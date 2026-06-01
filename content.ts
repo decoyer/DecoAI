@@ -61,6 +61,8 @@ const SITE_SELECTORS = {
 
 const storage = new Storage()
 let applyThemeQueued = false
+let applyThemeRunning = false
+let applyThemeRequestId = 0
 let currentLocation = location.href
 let fabMounted = false
 let fabOpen = false
@@ -172,20 +174,26 @@ const getFABStyle = () => {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        border: 0;
+        background-color: #000;
+        border: 1px solid #66cdaa4D;
         border-radius: 999px;
-        background-color: #fff;
-        border: 1px solid var(--kasutamu-accent);
         color: #66cdaa;
         cursor: pointer;
         opacity: 0.8;
         transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
       }
 
+      html.dark .${FAB_MAIN_BTN_CLASS},
+      body.dark-theme .${FAB_MAIN_BTN_CLASS},
+      html[data-mode="dark"] .${FAB_MAIN_BTN_CLASS} {
+        background-color: #fff;
+      }
+
       .${FAB_PANEL_CLASS} {
         display: block;
         overflow: hidden;
-        border: 1px solid rgba(255, 255, 255, 0.25);
+        background-color: rgba(24, 24, 24, 0.8);
+        border: 1px solid #66cdaa4D;
         border-radius: 14px;
         backdrop-filter: blur(10px);
         box-shadow: inset 0 2px 16px var(--kasutamu-accent);
@@ -237,23 +245,27 @@ const getPaletteData = async (bgUrl: string): Promise<ThemeConfig> => {
 }
 
 const getCustomThemeData = async (): Promise<ThemeConfig> => {
-  const [bgResult, bgColor, textColor, accentColor] = await Promise.all([
-    chrome.storage.local.get("custom-bg-image"),
-    storage.get<string>("custom-bg-color"),
-    storage.get<string>("custom-text-color"),
-    storage.get<string>("custom-text-accent")
+  const customData = await chrome.storage.local.get([
+    "custom-bg-image",
+    "custom-bg-color",
+    "custom-text-color",
+    "custom-text-accent"
   ])
 
   return {
-    bgUrl: bgResult["custom-bg-image"] || "",
-    bgColor: bgColor || "",
-    accentColor: accentColor || "",
-    lightTextColor: textColor || "",
-    darkTextColor: textColor || ""
+    bgUrl: customData["custom-bg-image"] || "",
+    bgColor: customData["custom-bg-color"] || "",
+    accentColor: customData["custom-text-accent"] || "",
+    lightTextColor: customData["custom-text-color"] || "",
+    darkTextColor: customData["custom-text-color"] || ""
   }
 }
 
 const getThemeData = async (theme: string): Promise<ThemeConfig> => {
+  if (theme === "custom") {
+    return getCustomThemeData()
+  }
+
   if (cachedThemeKey === theme && cachedThemeData) {
     return cachedThemeData
   }
@@ -263,9 +275,6 @@ const getThemeData = async (theme: string): Promise<ThemeConfig> => {
   switch (theme) {
     case "terminal":
       nextThemeData = TERMINAL_THEME
-      break
-    case "custom":
-      nextThemeData = await getCustomThemeData()
       break
     default:
       const url = THEME_BG_URLS[theme as ThemeName]
@@ -376,7 +385,8 @@ const mapSelectors = (
     .join(", ")
 
 const getCustomBgOptions = async (): Promise<CustomBgOptions> => {
-  const options = await storage.get<Partial<CustomBgOptions>>("custom-bg-options")
+  const optionsResult = await chrome.storage.local.get("custom-bg-options")
+  const options = optionsResult["custom-bg-options"] as Partial<CustomBgOptions> | undefined
   if (!options) return DEFAULT_CUSTOM_BG_OPTIONS
 
   return {
@@ -478,8 +488,10 @@ const generateCSS = (
   return [getBgStyle(), getElStyle(), getTextStyle()].join("\n")
 }
 
-const applyTheme = async () => {
+const applyTheme = async (requestId: number) => {
   await mountFab()
+  if (requestId !== applyThemeRequestId) return
+
   const currentSite = detectCurrentSite()
   if (!currentSite) return
 
@@ -496,6 +508,7 @@ const applyTheme = async () => {
 
   const isModelEnabled = modelEnabled?.[currentSite] ?? true
   if (!isModelEnabled || !currentTheme || currentTheme === "default") {
+    if (requestId !== applyThemeRequestId) return
     style.textContent = ""
     setFabAccentColor("")
     return
@@ -506,16 +519,29 @@ const applyTheme = async () => {
     currentTheme === "custom" ? getCustomBgOptions() : Promise.resolve(undefined)
   ])
 
+  if (requestId !== applyThemeRequestId) return
   style.textContent = generateCSS(currentSite, themeData, customBgOptions)
   setFabAccentColor(themeData.accentColor)
 }
 
+const flushApplyTheme = async () => {
+  if (applyThemeRunning) return
+  applyThemeRunning = true
+  try {
+    while (applyThemeQueued) {
+      applyThemeQueued = false
+      const requestId = ++applyThemeRequestId
+      await applyTheme(requestId)
+    }
+  } finally {
+    applyThemeRunning = false
+  }
+}
+
 const scheduleApplyTheme = () => {
-  if (applyThemeQueued) return
   applyThemeQueued = true
   requestAnimationFrame(() => {
-    applyThemeQueued = false
-    applyTheme()
+    void flushApplyTheme()
   })
 }
 
@@ -555,32 +581,22 @@ storage.watch({
     invalidateThemeCache()
     scheduleApplyTheme()
   },
-  "custom-text-color": () => {
-    invalidateThemeCache()
-    scheduleApplyTheme()
-  },
-  "custom-text-accent": () => {
-    invalidateThemeCache()
-    scheduleApplyTheme()
-  },
-  "custom-bg-color": () => {
-    invalidateThemeCache()
-    scheduleApplyTheme()
-  },
-  "custom-bg-options": () => {
-    invalidateThemeCache()
-    scheduleApplyTheme()
-  },
   "model-enabled-map": () => scheduleApplyTheme(),
   "fab-hidden": () => setFabVisibility()
 })
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === "local" && changes["custom-bg-image"]) {
+  if (areaName === "local" && (
+    changes["custom-bg-image"] ||
+    changes["custom-bg-color"] ||
+    changes["custom-text-color"] ||
+    changes["custom-text-accent"] ||
+    changes["custom-bg-options"]
+  )) {
     invalidateThemeCache()
     scheduleApplyTheme()
   }
 })
 
 watchLocationChange()
-applyTheme()
+scheduleApplyTheme()

@@ -1,13 +1,12 @@
 import { Storage } from "@plasmohq/storage"
 import { useStorage } from "@plasmohq/storage/hook"
-import { getAuth, GoogleAuthProvider, signInWithCredential } from "firebase/auth"
+import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithCredential, type User } from "firebase/auth"
 import { useEffect, useRef, useState } from "react"
 
 import { app } from "./firebase"
 
 const t = (key: string) => chrome.i18n.getMessage(key)
 const localStorageInstance = new Storage({ area: "local" })
-const syncStorageInstance = new Storage()
 
 const THEME_LIST = [
   { key: "random", color: "#ddd", textColor: "#000", emoji: "🎲" },
@@ -34,7 +33,7 @@ const rootStyle = { width: 250, height: 500, display: "flex", flexDirection: "co
 const contentStyle = { flex: 1, minHeight: 0, overflow: "hidden", padding: "20px 20px 0", display: "flex", flexDirection: "column" } as const
 const themeSectionStyle = { marginTop: 20, display: "flex", flexDirection: "column", flex: 1, minHeight: 0 } as const
 const themeGridScrollStyle = { flex: 1, minHeight: 0, padding: "10px 5px", overflow: "auto" } as const
-const sectionStyle = { marginTop: 20, display: "flex", flexDirection: "column", gap: 8 } as const
+const sectionStyle = { padding: "20px 0 10px", display: "flex", flexDirection: "column", gap: 8 } as const
 const editSectionScrollStyle = { ...sectionStyle, flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden" } as const
 const cardStyle = {
   backgroundColor: "#3f3f46",
@@ -77,10 +76,11 @@ export function FabPanelApp() {
   const [customThemes, setCustomThemes] = useStorage<CustomTheme[]>({ key: "custom-themes", instance: localStorageInstance }, [])
   const [selectedCustomThemeId, setSelectedCustomThemeId] = useStorage({ key: "selected-custom-theme-id", instance: localStorageInstance }, "")
   const [editingCustomThemeId, setEditingCustomThemeId] = useState("")
-  const [customText, setCustomText] = useStorage("custom-text-color", "")
-  const [customAccent, setCustomAccent] = useStorage("custom-text-accent", "")
-  const [customBgOptions, setCustomBgOptions] = useStorage<CustomBgOptions>("custom-bg-options", DEFAULT_CUSTOM_BG_OPTIONS)
+  const [customText, setCustomText] = useStorage({ key: "custom-text-color", instance: localStorageInstance }, "")
+  const [customAccent, setCustomAccent] = useStorage({ key: "custom-text-accent", instance: localStorageInstance }, "")
+  const [customBgOptions, setCustomBgOptions] = useStorage<CustomBgOptions>({ key: "custom-bg-options", instance: localStorageInstance }, DEFAULT_CUSTOM_BG_OPTIONS)
   const [isPremiumUser, setIsPremiumUser] = useState(false)
+  const [isPremiumLoaded, setIsPremiumLoaded] = useState(false)
   const [localCustomBgOptions, setLocalCustomBgOptions] = useState<CustomBgOptions>(DEFAULT_CUSTOM_BG_OPTIONS)
   const [localText, setLocalText] = useState("")
   const [localAccent, setLocalAccent] = useState("")
@@ -100,7 +100,11 @@ export function FabPanelApp() {
   }, [theme])
 
   useEffect(() => {
-    syncPremiumStatus()
+    const auth = getAuth(app)
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      void syncPremiumStatus(user)
+    })
+    return unsubscribe
   }, [])
 
   useEffect(() => {
@@ -127,12 +131,26 @@ export function FabPanelApp() {
 
   const updateCustomBgOption = (key: keyof CustomBgOptions, value: string | number) => setLocalCustomBgOptions((prev) => ({ ...prev, [key]: value }))
 
-  const syncThemeToLegacyStorage = (themeData: CustomTheme) => {
-    setCustomText(themeData.text || "")
-    setCustomAccent(themeData.accent || "")
-    setCustomBgOptions(themeData.bgOptions || DEFAULT_CUSTOM_BG_OPTIONS)
-    chrome.storage.local.set({ "custom-bg-image": themeData.bgUrl || "" })
-    syncStorageInstance.set("custom-bg-color", themeData.bgColor || "")
+  const syncThemeToLegacyStorage = async (themeData: CustomTheme) => {
+    const nextText = themeData.text || ""
+    const nextAccent = themeData.accent || ""
+    const nextBgOptions = themeData.bgOptions || DEFAULT_CUSTOM_BG_OPTIONS
+    const nextBgUrl = themeData.bgUrl || ""
+    const nextBgColor = themeData.bgColor || ""
+
+    setCustomText(nextText)
+    setCustomAccent(nextAccent)
+    setCustomBgOptions(nextBgOptions)
+    setCustomBg(nextBgUrl)
+    setLocalCustomBgColor(nextBgColor)
+
+    await chrome.storage.local.set({
+      "custom-bg-image": nextBgUrl,
+      "custom-bg-color": nextBgColor,
+      "custom-text-color": nextText,
+      "custom-text-accent": nextAccent,
+      "custom-bg-options": nextBgOptions
+    })
   }
 
   const upsertEditingTheme = () => {
@@ -140,7 +158,7 @@ export function FabPanelApp() {
     setCustomThemes((prev) => {
       const nextThemes = prev.map((item) => item.id === editingCustomThemeId ? { ...item, name: localCustomThemeName, text: localText, accent: localAccent, bgUrl: customBg, bgColor: localCustomBgColor, bgOptions: localCustomBgOptions } : item)
       const updated = nextThemes.find((item) => item.id === editingCustomThemeId)
-      if (updated && theme === "custom" && selectedCustomThemeId === updated.id) syncThemeToLegacyStorage(updated)
+      if (updated && theme === "custom" && selectedCustomThemeId === updated.id) void syncThemeToLegacyStorage(updated)
       return nextThemes
     })
   }
@@ -165,46 +183,60 @@ export function FabPanelApp() {
   }
 
   const getGoogleAccessToken = () =>
-    new Promise<string>((resolve) => {
-      chrome.identity.getAuthToken({ interactive: false }, (token) => {
-        if (token) chrome.identity.removeCachedAuthToken({ token }, requestNewToken)
-        else requestNewToken()
+    new Promise<string>((resolve, reject) => {
+      chrome.runtime.sendMessage({ type: "GET_GOOGLE_ACCESS_TOKEN" }, (response) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message))
+          return
+        }
+        if (!response?.success || !response?.token) {
+          reject(new Error(response?.error || "Failed to get Google access token"))
+          return
+        }
+        resolve(response.token)
       })
-      function requestNewToken() {
-        chrome.identity.getAuthToken({ interactive: true }, (newToken) => resolve(newToken))
-      }
     })
 
-  const syncPremiumStatus = async () => {
+  const syncPremiumStatus = async (userArg?: User | null) => {
     try {
       const auth = getAuth(app)
-      const user = auth.currentUser
-      if (!user) return setIsPremiumUser(false)
+      const user = userArg ?? auth.currentUser
+      if (!user) {
+        setIsPremiumUser(false)
+        return
+      }
       const tokenResult = await user.getIdTokenResult(true)
       setIsPremiumUser(tokenResult.claims.premium === true)
     } catch {
       setIsPremiumUser(false)
+    } finally {
+      setIsPremiumLoaded(true)
     }
   }
 
   const checkPremium = async () => {
-    if (isPremiumUser) return true
-    const auth = getAuth(app)
-    let user = auth.currentUser
-    if (!user) {
-      const accessToken = await getGoogleAccessToken()
-      const credential = GoogleAuthProvider.credential(null, accessToken)
-      const result = await signInWithCredential(auth, credential)
-      user = result.user
+    try {
+      if (isPremiumUser) return true
+      const auth = getAuth(app)
+      let user = auth.currentUser
+      if (!user) {
+        const accessToken = await getGoogleAccessToken()
+        const credential = GoogleAuthProvider.credential(null, accessToken)
+        const result = await signInWithCredential(auth, credential)
+        user = result.user
+      }
+      const tokenResult = await user.getIdTokenResult(true)
+      const isPremium = tokenResult.claims.premium === true
+      setIsPremiumUser(isPremium)
+      if (!isPremium) {
+        const idToken = await user.getIdToken()
+        await openCheckout(idToken)
+      }
+      return isPremium
+    } catch (error) {
+      console.error("Premium check failed:", error)
+      return false
     }
-    const tokenResult = await user.getIdTokenResult(true)
-    const isPremium = tokenResult.claims.premium === true
-    setIsPremiumUser(isPremium)
-    if (!isPremium) {
-      const idToken = await user.getIdToken()
-      await openCheckout(idToken)
-    }
-    return isPremium
   }
 
   const onUploadCustomBg = async (file?: File) => {
@@ -248,7 +280,7 @@ export function FabPanelApp() {
     setLocalCustomBgColor("")
   }
 
-  const onCustomCardClick = (customThemeItem: CustomTheme) => {
+  const onCustomCardClick = async (customThemeItem: CustomTheme) => {
     const isSelected = theme === "custom" && selectedCustomThemeId === customThemeItem.id
     if (isSelected) {
       setEditingCustomThemeId(customThemeItem.id)
@@ -258,9 +290,7 @@ export function FabPanelApp() {
     setEditingCustomThemeId("")
     setSelectedCustomThemeId(customThemeItem.id)
     setTheme("custom")
-    syncThemeToLegacyStorage(customThemeItem)
-    setCustomBg(customThemeItem.bgUrl || "")
-    setLocalCustomBgColor(customThemeItem.bgColor || "")
+    await syncThemeToLegacyStorage(customThemeItem)
     setView("themes")
   }
 
@@ -284,8 +314,7 @@ export function FabPanelApp() {
       setCustomText("")
       setCustomAccent("")
       setCustomBgOptions(DEFAULT_CUSTOM_BG_OPTIONS)
-      chrome.storage.local.remove("custom-bg-image")
-      syncStorageInstance.remove("custom-bg-color")
+      chrome.storage.local.remove(["custom-bg-image", "custom-bg-color", "custom-text-color", "custom-text-accent", "custom-bg-options"])
     }
     setEditingCustomThemeId("")
     setView("themes")
@@ -341,9 +370,11 @@ export function FabPanelApp() {
         .preset-theme-card:hover .preset-theme-card__label { background-color: #0000004D; }
         .custom-theme-card {
           position: relative;
-          border: 1px solid transparent;
+          width: 100%;
+          height: 100px;
+          padding: 0;
+          border: none;
           border-radius: 12px;
-          background: none;
           cursor: pointer;
           overflow: hidden;
           backdrop-filter: blur(12px) saturate(140%);
@@ -515,7 +546,7 @@ export function FabPanelApp() {
                 <button type="button" onClick={onSaveClick} style={{ ...controlButtonStyle, flex: 1, padding: 8, backgroundColor: "#1976d2", color: "#fff" }}>{t("save")}</button>
               </div>
             )}
-            {view !== "custom" && !isPremiumUser && (
+            {view !== "custom" && isPremiumLoaded && !isPremiumUser && (
               <button type="button" onClick={checkPremium} style={{ ...proButtonStyle }}>💎 {t("upgradePro")}</button>
             )}
           </div>
@@ -530,7 +561,7 @@ export function FabPanelApp() {
   )
 }
 
-const btnStyle = (color: string, active: boolean) => ({ flex: 1, height: 100, backgroundColor: color, border: "none", borderRadius: "12px", cursor: "pointer", boxShadow: active ? "inset 2px 2px 5px rgba(0, 0, 0, 0.2), 0 0 0 3px #66cdaa" : "none", transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)" })
+const btnStyle = (color: string, active: boolean) => ({ height: 100, backgroundColor: color, border: "none", borderRadius: "12px", cursor: "pointer", boxShadow: active ? "inset 2px 2px 5px rgba(0, 0, 0, 0.2), 0 0 0 3px #66cdaa" : "none", transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)" })
 
 function RangeControl({ label, min, max, step, value, disabled = false, onChange, onReset }: { label: string; min: number; max: number; step: number; value: number; disabled?: boolean; onChange: (value: string) => void; onReset?: () => void }) {
   return (

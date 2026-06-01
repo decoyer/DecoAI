@@ -1,8 +1,4 @@
 import { useStorage } from "@plasmohq/storage/hook"
-import { getAuth, GoogleAuthProvider, signInWithCredential } from "firebase/auth"
-import { useEffect, useState } from "react"
-
-import { app } from "./firebase"
 
 const t = (key: string) => chrome.i18n.getMessage(key)
 const FAB_HIDDEN_STORAGE_KEY = "fab-hidden"
@@ -31,67 +27,6 @@ const MODEL_LIST = [
 function IndexPopup() {
   const [fabHidden, setFabHidden] = useStorage<boolean>(FAB_HIDDEN_STORAGE_KEY, false)
   const [modelEnabled, setModelEnabled] = useStorage<ModelEnabledMap>("model-enabled-map", DEFAULT_MODEL_ENABLED)
-  const [isPremiumUser, setIsPremiumUser] = useState(false)
-
-  useEffect(() => {
-    syncPremiumStatus()
-  }, [])
-
-  const openCheckout = async (idToken: string) => {
-    const res = await fetch("https://kasutamu.cokr.workers.dev/checkout", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${idToken}` }
-    })
-    const data = JSON.parse(await res.text()) as { checkoutUrl: string }
-    chrome.tabs.create({ url: data.checkoutUrl })
-  }
-
-  const getGoogleAccessToken = () =>
-    new Promise<string>((resolve) => {
-      chrome.identity.getAuthToken({ interactive: false }, (token) => {
-        if (token) chrome.identity.removeCachedAuthToken({ token }, requestNewToken)
-        else requestNewToken()
-      })
-
-      function requestNewToken() {
-        chrome.identity.getAuthToken({ interactive: true }, (newToken) => resolve(newToken))
-      }
-    })
-
-  const syncPremiumStatus = async () => {
-    try {
-      const auth = getAuth(app)
-      const user = auth.currentUser
-      if (!user) return setIsPremiumUser(false)
-      const tokenResult = await user.getIdTokenResult(true)
-      setIsPremiumUser(tokenResult.claims.premium === true)
-    } catch {
-      setIsPremiumUser(false)
-    }
-  }
-
-  const checkPremium = async () => {
-    if (isPremiumUser) return true
-
-    const auth = getAuth(app)
-    let user = auth.currentUser
-    if (!user) {
-      const accessToken = await getGoogleAccessToken()
-      const credential = GoogleAuthProvider.credential(null, accessToken)
-      const result = await signInWithCredential(auth, credential)
-      user = result.user
-    }
-
-    const tokenResult = await user.getIdTokenResult(true)
-    const isPremium = tokenResult.claims.premium === true
-    setIsPremiumUser(isPremium)
-
-    if (!isPremium) {
-      const idToken = await user.getIdToken()
-      await openCheckout(idToken)
-    }
-    return isPremium
-  }
 
   return (
     <>
@@ -160,12 +95,6 @@ function IndexPopup() {
               />
             </label>
           ))}
-
-          {!isPremiumUser && (
-            <button type="button" onClick={checkPremium} style={proButtonStyle}>
-              {"💎 "}{t("upgradePro")}
-            </button>
-          )}
         </div>
       </div>
     </>
@@ -199,16 +128,6 @@ const rowStyle = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center"
-} as const
-
-const proButtonStyle = {
-  marginTop: 12,
-  border: "none",
-  borderRadius: 12,
-  padding: 8,
-  cursor: "pointer",
-  color: "#fff",
-  background: "linear-gradient(90deg, #8b5cf6, #ec4899)"
 } as const
 
 export default IndexPopup
