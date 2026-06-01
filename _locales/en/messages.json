@@ -1,0 +1,104 @@
+{
+  "appName": {
+    "message": "kasutamu"
+  },
+  "selectModel": {
+    "message": "Select Model"
+  },
+  "selectTheme": {
+    "message": "Select Theme"
+  },
+  "applyTheme": {
+    "message": "Apply Theme"
+  },
+  "addTheme": {
+    "message": "Add Theme"
+  },
+  "upgradePro": {
+    "message": "Upgrade to Pro"
+  },
+  "editTheme": {
+    "message": "Edit Theme"
+  },
+  "preset": {
+    "message": "Preset"
+  },
+  "custom": {
+    "message": "Custom"
+  },
+  "reset": {
+    "message": "Reset"
+  },
+  "save": {
+    "message": "Save"
+  },
+  "delete": {
+    "message": "Delete"
+  },
+  "name": {
+    "message": "Name"
+  },
+  "text": {
+    "message": "Text"
+  },
+  "accent": {
+    "message": "Accent"
+  },
+  "background": {
+    "message": "Background"
+  },
+  "upload": {
+    "message": "Upload"
+  },
+  "imagePosition": {
+    "message": "Image Position"
+  },
+  "Top": {
+    "message": "Top"
+  },
+  "Center": {
+    "message": "Center"
+  },
+  "Bottom": {
+    "message": "Bottom"
+  },
+  "brightness": {
+    "message": "Brightness"
+  },
+  "blur": {
+    "message": "Blur"
+  },
+  "scaleX": {
+    "message": "Flip"
+  },
+  "invert": {
+    "message": "Invert"
+  },
+  "grayscale": {
+    "message": "Grayscale"
+  },
+  "random": {
+    "message": "🎲\nRandom"
+  },
+  "nasa": {
+    "message": "🪐\nNASA"
+  },
+  "neon": {
+    "message": "💫\nNeon"
+  },
+  "pink": {
+    "message": "💗\nPink"
+  },
+  "vintage": {
+    "message": "🎻\nVintage"
+  },
+  "fractal": {
+    "message": "🌈\nFractal"
+  },
+  "terminal": {
+    "message": "📟\nTerminal"
+  },
+  "default": {
+    "message": "⚙️\nDefault"
+  }
+}

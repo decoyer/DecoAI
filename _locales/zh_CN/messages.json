@@ -1,0 +1,104 @@
+{
+  "appName": {
+    "message": "kasutamu"
+  },
+  "selectModel": {
+    "message": "选择模型"
+  },
+  "selectTheme": {
+    "message": "选择主题"
+  },
+  "applyTheme": {
+    "message": "应用主题"
+  },
+  "addTheme": {
+    "message": "添加主题"
+  },
+  "upgradePro": {
+    "message": "升级到 Pro"
+  },
+  "editTheme": {
+    "message": "编辑主题"
+  },
+  "preset": {
+    "message": "预设"
+  },
+  "custom": {
+    "message": "自定义"
+  },
+  "reset": {
+    "message": "重置"
+  },
+  "save": {
+    "message": "保存"
+  },
+  "delete": {
+    "message": "删除"
+  },
+  "name": {
+    "message": "名称"
+  },
+  "text": {
+    "message": "文字颜色"
+  },
+  "accent": {
+    "message": "强调色"
+  },
+  "background": {
+    "message": "背景图片"
+  },
+  "upload": {
+    "message": "上传"
+  },
+  "imagePosition": {
+    "message": "图片位置"
+  },
+  "Top": {
+    "message": "上"
+  },
+  "Center": {
+    "message": "中间"
+  },
+  "Bottom": {
+    "message": "下"
+  },
+  "brightness": {
+    "message": "亮度效果"
+  },
+  "blur": {
+    "message": "模糊效果"
+  },
+  "scaleX": {
+    "message": "镜像翻转"
+  },
+  "invert": {
+    "message": "反相效果"
+  },
+  "grayscale": {
+    "message": "灰度效果"
+  },
+  "random": {
+    "message": "🎲\n随机"
+  },
+  "nasa": {
+    "message": "🪐\n宇宙"
+  },
+  "neon": {
+    "message": "💫\n霓虹"
+  },
+  "pink": {
+    "message": "💗\n粉色"
+  },
+  "vintage": {
+    "message": "🎻\n复古"
+  },
+  "fractal": {
+    "message": "🌈\n分形"
+  },
+  "terminal": {
+    "message": "📟\n终端"
+  },
+  "default": {
+    "message": "⚙️\n默认"
+  }
+}

@@ -1,0 +1,104 @@
+{
+  "appName": {
+    "message": "kasutamu"
+  },
+  "selectModel": {
+    "message": "모델 선택"
+  },
+  "selectTheme": {
+    "message": "테마 선택"
+  },
+  "applyTheme": {
+    "message": "테마 적용"
+  },
+  "addTheme": {
+    "message": "테마 추가"
+  },
+  "upgradePro": {
+    "message": "Pro 업그레이드"
+  },
+  "editTheme": {
+    "message": "테마 수정"
+  },
+  "preset": {
+    "message": "프리셋"
+  },
+  "custom": {
+    "message": "커스텀"
+  },
+  "reset": {
+    "message": "초기화"
+  },
+  "save": {
+    "message": "저장"
+  },
+  "delete": {
+    "message": "삭제"
+  },
+  "name": {
+    "message": "이름"
+  },
+  "text": {
+    "message": "글자색"
+  },
+  "accent": {
+    "message": "강조색"
+  },
+  "background": {
+    "message": "배경 사진"
+  },
+  "upload": {
+    "message": "업로드"
+  },
+  "imagePosition": {
+    "message": "사진 위치"
+  },
+  "Top": {
+    "message": "위"
+  },
+  "Center": {
+    "message": "가운데"
+  },
+  "Bottom": {
+    "message": "아래"
+  },
+  "brightness": {
+    "message": "밝기 효과"
+  },
+  "blur": {
+    "message": "블러 효과"
+  },
+  "scaleX": {
+    "message": "대칭 이동"
+  },
+  "invert": {
+    "message": "반전 효과"
+  },
+  "grayscale": {
+    "message": "흑백 효과"
+  },
+  "random": {
+    "message": "🎲\n랜덤"
+  },
+  "nasa": {
+    "message": "🪐\n우주"
+  },
+  "neon": {
+    "message": "💫\n네온"
+  },
+  "pink": {
+    "message": "💗\n핑크"
+  },
+  "vintage": {
+    "message": "🎻\n빈티지"
+  },
+  "fractal": {
+    "message": "🌈\n프랙탈"
+  },
+  "terminal": {
+    "message": "📟\n터미널"
+  },
+  "default": {
+    "message": "⚙️\n기본"
+  }
+}
