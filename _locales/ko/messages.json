@@ -2,23 +2,32 @@
   "appName": {
     "message": "kasutamu"
   },
-  "selectModel": {
-    "message": "모델 선택"
+  "setting": {
+    "message": "설정"
+  },
+  "general": {
+    "message": "일반"
+  },
+  "button": {
+    "message": "버튼"
+  },
+  "applyModel": {
+    "message": "모델 적용"
   },
   "selectTheme": {
     "message": "테마 선택"
   },
-  "applyTheme": {
-    "message": "테마 적용"
-  },
   "addTheme": {
     "message": "테마 추가"
   },
-  "upgradePro": {
-    "message": "Pro 업그레이드"
-  },
   "editTheme": {
     "message": "테마 수정"
+  },
+  "loading": {
+    "message": "로딩 중"
+  },
+  "upgradePro": {
+    "message": "Pro 업그레이드"
   },
   "preset": {
     "message": "프리셋"
@@ -44,7 +53,10 @@
   "accent": {
     "message": "강조색"
   },
-  "background": {
+  "backgroundColor": {
+    "message": "배경색"
+  },
+  "backgroundImage": {
     "message": "배경 사진"
   },
   "upload": {
@@ -78,27 +90,27 @@
     "message": "흑백 효과"
   },
   "random": {
-    "message": "🎲\n랜덤"
+    "message": "랜덤"
   },
   "nasa": {
-    "message": "🪐\n우주"
+    "message": "우주"
   },
   "neon": {
-    "message": "💫\n네온"
+    "message": "네온"
   },
   "pink": {
-    "message": "💗\n핑크"
+    "message": "핑크"
   },
   "vintage": {
-    "message": "🎻\n빈티지"
+    "message": "빈티지"
   },
   "fractal": {
-    "message": "🌈\n프랙탈"
+    "message": "프랙탈"
   },
   "terminal": {
-    "message": "📟\n터미널"
+    "message": "터미널"
   },
   "default": {
-    "message": "⚙️\n기본"
+    "message": "기본"
   }
 }

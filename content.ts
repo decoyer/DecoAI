@@ -1,6 +1,9 @@
 import { Storage } from "@plasmohq/storage"
 import { Vibrant } from "node-vibrant/browser"
 import type { PlasmoCSConfig } from "plasmo"
+import { createElement } from "react"
+import { createRoot, type Root } from "react-dom/client"
+import { FabPanelApp } from "./panel"
 
 export const config: PlasmoCSConfig = {
   matches: [
@@ -14,6 +17,7 @@ export const config: PlasmoCSConfig = {
 
 interface ThemeConfig {
   bgUrl: string
+  bgColor: string
   accentColor: string
   lightTextColor: string
   darkTextColor: string
@@ -58,11 +62,17 @@ const SITE_SELECTORS = {
 const storage = new Storage()
 let applyThemeQueued = false
 let currentLocation = location.href
+let fabMounted = false
+let fabOpen = false
+let fabPanelRoot: Root | null = null
+let cachedThemeKey: string | null = null
+let cachedThemeData: ThemeConfig | null = null
 
-const EMPTY_THEME: ThemeConfig = { bgUrl: "", accentColor: "", lightTextColor: "", darkTextColor: "" }
+const EMPTY_THEME: ThemeConfig = { bgUrl: "", bgColor: "", accentColor: "", lightTextColor: "", darkTextColor: "" }
 
 const TERMINAL_THEME: ThemeConfig = {
   bgUrl: "",
+  bgColor: "",
   accentColor: "#33ff33",
   lightTextColor: "#33ff33",
   darkTextColor: "#33ff33"
@@ -84,6 +94,21 @@ const THEME_BG_URLS: Partial<Record<ThemeName, string>> = {
   pink: "https://wallpapercave.com/wp/wp11886768.jpg",
   vintage: "https://wallpaperaccess.com/full/1461802.jpg",
   fractal: "https://i.imgur.com/H1rtAbm.png"
+}
+
+const FAB_STYLE_ID = "kasutamu-fab-style"
+const FAB_ROOT_ID = "kasutamu-fab-root"
+const FAB_ROOT_CLASS = "kasutamu-fab"
+const FAB_OPEN_CLASS = "is-open"
+const FAB_MAIN_BTN_CLASS = "kasutamu-fab-main"
+const FAB_PANEL_CLASS = "kasutamu-fab-panel"
+const FAB_PANEL_MOUNT_ID = "kasutamu-fab-panel-mount"
+const FAB_HIDDEN_STORAGE_KEY = "fab-hidden"
+const FAB_MAIN_BTN_ICON = `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M7.5 5.6 10 7 8.6 4.5 10 2 7.5 3.4 5 2l1.4 2.5L5 7l2.5-1.4zm12 9.8L17 14l1.4 2.5L17 19l2.5-1.4L22 19l-1.4-2.5L22 14l-2.5 1.4zM22 2l-2.5 1.4L17 2l1.4 2.5L17 7l2.5-1.4L22 7l-1.4-2.5L22 2zM13.34 12.78l2.44-2.44-2.12-2.12-2.44 2.44 2.12 2.12zm1.03-5.49 2.34 2.34c.39.39.39 1.03 0 1.42l-7.66 7.66c-.39.39-1.03.39-1.42 0l-2.34-2.34a.9959.9959 0 0 1 0-1.42l7.66-7.66c.39-.39 1.03-.39 1.42 0z"></path></svg>`
+const THEME_LOADING_EVENT = "kasutamu:theme-loading"
+
+const emitThemeLoading = (loading: boolean) => {
+  window.dispatchEvent(new CustomEvent(THEME_LOADING_EVENT, { detail: { loading } }))
 }
 
 const detectCurrentSite = (): SiteType | null => {
@@ -123,6 +148,72 @@ const getThemeStyle = () => {
   return style
 }
 
+const getFABStyle = () => {
+  let style = document.getElementById(FAB_STYLE_ID) as HTMLStyleElement | null
+  if (!style) {
+    style = document.createElement("style")
+    style.id = FAB_STYLE_ID
+    style.textContent = `
+      .${FAB_ROOT_CLASS} {
+        position: fixed;
+        right: 38px;
+        bottom: 78px;
+        z-index: 2147483646;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 10px;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+
+      .${FAB_MAIN_BTN_CLASS} {
+        width: 45px;
+        height: 45px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 0;
+        border-radius: 999px;
+        background-color: #fff;
+        border: 1px solid var(--kasutamu-accent);
+        color: #66cdaa;
+        cursor: pointer;
+        opacity: 0.8;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      .${FAB_PANEL_CLASS} {
+        display: block;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        border-radius: 14px;
+        backdrop-filter: blur(10px);
+        box-shadow: inset 0 2px 16px var(--kasutamu-accent);
+        opacity: 0;
+        pointer-events: none;
+        visibility: hidden;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      .${FAB_ROOT_CLASS}.${FAB_OPEN_CLASS} .${FAB_PANEL_CLASS} {
+        opacity: 0.8;
+        pointer-events: auto;
+        visibility: visible;
+      }
+
+      .${FAB_MAIN_BTN_CLASS}:hover {
+        opacity: 1;
+      }
+
+      .${FAB_ROOT_CLASS}.${FAB_OPEN_CLASS} .${FAB_PANEL_CLASS}:hover {
+        opacity: 1;
+      }
+    `
+      ; (document.head || document.documentElement).appendChild(style)
+  }
+  return style
+}
+
 const convertToDataUrl = async (url: string): Promise<string> =>
   new Promise((resolve) => {
     chrome.runtime.sendMessage({ type: "FETCH_IMAGE_AS_DATA_URL", url },
@@ -135,6 +226,7 @@ const getPaletteData = async (bgUrl: string): Promise<ThemeConfig> => {
     const palette = await Vibrant.from(bgUrl).getPalette()
     return {
       bgUrl,
+      bgColor: "",
       accentColor: palette.Vibrant?.hex || "",
       lightTextColor: palette.DarkVibrant?.hex || "",
       darkTextColor: palette.LightVibrant?.hex || ""
@@ -145,14 +237,16 @@ const getPaletteData = async (bgUrl: string): Promise<ThemeConfig> => {
 }
 
 const getCustomThemeData = async (): Promise<ThemeConfig> => {
-  const [bgResult, textColor, accentColor] = await Promise.all([
+  const [bgResult, bgColor, textColor, accentColor] = await Promise.all([
     chrome.storage.local.get("custom-bg-image"),
+    storage.get<string>("custom-bg-color"),
     storage.get<string>("custom-text-color"),
     storage.get<string>("custom-text-accent")
   ])
 
   return {
     bgUrl: bgResult["custom-bg-image"] || "",
+    bgColor: bgColor || "",
     accentColor: accentColor || "",
     lightTextColor: textColor || "",
     darkTextColor: textColor || ""
@@ -160,13 +254,110 @@ const getCustomThemeData = async (): Promise<ThemeConfig> => {
 }
 
 const getThemeData = async (theme: string): Promise<ThemeConfig> => {
+  if (cachedThemeKey === theme && cachedThemeData) {
+    return cachedThemeData
+  }
+
+  let nextThemeData: ThemeConfig
+
   switch (theme) {
-    case "terminal": return TERMINAL_THEME
-    case "custom": return getCustomThemeData()
+    case "terminal":
+      nextThemeData = TERMINAL_THEME
+      break
+    case "custom":
+      nextThemeData = await getCustomThemeData()
+      break
     default:
       const url = THEME_BG_URLS[theme as ThemeName]
-      return url ? getPaletteData(await convertToDataUrl(url)) : EMPTY_THEME
+      if (url) {
+        emitThemeLoading(true)
+        try {
+          nextThemeData = await getPaletteData(await convertToDataUrl(url))
+        } finally {
+          emitThemeLoading(false)
+        }
+      } else {
+        nextThemeData = EMPTY_THEME
+      }
+      break
   }
+
+  cachedThemeKey = theme
+  cachedThemeData = nextThemeData
+  return nextThemeData
+}
+
+const closeFabDock = () => {
+  fabOpen = false
+  const root = document.getElementById(FAB_ROOT_ID)
+  root?.classList.remove(FAB_OPEN_CLASS)
+}
+
+const setFabAccentColor = (accentColor?: string) => {
+  const root = document.getElementById(FAB_ROOT_ID)
+  if (!root) return
+  root.style.setProperty("--kasutamu-accent", (accentColor || "#66cdaa") + "4D")
+}
+
+const setFabVisibility = async () => {
+  const root = document.getElementById(FAB_ROOT_ID)
+  if (!root) return
+  const isHidden = (await storage.get<boolean>(FAB_HIDDEN_STORAGE_KEY)) === true
+  root.style.display = isHidden ? "none" : "flex"
+}
+
+const onOutsideFabClick = (event: MouseEvent) => {
+  const root = document.getElementById(FAB_ROOT_ID)
+  if (!root) return
+  const target = event.target as Node
+  if (!root.contains(target)) closeFabDock()
+}
+
+const mountFab = async () => {
+  if (fabMounted || document.getElementById(FAB_ROOT_ID)) {
+    fabMounted = true
+    return
+  }
+
+  getFABStyle()
+  const root = document.createElement("div")
+  root.id = FAB_ROOT_ID
+  root.className = FAB_ROOT_CLASS
+
+  const panel = document.createElement("aside")
+  panel.className = FAB_PANEL_CLASS
+  const panelHost = document.createElement("div")
+  panelHost.id = FAB_PANEL_MOUNT_ID
+  panelHost.style.width = "100%"
+  panelHost.style.height = "100%"
+  panel.appendChild(panelHost)
+
+  const mainButton = document.createElement("button")
+  mainButton.type = "button"
+  mainButton.className = FAB_MAIN_BTN_CLASS
+  mainButton.setAttribute("aria-label", "Open theme quick menu")
+  mainButton.innerHTML = FAB_MAIN_BTN_ICON
+  mainButton.addEventListener("click", (event) => {
+    event.stopPropagation()
+    fabOpen = !fabOpen
+    root.classList.toggle(FAB_OPEN_CLASS, fabOpen)
+  })
+
+  root.appendChild(panel)
+  root.appendChild(mainButton)
+    ; (document.body || document.documentElement).appendChild(root)
+  document.addEventListener("click", onOutsideFabClick, { capture: true })
+  const shadowRoot = panelHost.attachShadow({ mode: "open" })
+  const shadowMount = document.createElement("div")
+  shadowMount.style.width = "100%"
+  shadowMount.style.height = "100%"
+  shadowRoot.appendChild(shadowMount)
+
+  fabPanelRoot = createRoot(shadowMount)
+  fabPanelRoot.render(createElement(FabPanelApp))
+
+  fabMounted = true
+  await setFabVisibility()
 }
 
 const mapSelectors = (
@@ -196,7 +387,7 @@ const getCustomBgOptions = async (): Promise<CustomBgOptions> => {
 
 const generateCSS = (
   site: SiteType,
-  { bgUrl, accentColor, lightTextColor, darkTextColor }: ThemeConfig,
+  { bgUrl, bgColor, accentColor, lightTextColor, darkTextColor }: ThemeConfig,
   customBgOptions?: CustomBgOptions
 ) => {
   const config = SITE_SELECTORS[site]
@@ -213,10 +404,11 @@ const generateCSS = (
   const blur = customBgOptions?.blur ?? 0
   const brightness = customBgOptions?.brightness ?? 1
 
-  const getBgStyle = () => bgUrl ? `
+  const getBgStyle = () => (bgUrl || bgColor) ? `
     body::before {
       content: ""; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-      background-image: url('${bgUrl}') !important;
+      ${bgUrl ? `background-image: url('${bgUrl}') !important;` : "background-image: none !important;"}
+      ${bgColor ? `background-color: ${bgColor} !important;` : ""}
       background-position: ${position} !important;
       background-size: cover !important;
       background-repeat: no-repeat !important;
@@ -235,7 +427,7 @@ const generateCSS = (
   const getElStyle = () => `
     ${elements} {
       background-color: rgba(255, 255, 255, 0.8) !important;
-      box-shadow: 0 0 0 1px transparent !important;
+      box-shadow: inset 0 2px 16px ${accentColor}4D !important;
       backdrop-filter: blur(12px) saturate(140%) !important;
       opacity: 0.9 !important;
       transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
@@ -244,7 +436,6 @@ const generateCSS = (
       background-color: rgba(24, 24, 24, 0.8) !important;
     }
     ${hoverSelectors} {
-      box-shadow: 0 0 0 1px ${accentColor}4D !important;
       opacity: 1 !important;
     }
     ${site === "chatgpt" ? `
@@ -276,7 +467,7 @@ const generateCSS = (
         border-radius: 24px !important;
       }
     ` : ""}
-    ${accentColor ? `::-webkit-scrollbar { width: 10px !important; } ::-webkit-scrollbar-thumb { background-color: ${accentColor}4D !important; border-radius: 22px !important; }` : ""}
+    ${accentColor ? `::-webkit-scrollbar { width: auto !important; }::-webkit-scrollbar-thumb { background-color: ${accentColor}4D !important; border-radius: 22px !important; }` : ""}
   `
 
   const getTextStyle = () => (lightTextColor && darkTextColor) ? `
@@ -288,6 +479,7 @@ const generateCSS = (
 }
 
 const applyTheme = async () => {
+  await mountFab()
   const currentSite = detectCurrentSite()
   if (!currentSite) return
 
@@ -305,6 +497,7 @@ const applyTheme = async () => {
   const isModelEnabled = modelEnabled?.[currentSite] ?? true
   if (!isModelEnabled || !currentTheme || currentTheme === "default") {
     style.textContent = ""
+    setFabAccentColor("")
     return
   }
 
@@ -314,6 +507,7 @@ const applyTheme = async () => {
   ])
 
   style.textContent = generateCSS(currentSite, themeData, customBgOptions)
+  setFabAccentColor(themeData.accentColor)
 }
 
 const scheduleApplyTheme = () => {
@@ -329,6 +523,11 @@ const scheduleApplyThemeOnLocationChange = () => {
   if (currentLocation === location.href) return
   currentLocation = location.href
   scheduleApplyTheme()
+}
+
+const invalidateThemeCache = () => {
+  cachedThemeKey = null
+  cachedThemeData = null
 }
 
 const watchLocationChange = () => {
@@ -352,15 +551,33 @@ const watchLocationChange = () => {
 }
 
 storage.watch({
-  "selected-theme": () => scheduleApplyTheme(),
-  "custom-text-color": () => scheduleApplyTheme(),
-  "custom-text-accent": () => scheduleApplyTheme(),
-  "custom-bg-options": () => scheduleApplyTheme(),
-  "model-enabled-map": () => scheduleApplyTheme()
+  "selected-theme": () => {
+    invalidateThemeCache()
+    scheduleApplyTheme()
+  },
+  "custom-text-color": () => {
+    invalidateThemeCache()
+    scheduleApplyTheme()
+  },
+  "custom-text-accent": () => {
+    invalidateThemeCache()
+    scheduleApplyTheme()
+  },
+  "custom-bg-color": () => {
+    invalidateThemeCache()
+    scheduleApplyTheme()
+  },
+  "custom-bg-options": () => {
+    invalidateThemeCache()
+    scheduleApplyTheme()
+  },
+  "model-enabled-map": () => scheduleApplyTheme(),
+  "fab-hidden": () => setFabVisibility()
 })
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === "local" && changes["custom-bg-image"]) {
+    invalidateThemeCache()
     scheduleApplyTheme()
   }
 })

@@ -2,23 +2,32 @@
   "appName": {
     "message": "kasutamu"
   },
-  "selectModel": {
-    "message": "Select Model"
+  "setting": {
+    "message": "Settings"
+  },
+  "general": {
+    "message": "General"
+  },
+  "button": {
+    "message": "Button"
+  },
+  "applyModel": {
+    "message": "Apply Model"
   },
   "selectTheme": {
     "message": "Select Theme"
   },
-  "applyTheme": {
-    "message": "Apply Theme"
-  },
   "addTheme": {
     "message": "Add Theme"
   },
-  "upgradePro": {
-    "message": "Upgrade to Pro"
-  },
   "editTheme": {
     "message": "Edit Theme"
+  },
+  "loading": {
+    "message": "Loading"
+  },
+  "upgradePro": {
+    "message": "Upgrade to Pro"
   },
   "preset": {
     "message": "Preset"
@@ -44,8 +53,11 @@
   "accent": {
     "message": "Accent"
   },
-  "background": {
-    "message": "Background"
+  "backgroundColor": {
+    "message": "Background Color"
+  },
+  "backgroundImage": {
+    "message": "Background Image"
   },
   "upload": {
     "message": "Upload"
@@ -78,27 +90,27 @@
     "message": "Grayscale"
   },
   "random": {
-    "message": "🎲\nRandom"
+    "message": "Random"
   },
   "nasa": {
-    "message": "🪐\nNASA"
+    "message": "NASA"
   },
   "neon": {
-    "message": "💫\nNeon"
+    "message": "Neon"
   },
   "pink": {
-    "message": "💗\nPink"
+    "message": "Pink"
   },
   "vintage": {
-    "message": "🎻\nVintage"
+    "message": "Vintage"
   },
   "fractal": {
-    "message": "🌈\nFractal"
+    "message": "Fractal"
   },
   "terminal": {
-    "message": "📟\nTerminal"
+    "message": "Terminal"
   },
   "default": {
-    "message": "⚙️\nDefault"
+    "message": "Default"
   }
 }

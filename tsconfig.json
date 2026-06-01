@@ -9,11 +9,13 @@
     "./**/*.tsx"
   ],
   "compilerOptions": {
+    "jsx": "react-jsx",
     "paths": {
       "~*": [
         "./*"
       ]
     },
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "types": ["node", "chrome"]
   }

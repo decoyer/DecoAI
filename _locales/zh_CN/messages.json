@@ -2,23 +2,32 @@
   "appName": {
     "message": "kasutamu"
   },
-  "selectModel": {
-    "message": "选择模型"
+  "setting": {
+    "message": "设置"
+  },
+  "general": {
+    "message": "一般"
+  },
+  "button": {
+    "message": "按钮"
+  },
+  "applyModel": {
+    "message": "应用模型"
   },
   "selectTheme": {
     "message": "选择主题"
   },
-  "applyTheme": {
-    "message": "应用主题"
-  },
   "addTheme": {
     "message": "添加主题"
   },
-  "upgradePro": {
-    "message": "升级到 Pro"
-  },
   "editTheme": {
     "message": "编辑主题"
+  },
+  "loading": {
+    "message": "加载中"
+  },
+  "upgradePro": {
+    "message": "升级到 Pro"
   },
   "preset": {
     "message": "预设"
@@ -44,7 +53,10 @@
   "accent": {
     "message": "强调色"
   },
-  "background": {
+  "backgroundColor": {
+    "message": "背景颜色"
+  },
+  "backgroundImage": {
     "message": "背景图片"
   },
   "upload": {
@@ -78,27 +90,27 @@
     "message": "灰度效果"
   },
   "random": {
-    "message": "🎲\n随机"
+    "message": "随机"
   },
   "nasa": {
-    "message": "🪐\n宇宙"
+    "message": "宇宙"
   },
   "neon": {
-    "message": "💫\n霓虹"
+    "message": "霓虹"
   },
   "pink": {
-    "message": "💗\n粉色"
+    "message": "粉色"
   },
   "vintage": {
-    "message": "🎻\n复古"
+    "message": "复古"
   },
   "fractal": {
-    "message": "🌈\n分形"
+    "message": "分形"
   },
   "terminal": {
-    "message": "📟\n终端"
+    "message": "终端"
   },
   "default": {
-    "message": "⚙️\n默认"
+    "message": "默认"
   }
 }
