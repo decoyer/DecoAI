@@ -114,6 +114,7 @@ const FAB_HIDDEN_STORAGE_KEY = "fab-hidden"
 const MODEL_ENABLED_STORAGE_KEY = "model-enabled-map"
 const FAB_MAIN_BTN_ICON = `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M7.5 5.6 10 7 8.6 4.5 10 2 7.5 3.4 5 2l1.4 2.5L5 7l2.5-1.4zm12 9.8L17 14l1.4 2.5L17 19l2.5-1.4L22 19l-1.4-2.5L22 14l-2.5 1.4zM22 2l-2.5 1.4L17 2l1.4 2.5L17 7l2.5-1.4L22 7l-1.4-2.5L22 2zM13.34 12.78l2.44-2.44-2.12-2.12-2.44 2.44 2.12 2.12zm1.03-5.49 2.34 2.34c.39.39.39 1.03 0 1.42l-7.66 7.66c-.39.39-1.03.39-1.42 0l-2.34-2.34a.9959.9959 0 0 1 0-1.42l7.66-7.66c.39-.39 1.03-.39 1.42 0z"></path></svg>`
 const THEME_LOADING_EVENT = "kasutamu:theme-loading"
+const FAB_OPEN_EVENT = "kasutamu:fab-open"
 const CUSTOM_THEME_DATA_STORAGE_KEYS = ["custom-bg-image", "custom-bg-color", "custom-text-color", "custom-text-accent"]
 const CUSTOM_THEME_WATCH_STORAGE_KEYS = [...CUSTOM_THEME_DATA_STORAGE_KEYS, "custom-bg-options"]
 
@@ -377,6 +378,7 @@ const mountFab = async () => {
     event.stopPropagation()
     fabOpen = !fabOpen
     root.classList.toggle(FAB_OPEN_CLASS, fabOpen)
+    if (fabOpen) window.dispatchEvent(new Event(FAB_OPEN_EVENT))
   })
 
   const tooltip = document.createElement("span")
@@ -494,7 +496,7 @@ const generateCSS = (
     ` : ""}
     ${site === "gemini" ? `
       .show-lm-background::before {
-        background: radial-gradient(ellipse 100% 100% at center 8%, ${accentColor}2D 0, ${accentColor}2D 50%) !important;
+        background: none !important;
       }
       model-response {
         padding: 20px 28px !important;

@@ -9,14 +9,14 @@ const t = (key: string) => chrome.i18n.getMessage(key)
 const localStorageInstance = new Storage({ area: "local" })
 
 const THEME_LIST = [
-  { key: "random", color: "#ddd", textColor: "#000", emoji: "🎲" },
-  { key: "nasa", color: "#0b3d91", textColor: "#fc3d21", emoji: "🪐" },
-  { key: "neon", color: "#bf00ff", textColor: "#00f0ff", emoji: "💫" },
-  { key: "pink", color: "#ff3cac", textColor: "#e0b8ff", emoji: "💗" },
-  { key: "vintage", color: "#400000", textColor: "#b8860b", emoji: "🎻" },
-  { key: "fractal", color: "#ffe169", textColor: "#000", emoji: "🌈" },
-  { key: "terminal", color: "#000", textColor: "#33ff33", emoji: "📟" },
-  { key: "default", color: "#666", textColor: "#fff", emoji: "⚙️" }
+  { key: "random", color: "#ddd", emoji: "🎲" },
+  { key: "nasa", color: "#0b3d91", emoji: "🪐" },
+  { key: "neon", color: "#8f00ff", emoji: "💫" },
+  { key: "pink", color: "#ff3cac", emoji: "💗" },
+  { key: "vintage", color: "#400000", emoji: "🎻" },
+  { key: "fractal", color: "#f5de10", emoji: "🌈" },
+  { key: "terminal", color: "#000", emoji: "📟" },
+  { key: "default", color: "#666", emoji: "⚙️" }
 ]
 
 type ViewType = "themes" | "custom"
@@ -26,6 +26,7 @@ type CustomBgOptions = { scaleX: number; invert: number; grayscale: number; blur
 
 const DEFAULT_CUSTOM_BG_OPTIONS: CustomBgOptions = { scaleX: 1, invert: 0, grayscale: 0, blur: 0, brightness: 1, position: "center center" }
 const THEME_LOADING_EVENT = "kasutamu:theme-loading"
+const FAB_OPEN_EVENT = "kasutamu:fab-open"
 const DEBOUNCE_MS = 100
 const CUSTOM_THEME_LEGACY_STORAGE_KEYS = ["custom-bg-image", "custom-bg-color", "custom-text-color", "custom-text-accent", "custom-bg-options"]
 
@@ -113,6 +114,15 @@ export function FabPanelApp() {
     }
     window.addEventListener(THEME_LOADING_EVENT, onThemeLoading)
     return () => window.removeEventListener(THEME_LOADING_EVENT, onThemeLoading)
+  }, [])
+
+  useEffect(() => {
+    const onFabOpen = () => {
+      setEditingCustomThemeId("")
+      setView("themes")
+    }
+    window.addEventListener(FAB_OPEN_EVENT, onFabOpen)
+    return () => window.removeEventListener(FAB_OPEN_EVENT, onFabOpen)
   }, [])
 
   const createCustomTheme = () => ({ id: crypto.randomUUID(), name: `${t("custom")} ${customThemes.length + 1}`, text: "", accent: "", bgUrl: "", bgColor: "", bgOptions: { ...DEFAULT_CUSTOM_BG_OPTIONS } })
@@ -408,7 +418,7 @@ export function FabPanelApp() {
         .custom-theme-card:hover .custom-theme-card__bg { transform: scale(1.1); }
         .custom-theme-card:hover .custom-theme-card__title { background-color: #0000004D; }
         .pro-button { animation: pro-gradient 20s linear infinite; }
-        .pro-button:hover { filter: brightness(1.1); }
+        .footer button:hover { filter: brightness(1.1); }
         @keyframes pro-gradient {
           from { background-position: 500% 50%; }
           to { background-position: 0% 50%; }
@@ -528,11 +538,11 @@ export function FabPanelApp() {
               </>
             )}
           </div>
-          <div style={{ padding: 10 }}>
+          <div className="footer" style={{ padding: "10px 20px" }}>
             {view === "custom" && (
               <div style={{ ...rowStyle, gap: 8 }}>
-                <button type="button" onClick={onDeleteCustomTheme} style={{ ...controlButtonStyle, flex: 1, padding: 8, backgroundColor: "#d32f2f", color: "#fff" }}>{t("delete")}</button>
-                <button type="button" onClick={onSaveClick} style={{ ...controlButtonStyle, flex: 1, padding: 8, backgroundColor: "#1976d2", color: "#fff" }}>{t("save")}</button>
+                <button type="button" onClick={onDeleteCustomTheme} style={{ ...controlButtonStyle, flex: 1, border: "none", padding: 8, backgroundColor: "#d32f2f", color: "#fff" }}>{t("delete")}</button>
+                <button type="button" onClick={onSaveClick} style={{ ...controlButtonStyle, flex: 1, border: "none", padding: 8, backgroundColor: "#1976d2", color: "#fff" }}>{t("save")}</button>
               </div>
             )}
             {view !== "custom" && isPremiumLoaded && !isPremiumUser && (
