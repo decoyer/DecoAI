@@ -11,8 +11,8 @@
   "button": {
     "message": "버튼"
   },
-  "applyModel": {
-    "message": "모델 적용"
+  "manageModel": {
+    "message": "모델 관리"
   },
   "selectTheme": {
     "message": "테마 선택"

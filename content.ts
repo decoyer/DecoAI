@@ -98,16 +98,24 @@ const THEME_BG_URLS: Partial<Record<ThemeName, string>> = {
   fractal: "https://i.imgur.com/H1rtAbm.png"
 }
 
+const t = (key: string) => chrome.i18n.getMessage(key)
+
+const THEME_STYLE_ID = "ai-theme-style"
 const FAB_STYLE_ID = "kasutamu-fab-style"
 const FAB_ROOT_ID = "kasutamu-fab-root"
 const FAB_ROOT_CLASS = "kasutamu-fab"
 const FAB_OPEN_CLASS = "is-open"
+const FAB_ACTION_CLASS = "kasutamu-fab-action"
 const FAB_MAIN_BTN_CLASS = "kasutamu-fab-main"
+const FAB_TOOLTIP_CLASS = "kasutamu-fab-tooltip"
 const FAB_PANEL_CLASS = "kasutamu-fab-panel"
 const FAB_PANEL_MOUNT_ID = "kasutamu-fab-panel-mount"
 const FAB_HIDDEN_STORAGE_KEY = "fab-hidden"
+const MODEL_ENABLED_STORAGE_KEY = "model-enabled-map"
 const FAB_MAIN_BTN_ICON = `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M7.5 5.6 10 7 8.6 4.5 10 2 7.5 3.4 5 2l1.4 2.5L5 7l2.5-1.4zm12 9.8L17 14l1.4 2.5L17 19l2.5-1.4L22 19l-1.4-2.5L22 14l-2.5 1.4zM22 2l-2.5 1.4L17 2l1.4 2.5L17 7l2.5-1.4L22 7l-1.4-2.5L22 2zM13.34 12.78l2.44-2.44-2.12-2.12-2.44 2.44 2.12 2.12zm1.03-5.49 2.34 2.34c.39.39.39 1.03 0 1.42l-7.66 7.66c-.39.39-1.03.39-1.42 0l-2.34-2.34a.9959.9959 0 0 1 0-1.42l7.66-7.66c.39-.39 1.03-.39 1.42 0z"></path></svg>`
 const THEME_LOADING_EVENT = "kasutamu:theme-loading"
+const CUSTOM_THEME_DATA_STORAGE_KEYS = ["custom-bg-image", "custom-bg-color", "custom-text-color", "custom-text-accent"]
+const CUSTOM_THEME_WATCH_STORAGE_KEYS = [...CUSTOM_THEME_DATA_STORAGE_KEYS, "custom-bg-options"]
 
 const emitThemeLoading = (loading: boolean) => {
   window.dispatchEvent(new CustomEvent(THEME_LOADING_EVENT, { detail: { loading } }))
@@ -141,10 +149,10 @@ const isThemeAllowedForCurrentUrl = (site: SiteType) => {
 }
 
 const getThemeStyle = () => {
-  let style = document.getElementById("ai-theme-style") as HTMLStyleElement | null
+  let style = document.getElementById(THEME_STYLE_ID) as HTMLStyleElement | null
   if (!style) {
     style = document.createElement("style")
-    style.id = "ai-theme-style"
+    style.id = THEME_STYLE_ID
       ; (document.head || document.documentElement).appendChild(style)
   }
   return style
@@ -158,7 +166,7 @@ const getFABStyle = () => {
     style.textContent = `
       .${FAB_ROOT_CLASS} {
         position: fixed;
-        right: 38px;
+        right: 48px;
         bottom: 78px;
         z-index: 2147483646;
         display: flex;
@@ -179,14 +187,41 @@ const getFABStyle = () => {
         border-radius: 999px;
         color: #66cdaa;
         cursor: pointer;
-        opacity: 0.8;
-        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
       }
 
       html.dark .${FAB_MAIN_BTN_CLASS},
       body.dark-theme .${FAB_MAIN_BTN_CLASS},
       html[data-mode="dark"] .${FAB_MAIN_BTN_CLASS} {
         background-color: #fff;
+      }
+
+      .${FAB_MAIN_BTN_CLASS}:hover {
+        opacity: 0.7;
+      }
+
+      .${FAB_ACTION_CLASS} {
+        display: flex;
+        flex-direction: row-reverse;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .${FAB_TOOLTIP_CLASS} {
+        padding: 4px 8px;
+        background-color: #000;
+        border: 1px solid #66cdaa4D;
+        border-radius: 8px;
+        color: #fff;
+        font-size: 12px;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateX(4px);
+      }
+
+      .${FAB_MAIN_BTN_CLASS}:hover + .${FAB_TOOLTIP_CLASS},
+      .${FAB_MAIN_BTN_CLASS}:focus-visible + .${FAB_TOOLTIP_CLASS} {
+        opacity: 1;
       }
 
       .${FAB_PANEL_CLASS} {
@@ -199,18 +234,12 @@ const getFABStyle = () => {
         box-shadow: inset 0 2px 16px var(--kasutamu-accent);
         opacity: 0;
         pointer-events: none;
-        visibility: hidden;
-        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       }
 
       .${FAB_ROOT_CLASS}.${FAB_OPEN_CLASS} .${FAB_PANEL_CLASS} {
-        opacity: 0.8;
         pointer-events: auto;
-        visibility: visible;
-      }
-
-      .${FAB_MAIN_BTN_CLASS}:hover {
-        opacity: 1;
+        opacity: 0.7;
       }
 
       .${FAB_ROOT_CLASS}.${FAB_OPEN_CLASS} .${FAB_PANEL_CLASS}:hover {
@@ -245,12 +274,7 @@ const getPaletteData = async (bgUrl: string): Promise<ThemeConfig> => {
 }
 
 const getCustomThemeData = async (): Promise<ThemeConfig> => {
-  const customData = await chrome.storage.local.get([
-    "custom-bg-image",
-    "custom-bg-color",
-    "custom-text-color",
-    "custom-text-accent"
-  ])
+  const customData = await chrome.storage.local.get(CUSTOM_THEME_DATA_STORAGE_KEYS)
 
   return {
     bgUrl: customData["custom-bg-image"] || "",
@@ -319,7 +343,10 @@ const onOutsideFabClick = (event: MouseEvent) => {
   const root = document.getElementById(FAB_ROOT_ID)
   if (!root) return
   const target = event.target as Node
-  if (!root.contains(target)) closeFabDock()
+  const panel = root.querySelector(`.${FAB_PANEL_CLASS}`)
+  const mainButton = root.querySelector(`.${FAB_MAIN_BTN_CLASS}`)
+  if (panel?.contains(target) || mainButton?.contains(target)) return
+  closeFabDock()
 }
 
 const mountFab = async () => {
@@ -344,7 +371,7 @@ const mountFab = async () => {
   const mainButton = document.createElement("button")
   mainButton.type = "button"
   mainButton.className = FAB_MAIN_BTN_CLASS
-  mainButton.setAttribute("aria-label", "Open theme quick menu")
+  mainButton.setAttribute("aria-label", "Select Theme Button")
   mainButton.innerHTML = FAB_MAIN_BTN_ICON
   mainButton.addEventListener("click", (event) => {
     event.stopPropagation()
@@ -352,8 +379,17 @@ const mountFab = async () => {
     root.classList.toggle(FAB_OPEN_CLASS, fabOpen)
   })
 
+  const tooltip = document.createElement("span")
+  tooltip.className = FAB_TOOLTIP_CLASS
+  tooltip.textContent = `${t("selectTheme")}`
+
+  const action = document.createElement("div")
+  action.className = FAB_ACTION_CLASS
+  action.appendChild(mainButton)
+  action.appendChild(tooltip)
+
   root.appendChild(panel)
-  root.appendChild(mainButton)
+  root.appendChild(action)
     ; (document.body || document.documentElement).appendChild(root)
   document.addEventListener("click", onOutsideFabClick, { capture: true })
   const shadowRoot = panelHost.attachShadow({ mode: "open" })
@@ -440,7 +476,7 @@ const generateCSS = (
       box-shadow: inset 0 2px 16px ${accentColor}4D !important;
       backdrop-filter: blur(12px) saturate(140%) !important;
       opacity: 0.9 !important;
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
     }
     ${darkSelectors} {
       background-color: rgba(24, 24, 24, 0.8) !important;
@@ -503,7 +539,7 @@ const applyTheme = async (requestId: number) => {
 
   const [currentTheme, modelEnabled] = await Promise.all([
     storage.get<string>("selected-theme"),
-    storage.get<ModelEnabledMap>("model-enabled-map")
+    storage.get<ModelEnabledMap>(MODEL_ENABLED_STORAGE_KEY)
   ])
 
   const isModelEnabled = modelEnabled?.[currentSite] ?? true
@@ -556,6 +592,9 @@ const invalidateThemeCache = () => {
   cachedThemeData = null
 }
 
+const hasCustomThemeStorageChange = (changes: Record<string, chrome.storage.StorageChange>) =>
+  CUSTOM_THEME_WATCH_STORAGE_KEYS.some((key) => changes[key])
+
 const watchLocationChange = () => {
   const originalPushState = history.pushState
   const originalReplaceState = history.replaceState
@@ -586,13 +625,7 @@ storage.watch({
 })
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === "local" && (
-    changes["custom-bg-image"] ||
-    changes["custom-bg-color"] ||
-    changes["custom-text-color"] ||
-    changes["custom-text-accent"] ||
-    changes["custom-bg-options"]
-  )) {
+  if (areaName === "local" && hasCustomThemeStorageChange(changes)) {
     invalidateThemeCache()
     scheduleApplyTheme()
   }

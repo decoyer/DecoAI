@@ -2,6 +2,7 @@ import { useStorage } from "@plasmohq/storage/hook"
 
 const t = (key: string) => chrome.i18n.getMessage(key)
 const FAB_HIDDEN_STORAGE_KEY = "fab-hidden"
+const MODEL_ENABLED_STORAGE_KEY = "model-enabled-map"
 
 type ModelEnabledMap = {
   chatgpt: boolean
@@ -9,6 +10,7 @@ type ModelEnabledMap = {
   claude: boolean
   grok: boolean
 }
+type ModelKey = keyof ModelEnabledMap
 
 const DEFAULT_MODEL_ENABLED: ModelEnabledMap = {
   chatgpt: true,
@@ -26,7 +28,9 @@ const MODEL_LIST = [
 
 function IndexPopup() {
   const [fabHidden, setFabHidden] = useStorage<boolean>(FAB_HIDDEN_STORAGE_KEY, false)
-  const [modelEnabled, setModelEnabled] = useStorage<ModelEnabledMap>("model-enabled-map", DEFAULT_MODEL_ENABLED)
+  const [modelEnabled, setModelEnabled] = useStorage<ModelEnabledMap>(MODEL_ENABLED_STORAGE_KEY, DEFAULT_MODEL_ENABLED)
+  const version = chrome.runtime.getManifest().version
+  const setModelChecked = (key: ModelKey, checked: boolean) => setModelEnabled({ ...modelEnabled, [key]: checked })
 
   return (
     <>
@@ -69,9 +73,10 @@ function IndexPopup() {
       `}</style>
       <div style={rootStyle}>
         <div style={headerStyle}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "end", justifyContent: "space-between" }}>
             <img src={chrome.runtime.getURL("assets/icon.png")} alt="app icon" style={{ height: 24 }} />
             <img src={chrome.runtime.getURL("assets/logo.png")} alt="app logo" style={{ height: 24 }} />
+            <span>v{version}</span>
           </div>
         </div>
 
@@ -79,25 +84,31 @@ function IndexPopup() {
           <h2 style={{ textAlign: "center" }}>{t("setting")}</h2>
           <h3 style={{ marginTop: 10 }}>{t("general")}</h3>
           <label style={rowStyle}>
-            <span>{t("appName")} {t("button")}</span>
-            <input className="toggle-switch" type="checkbox" checked={!fabHidden} onChange={(e) => setFabHidden(!e.target.checked)} />
+            <span>{t("selectTheme")} {t("button")}</span>
+            <ToggleSwitch checked={!fabHidden} onChange={(checked) => setFabHidden(!checked)} />
           </label>
 
-          <h3 style={{ marginTop: 10 }}>{t("applyModel")}</h3>
+          <h3 style={{ marginTop: 10 }}>{t("manageModel")}</h3>
           {MODEL_LIST.map((site) => (
             <label key={site.key} style={rowStyle}>
               <span>{site.label}</span>
-              <input
-                className="toggle-switch"
-                type="checkbox"
-                checked={Boolean(modelEnabled?.[site.key as keyof ModelEnabledMap])}
-                onChange={(e) => setModelEnabled({ ...modelEnabled, [site.key]: e.target.checked })}
-              />
+              <ToggleSwitch checked={Boolean(modelEnabled?.[site.key])} onChange={(checked) => setModelChecked(site.key, checked)} />
             </label>
           ))}
         </div>
       </div>
     </>
+  )
+}
+
+function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <input
+      className="toggle-switch"
+      type="checkbox"
+      checked={checked}
+      onChange={(e) => onChange(e.target.checked)}
+    />
   )
 }
 
@@ -108,12 +119,15 @@ const rootStyle = {
   flexDirection: "column",
   backgroundColor: "#333",
   color: "#fff",
-  fontFamily: "sans-serif"
+  fontFamily: "sans-serif",
+  userSelect: "none",
+  WebkitUserSelect: "none"
 } as const
 
 const headerStyle = {
-  padding: 8,
-  backgroundColor: "#66cdaa"
+  padding: "8px 16px",
+  backgroundColor: "#66cdaa",
+  color: "#333"
 } as const
 
 const contentStyle = {

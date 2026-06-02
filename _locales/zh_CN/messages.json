@@ -11,8 +11,8 @@
   "button": {
     "message": "按钮"
   },
-  "applyModel": {
-    "message": "应用模型"
+  "manageModel": {
+    "message": "模型管理"
   },
   "selectTheme": {
     "message": "选择主题"

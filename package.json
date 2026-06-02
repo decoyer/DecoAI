@@ -1,12 +1,12 @@
 {
   "name": "kasutamu",
   "displayName": "kasutamu",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "Customize your AI chat",
   "author": "decoyer <nockback@naver.com>",
   "scripts": {
-    "dev": "plasmo dev",
-    "build": "plasmo build",
+    "dev": "node scripts/locales.cjs dev",
+    "build": "node scripts/locales.cjs build",
     "package": "plasmo package"
   },
   "dependencies": {

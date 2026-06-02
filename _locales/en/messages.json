@@ -11,8 +11,8 @@
   "button": {
     "message": "Button"
   },
-  "applyModel": {
-    "message": "Apply Model"
+  "manageModel": {
+    "message": "Models"
   },
   "selectTheme": {
     "message": "Select Theme"

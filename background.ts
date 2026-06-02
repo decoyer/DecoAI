@@ -83,4 +83,35 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
 
     return true
   }
+
+  if (message.type === "OPEN_CHECKOUT") {
+    ; (async () => {
+      try {
+        const response = await fetch("https://kasutamu.cokr.workers.dev/checkout", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${message.idToken}` }
+        })
+
+        if (!response.ok) {
+          sendResponse({ success: false, error: `Checkout request failed: ${response.status}` })
+          return
+        }
+
+        const data = await response.json()
+        const checkoutUrl = typeof data?.checkoutUrl === "string" ? data.checkoutUrl : ""
+
+        if (!checkoutUrl) {
+          sendResponse({ success: false, error: "Checkout URL missing" })
+          return
+        }
+
+        chrome.tabs.create({ url: checkoutUrl })
+        sendResponse({ success: true })
+      } catch (error) {
+        sendResponse({ success: false, error: error instanceof Error ? error.message : "Checkout request failed" })
+      }
+    })()
+
+    return true
+  }
 })

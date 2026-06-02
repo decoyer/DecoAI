@@ -1,7 +1,7 @@
 import { Storage } from "@plasmohq/storage"
 import { useStorage } from "@plasmohq/storage/hook"
 import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithCredential, type User } from "firebase/auth"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 
 import { app } from "./firebase"
 
@@ -27,6 +27,7 @@ type CustomBgOptions = { scaleX: number; invert: number; grayscale: number; blur
 const DEFAULT_CUSTOM_BG_OPTIONS: CustomBgOptions = { scaleX: 1, invert: 0, grayscale: 0, blur: 0, brightness: 1, position: "center center" }
 const THEME_LOADING_EVENT = "kasutamu:theme-loading"
 const DEBOUNCE_MS = 100
+const CUSTOM_THEME_LEGACY_STORAGE_KEYS = ["custom-bg-image", "custom-bg-color", "custom-text-color", "custom-text-accent", "custom-bg-options"]
 
 const wrapperStyle = { position: "relative", width: 250, height: 500 } as const
 const rootStyle = { width: 250, height: 500, display: "flex", flexDirection: "column", fontFamily: "sans-serif", color: "#fff", overflow: "hidden" } as const
@@ -42,7 +43,7 @@ const cardStyle = {
   padding: 10,
   backdropFilter: "blur(12px) saturate(140%)",
   WebkitBackdropFilter: "blur(12px) saturate(140%)",
-  transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
+  transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
 } as const
 const rowStyle = { display: "flex", justifyContent: "space-between", alignItems: "center" } as const
 const colorInputStyle = { width: 45, height: 25, border: "none", borderRadius: "12px", padding: 0, cursor: "pointer", overflow: "hidden" } as const
@@ -54,7 +55,7 @@ const controlButtonStyle = {
   border: "1px solid transparent",
   borderRadius: 12,
   cursor: "pointer",
-  transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+  transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
   backdropFilter: "blur(12px) saturate(140%)",
   WebkitBackdropFilter: "blur(12px) saturate(140%)"
 } as const
@@ -64,7 +65,8 @@ const proButtonStyle = {
   border: "none",
   padding: 8,
   color: "#fff",
-  background: "linear-gradient(90deg, rgba(139, 92, 246, 0.92), rgba(236, 72, 153, 0.92))"
+  background: "linear-gradient(90deg, #F472B6, #C084FC, #60A5FA, #C084FC, #F472B6)",
+  backgroundSize: "500% 100%"
 } as const
 
 export function FabPanelApp() {
@@ -76,9 +78,6 @@ export function FabPanelApp() {
   const [customThemes, setCustomThemes] = useStorage<CustomTheme[]>({ key: "custom-themes", instance: localStorageInstance }, [])
   const [selectedCustomThemeId, setSelectedCustomThemeId] = useStorage({ key: "selected-custom-theme-id", instance: localStorageInstance }, "")
   const [editingCustomThemeId, setEditingCustomThemeId] = useState("")
-  const [customText, setCustomText] = useStorage({ key: "custom-text-color", instance: localStorageInstance }, "")
-  const [customAccent, setCustomAccent] = useStorage({ key: "custom-text-accent", instance: localStorageInstance }, "")
-  const [customBgOptions, setCustomBgOptions] = useStorage<CustomBgOptions>({ key: "custom-bg-options", instance: localStorageInstance }, DEFAULT_CUSTOM_BG_OPTIONS)
   const [isPremiumUser, setIsPremiumUser] = useState(false)
   const [isPremiumLoaded, setIsPremiumLoaded] = useState(false)
   const [localCustomBgOptions, setLocalCustomBgOptions] = useState<CustomBgOptions>(DEFAULT_CUSTOM_BG_OPTIONS)
@@ -138,9 +137,6 @@ export function FabPanelApp() {
     const nextBgUrl = themeData.bgUrl || ""
     const nextBgColor = themeData.bgColor || ""
 
-    setCustomText(nextText)
-    setCustomAccent(nextAccent)
-    setCustomBgOptions(nextBgOptions)
     setCustomBg(nextBgUrl)
     setLocalCustomBgColor(nextBgColor)
 
@@ -177,9 +173,19 @@ export function FabPanelApp() {
   }
 
   const openCheckout = async (idToken: string) => {
-    const res = await fetch("https://kasutamu.cokr.workers.dev/checkout", { method: "POST", headers: { Authorization: `Bearer ${idToken}` } })
-    const data = JSON.parse(await res.text()) as { checkoutUrl: string }
-    chrome.tabs.create({ url: data.checkoutUrl })
+    await new Promise<void>((resolve, reject) => {
+      chrome.runtime.sendMessage({ type: "OPEN_CHECKOUT", idToken }, (response) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message))
+          return
+        }
+        if (!response?.success) {
+          reject(new Error(response?.error || "Failed to open checkout"))
+          return
+        }
+        resolve()
+      })
+    })
   }
 
   const getGoogleAccessToken = () =>
@@ -311,10 +317,7 @@ export function FabPanelApp() {
     if (deletingSelected) {
       setSelectedCustomThemeId("")
       setTheme("default")
-      setCustomText("")
-      setCustomAccent("")
-      setCustomBgOptions(DEFAULT_CUSTOM_BG_OPTIONS)
-      chrome.storage.local.remove(["custom-bg-image", "custom-bg-color", "custom-text-color", "custom-text-accent", "custom-bg-options"])
+      chrome.storage.local.remove(CUSTOM_THEME_LEGACY_STORAGE_KEYS)
     }
     setEditingCustomThemeId("")
     setView("themes")
@@ -323,7 +326,7 @@ export function FabPanelApp() {
   return (
     <>
       <style>{`
-        * { margin: 0; box-sizing: border-box; }
+        * { margin: 0; box-sizing: border-box; user-select: none; -webkit-user-select: none; }
         .content-scroll { -ms-overflow-style: none; scrollbar-width: none; }
         .content-scroll::-webkit-scrollbar { display: none; }
         input.color-picker::-webkit-color-swatch-wrapper { padding: 0; }
@@ -337,7 +340,7 @@ export function FabPanelApp() {
           position: absolute;
           inset: 0;
           transform: scale(1);
-          transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
           z-index: 0;
           background-position: center center;
           background-size: cover;
@@ -353,7 +356,7 @@ export function FabPanelApp() {
           color: #fff;
           background-color: #0000008D;
           text-align: center;
-          transition: background-color 200ms cubic-bezier(0.4, 0, 0.2, 1);
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .preset-theme-card__emoji {
           position: absolute;
@@ -363,7 +366,7 @@ export function FabPanelApp() {
           z-index: 1;
           font-size: 32px;
           line-height: 1;
-          transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .preset-theme-card:hover .preset-theme-card__bg { transform: scale(1.1); }
         .preset-theme-card:hover .preset-theme-card__emoji { transform: translate(-50%, -75%) scale(1.1); }
@@ -379,7 +382,7 @@ export function FabPanelApp() {
           overflow: hidden;
           backdrop-filter: blur(12px) saturate(140%);
           isolation: isolate;
-          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .custom-theme-card__bg {
           position: absolute;
@@ -388,7 +391,7 @@ export function FabPanelApp() {
           background-size: cover;
           background-repeat: no-repeat;
           transform: scale(1);
-          transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .custom-theme-card__title {
           position: absolute;
@@ -400,10 +403,16 @@ export function FabPanelApp() {
           background-color: #0000008D;
           color: #fff;
           text-align: center;
-          transition: background-color 200ms cubic-bezier(0.4, 0, 0.2, 1);
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .custom-theme-card:hover .custom-theme-card__bg { transform: scale(1.1); }
         .custom-theme-card:hover .custom-theme-card__title { background-color: #0000004D; }
+        .pro-button { animation: pro-gradient 20s linear infinite; }
+        .pro-button:hover { filter: brightness(1.1); }
+        @keyframes pro-gradient {
+          from { background-position: 500% 50%; }
+          to { background-position: 0% 50%; }
+        }
       `}</style>
       <div style={wrapperStyle}>
         <div style={rootStyle}>
@@ -473,33 +482,9 @@ export function FabPanelApp() {
                       <input type="text" value={localCustomThemeName} maxLength={10} onChange={(e) => setLocalCustomThemeName(e.target.value)} style={{ width: 120, border: "none", borderRadius: 12, padding: 4, textAlign: "center", backgroundColor: "#4b5563", color: "#fff" }} />
                     </label>
                   </div>
-                  <div style={cardStyle}>
-                    <label style={rowStyle}>
-                      <span>{t("text")}</span>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <input type="color" value={localText} onChange={(e) => setLocalText(e.target.value)} className="color-picker" style={colorInputStyle} />
-                        <button type="button" onClick={resetCustomText} disabled={!canResetText} style={{ ...controlButtonStyle, opacity: canResetText ? 1 : 0.5, cursor: canResetText ? "pointer" : "not-allowed" }}>{t("reset")}</button>
-                      </div>
-                    </label>
-                  </div>
-                  <div style={cardStyle}>
-                    <label style={rowStyle}>
-                      <span>{t("accent")}</span>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <input type="color" value={localAccent} onChange={(e) => setLocalAccent(e.target.value)} className="color-picker" style={colorInputStyle} />
-                        <button type="button" onClick={resetCustomAccent} disabled={!canResetAccent} style={{ ...controlButtonStyle, opacity: canResetAccent ? 1 : 0.5, cursor: canResetAccent ? "pointer" : "not-allowed" }}>{t("reset")}</button>
-                      </div>
-                    </label>
-                  </div>
-                  <div style={cardStyle}>
-                    <label style={rowStyle}>
-                      <span>{t("backgroundColor")}</span>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <input type="color" value={localCustomBgColor} onChange={(e) => setLocalCustomBgColor(e.target.value)} className="color-picker" style={colorInputStyle} />
-                        <button type="button" onClick={resetCustomBgColor} disabled={!localCustomBgColor} style={{ ...controlButtonStyle, opacity: localCustomBgColor ? 1 : 0.5, cursor: localCustomBgColor ? "pointer" : "not-allowed" }}>{t("reset")}</button>
-                      </div>
-                    </label>
-                  </div>
+                  <ColorSettingCard label={t("text")} value={localText} onChange={setLocalText} onReset={resetCustomText} canReset={canResetText} />
+                  <ColorSettingCard label={t("accent")} value={localAccent} onChange={setLocalAccent} onReset={resetCustomAccent} canReset={canResetAccent} />
+                  <ColorSettingCard label={t("backgroundColor")} value={localCustomBgColor} onChange={setLocalCustomBgColor} onReset={resetCustomBgColor} canReset={Boolean(localCustomBgColor)} />
                   <div style={cardStyle}>
                     <label style={rowStyle}>
                       <span>{t("backgroundImage")}</span>
@@ -510,31 +495,35 @@ export function FabPanelApp() {
                       </div>
                     </label>
                   </div>
-                  <div style={cardStyle}>
-                    <label style={rowStyle}>
-                      <span>{t("imagePosition")}</span>
-                      <select value={localCustomBgOptions.position} onChange={(e) => updateCustomBgOption("position", e.target.value)} disabled={!customBg} style={{ border: "none", borderRadius: "12px", padding: 4, backgroundColor: "#4b5563", color: "#fff", cursor: customBg ? "pointer" : "not-allowed", opacity: customBg ? 1 : 0.5 }}>
-                        <option value="center top">{t("Top")}</option>
-                        <option value="center center">{t("Center")}</option>
-                        <option value="center bottom">{t("Bottom")}</option>
-                      </select>
-                    </label>
-                  </div>
-                  <div style={cardStyle}>
-                    <CheckboxControl label={t("scaleX")} checked={localCustomBgOptions.scaleX === -1} disabled={!customBg} onChange={(c) => updateCustomBgOption("scaleX", c ? -1 : 1)} />
-                  </div>
-                  <div style={cardStyle}>
-                    <RangeControl label={t("brightness")} min={0} max={5} step={0.1} value={localCustomBgOptions.brightness} disabled={!customBg} onChange={(v) => updateCustomBgOption("brightness", Number(v))} onReset={() => updateCustomBgOption("brightness", 1)} />
-                  </div>
-                  <div style={cardStyle}>
-                    <RangeControl label={t("blur")} min={0} max={50} step={1} value={localCustomBgOptions.blur} disabled={!customBg} onChange={(v) => updateCustomBgOption("blur", Number(v))} onReset={() => updateCustomBgOption("blur", 0)} />
-                  </div>
-                  <div style={cardStyle}>
-                    <CheckboxControl label={t("invert")} checked={localCustomBgOptions.invert === 1} disabled={!customBg} onChange={(c) => updateCustomBgOption("invert", c ? 1 : 0)} />
-                  </div>
-                  <div style={cardStyle}>
-                    <CheckboxControl label={t("grayscale")} checked={localCustomBgOptions.grayscale === 1} disabled={!customBg} onChange={(c) => updateCustomBgOption("grayscale", c ? 1 : 0)} />
-                  </div>
+                  {customBg && (
+                    <>
+                      <div style={cardStyle}>
+                        <label style={rowStyle}>
+                          <span>{t("imagePosition")}</span>
+                          <select value={localCustomBgOptions.position} onChange={(e) => updateCustomBgOption("position", e.target.value)} disabled={!customBg} style={{ border: "none", borderRadius: "12px", padding: 4, backgroundColor: "#4b5563", color: "#fff", cursor: customBg ? "pointer" : "not-allowed", opacity: customBg ? 1 : 0.5 }}>
+                            <option value="center top">{t("Top")}</option>
+                            <option value="center center">{t("Center")}</option>
+                            <option value="center bottom">{t("Bottom")}</option>
+                          </select>
+                        </label>
+                      </div>
+                      <div style={cardStyle}>
+                        <CheckboxControl label={t("scaleX")} checked={localCustomBgOptions.scaleX === -1} disabled={!customBg} onChange={(c) => updateCustomBgOption("scaleX", c ? -1 : 1)} />
+                      </div>
+                      <div style={cardStyle}>
+                        <RangeControl label={t("brightness")} min={0} max={5} step={0.1} value={localCustomBgOptions.brightness} disabled={!customBg} onChange={(v) => updateCustomBgOption("brightness", Number(v))} onReset={() => updateCustomBgOption("brightness", 1)} />
+                      </div>
+                      <div style={cardStyle}>
+                        <RangeControl label={t("blur")} min={0} max={50} step={1} value={localCustomBgOptions.blur} disabled={!customBg} onChange={(v) => updateCustomBgOption("blur", Number(v))} onReset={() => updateCustomBgOption("blur", 0)} />
+                      </div>
+                      <div style={cardStyle}>
+                        <CheckboxControl label={t("invert")} checked={localCustomBgOptions.invert === 1} disabled={!customBg} onChange={(c) => updateCustomBgOption("invert", c ? 1 : 0)} />
+                      </div>
+                      <div style={cardStyle}>
+                        <CheckboxControl label={t("grayscale")} checked={localCustomBgOptions.grayscale === 1} disabled={!customBg} onChange={(c) => updateCustomBgOption("grayscale", c ? 1 : 0)} />
+                      </div>
+                    </>
+                  )}
                 </div>
               </>
             )}
@@ -547,7 +536,7 @@ export function FabPanelApp() {
               </div>
             )}
             {view !== "custom" && isPremiumLoaded && !isPremiumUser && (
-              <button type="button" onClick={checkPremium} style={{ ...proButtonStyle }}>💎 {t("upgradePro")}</button>
+              <button type="button" className="pro-button" onClick={checkPremium} style={{ ...proButtonStyle }}><span>💎 {t("upgradePro")}</span></button>
             )}
           </div>
         </div>
@@ -561,7 +550,25 @@ export function FabPanelApp() {
   )
 }
 
-const btnStyle = (color: string, active: boolean) => ({ height: 100, backgroundColor: color, border: "none", borderRadius: "12px", cursor: "pointer", boxShadow: active ? "inset 2px 2px 5px rgba(0, 0, 0, 0.2), 0 0 0 3px #66cdaa" : "none", transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)" })
+const btnStyle = (color: string, active: boolean) => ({ height: 100, backgroundColor: color, border: "none", borderRadius: "12px", cursor: "pointer", boxShadow: active ? "inset 2px 2px 5px rgba(0, 0, 0, 0.2), 0 0 0 3px #66cdaa" : "none", transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)" })
+
+function Card({ children }: { children: ReactNode }) {
+  return <div style={cardStyle}>{children}</div>
+}
+
+function ColorSettingCard({ label, value, onChange, onReset, canReset }: { label: string; value: string; onChange: (value: string) => void; onReset: () => void; canReset: boolean }) {
+  return (
+    <Card>
+      <label style={rowStyle}>
+        <span>{label}</span>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="color-picker" style={colorInputStyle} />
+          <button type="button" onClick={onReset} disabled={!canReset} style={{ ...controlButtonStyle, opacity: canReset ? 1 : 0.5, cursor: canReset ? "pointer" : "not-allowed" }}>{t("reset")}</button>
+        </div>
+      </label>
+    </Card>
+  )
+}
 
 function RangeControl({ label, min, max, step, value, disabled = false, onChange, onReset }: { label: string; min: number; max: number; step: number; value: number; disabled?: boolean; onChange: (value: string) => void; onReset?: () => void }) {
   return (
