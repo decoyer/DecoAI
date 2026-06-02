@@ -203,7 +203,7 @@ const getFABStyle = () => {
         display: flex;
         flex-direction: row-reverse;
         align-items: center;
-        gap: 8px;
+        gap: 10px;
       }
 
       .${FAB_TOOLTIP_CLASS} {
