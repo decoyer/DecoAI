@@ -1,3 +1,31 @@
+import { ALLOWED_IMAGE_SOURCE_URLS, MAX_FETCH_IMAGE_BYTES } from "./theme-utils"
+
+const isHttpsUrl = (value: unknown) => {
+  if (typeof value !== "string") return false
+  try {
+    return new URL(value).protocol === "https:"
+  } catch {
+    return false
+  }
+}
+
+const isAllowedImageSource = (value: unknown) =>
+  typeof value === "string" && ALLOWED_IMAGE_SOURCE_URLS.has(value)
+
+const getContentLength = (response: Response) => {
+  const value = Number(response.headers.get("content-length") || 0)
+  return Number.isFinite(value) ? value : 0
+}
+
+const isSupportedImageResponse = (response: Response) => {
+  const contentType = response.headers.get("content-type") || ""
+  const contentLength = getContentLength(response)
+  return (
+    contentType.startsWith("image/") &&
+    (!contentLength || contentLength <= MAX_FETCH_IMAGE_BYTES)
+  )
+}
+
 chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
   if (message.type === "GET_GOOGLE_ACCESS_TOKEN") {
     const identityApi = chrome.identity
@@ -9,7 +37,10 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
     ;(async () => {
       identityApi.getAuthToken({ interactive: false }, (token) => {
         if (chrome.runtime.lastError) {
-          sendResponse({ success: false, error: chrome.runtime.lastError.message })
+          sendResponse({
+            success: false,
+            error: chrome.runtime.lastError.message
+          })
           return
         }
 
@@ -17,7 +48,11 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
           identityApi.removeCachedAuthToken({ token }, () => {
             identityApi.getAuthToken({ interactive: true }, (newToken) => {
               if (chrome.runtime.lastError || !newToken) {
-                sendResponse({ success: false, error: chrome.runtime.lastError?.message || "Failed to get token" })
+                sendResponse({
+                  success: false,
+                  error:
+                    chrome.runtime.lastError?.message || "Failed to get token"
+                })
                 return
               }
               sendResponse({ success: true, token: newToken })
@@ -28,7 +63,10 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
 
         identityApi.getAuthToken({ interactive: true }, (newToken) => {
           if (chrome.runtime.lastError || !newToken) {
-            sendResponse({ success: false, error: chrome.runtime.lastError?.message || "Failed to get token" })
+            sendResponse({
+              success: false,
+              error: chrome.runtime.lastError?.message || "Failed to get token"
+            })
             return
           }
           sendResponse({ success: true, token: newToken })
@@ -40,7 +78,12 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
   }
 
   if (message.type === "FETCH_IMAGE_AS_DATA_URL") {
-    ; (async () => {
+    ;(async () => {
+      if (!isAllowedImageSource(message.url)) {
+        sendResponse({ success: false })
+        return
+      }
+
       const response = await fetch(message.url)
 
       if (!response.ok) {
@@ -55,7 +98,7 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
         const data = await response.json()
         const imageUrl = typeof data?.url === "string" ? data.url : ""
 
-        if (!imageUrl) {
+        if (!isHttpsUrl(imageUrl)) {
           sendResponse({ success: false })
           return
         }
@@ -68,7 +111,17 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
         }
       }
 
+      if (!isSupportedImageResponse(url)) {
+        sendResponse({ success: false })
+        return
+      }
+
       const blob = await url.blob()
+      if (blob.size > MAX_FETCH_IMAGE_BYTES) {
+        sendResponse({ success: false })
+        return
+      }
+
       const reader = new FileReader()
 
       reader.onloadend = () => {
@@ -85,22 +138,37 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
   }
 
   if (message.type === "OPEN_CHECKOUT") {
-    ; (async () => {
+    ;(async () => {
       try {
-        const response = await fetch("https://kasutamu.cokr.workers.dev/checkout", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${message.idToken}` }
-        })
+        if (
+          typeof message.idToken !== "string" ||
+          message.idToken.length < 100
+        ) {
+          sendResponse({ success: false, error: "Invalid token" })
+          return
+        }
+
+        const response = await fetch(
+          "https://kasutamu.cokr.workers.dev/checkout",
+          {
+            method: "POST",
+            headers: { Authorization: `Bearer ${message.idToken}` }
+          }
+        )
 
         if (!response.ok) {
-          sendResponse({ success: false, error: `Checkout request failed: ${response.status}` })
+          sendResponse({
+            success: false,
+            error: `Checkout request failed: ${response.status}`
+          })
           return
         }
 
         const data = await response.json()
-        const checkoutUrl = typeof data?.checkoutUrl === "string" ? data.checkoutUrl : ""
+        const checkoutUrl =
+          typeof data?.checkoutUrl === "string" ? data.checkoutUrl : ""
 
-        if (!checkoutUrl) {
+        if (!checkoutUrl || !isHttpsUrl(checkoutUrl)) {
           sendResponse({ success: false, error: "Checkout URL missing" })
           return
         }
@@ -108,7 +176,11 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
         chrome.tabs.create({ url: checkoutUrl })
         sendResponse({ success: true })
       } catch (error) {
-        sendResponse({ success: false, error: error instanceof Error ? error.message : "Checkout request failed" })
+        sendResponse({
+          success: false,
+          error:
+            error instanceof Error ? error.message : "Checkout request failed"
+        })
       }
     })()
 

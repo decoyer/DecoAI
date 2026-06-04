@@ -11,6 +11,22 @@ import { Storage } from "@plasmohq/storage"
 import { useStorage } from "@plasmohq/storage/hook"
 
 import { app } from "./firebase"
+import {
+  createCustomTheme,
+  createThemeExportBlob,
+  CUSTOM_THEME_LEGACY_STORAGE_KEYS,
+  DEFAULT_CUSTOM_BG_OPTIONS,
+  hasAnimatedBackground,
+  isAnimatedImage,
+  MAX_IMAGE_FILE_BYTES,
+  MAX_IMPORT_FILE_BYTES,
+  parseImportedThemes,
+  sanitizeColor,
+  sanitizeCustomBgOptions,
+  sanitizeCustomBgUrl,
+  type CustomBgOptions,
+  type CustomTheme
+} from "./theme-utils"
 
 const t = (key: string) => chrome.i18n.getMessage(key)
 const localStorageInstance = new Storage({ area: "local" })
@@ -29,56 +45,10 @@ const THEME_LIST = [
 type ViewType = "themes" | "custom"
 type ThemeTabType = "preset" | "custom"
 type CustomEditTabType = "general" | "background" | "layout"
-type CustomTheme = {
-  id: string
-  name: string
-  text: string
-  accent: string
-  bgUrl: string
-  bgColor: string
-  bgOptions: CustomBgOptions
-}
-type CustomBgOptions = {
-  scaleX: number
-  invert: number
-  grayscale: number
-  blur: number
-  brightness: number
-  position: string
-  glassBlur: number
-  opacity: number
-  hideHeader: boolean
-  hideFooter: boolean
-}
-type ThemeImportData = {
-  customThemes?: Partial<CustomTheme>[]
-  themes?: Partial<CustomTheme>[]
-}
 
-const DEFAULT_CUSTOM_BG_OPTIONS: CustomBgOptions = {
-  scaleX: 1,
-  invert: 0,
-  grayscale: 0,
-  blur: 0,
-  brightness: 1,
-  position: "center center",
-  glassBlur: 10,
-  opacity: 0.8,
-  hideHeader: false,
-  hideFooter: false
-}
 const THEME_LOADING_EVENT = "kasutamu:theme-loading"
 const FAB_OPEN_EVENT = "kasutamu:fab-open"
 const DEBOUNCE_MS = 100
-const IMAGE_HEADER_BYTES = 64 * 1024
-const DATA_URL_SAMPLE_CHARS = 96 * 1024
-const CUSTOM_THEME_LEGACY_STORAGE_KEYS = [
-  "custom-bg-image",
-  "custom-bg-color",
-  "custom-text-color",
-  "custom-text-accent",
-  "custom-bg-options"
-]
 
 const wrapperStyle = { position: "relative", width: 250, height: 500 } as const
 const rootStyle = {
@@ -166,42 +136,8 @@ const proButtonStyle = {
   backgroundSize: "500% 100%"
 } as const
 
-const normalizeCustomTheme = (
-  themeData: Partial<CustomTheme>,
-  index: number
-): CustomTheme => ({
-  id: crypto.randomUUID(),
-  name: String(themeData.name || `${t("custom")} ${index + 1}`).slice(0, 10),
-  text: typeof themeData.text === "string" ? themeData.text : "",
-  accent: typeof themeData.accent === "string" ? themeData.accent : "",
-  bgUrl: typeof themeData.bgUrl === "string" ? themeData.bgUrl : "",
-  bgColor: typeof themeData.bgColor === "string" ? themeData.bgColor : "",
-  bgOptions: { ...DEFAULT_CUSTOM_BG_OPTIONS, ...(themeData.bgOptions || {}) }
-})
-
-const createCustomTheme = (index: number): CustomTheme => ({
-  id: crypto.randomUUID(),
-  name: `${t("custom")} ${index + 1}`,
-  text: "",
-  accent: "",
-  bgUrl: "",
-  bgColor: "",
-  bgOptions: { ...DEFAULT_CUSTOM_BG_OPTIONS }
-})
-
-const getImportedThemes = (data: ThemeImportData) =>
-  Array.isArray(data.customThemes) ? data.customThemes : data.themes || []
-
-const parseImportedThemes = (text: string) =>
-  getImportedThemes(JSON.parse(text) as ThemeImportData).map(
-    normalizeCustomTheme
-  )
-
 const downloadCustomTheme = (themeData: CustomTheme) => {
-  const blob = new Blob(
-    [JSON.stringify({ customThemes: [themeData] }, null, 2)],
-    { type: "application/json" }
-  )
+  const blob = createThemeExportBlob(themeData)
   const url = URL.createObjectURL(blob)
   const link = document.createElement("a")
   link.href = url
@@ -209,61 +145,6 @@ const downloadCustomTheme = (themeData: CustomTheme) => {
   link.click()
   URL.revokeObjectURL(url)
 }
-
-const isAnimatedBytes = (bytes: Uint8Array) => {
-  const text = new TextDecoder("latin1").decode(bytes)
-  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46)
-    return text.includes("NETSCAPE2.0")
-  if (
-    bytes[0] === 0x89 &&
-    bytes[1] === 0x50 &&
-    bytes[2] === 0x4e &&
-    bytes[3] === 0x47
-  )
-    return text.includes("acTL")
-  if (text.includes("WEBP")) return text.includes("ANIM")
-  if (text.includes("ftypavif") || text.includes("ftypavis"))
-    return (
-      text.includes("avis") || text.includes("msf1") || text.includes("aseq")
-    )
-  return false
-}
-
-const isAnimatedImage = async (file: File) => {
-  const buffer = await file.slice(0, IMAGE_HEADER_BYTES).arrayBuffer()
-  return isAnimatedBytes(new Uint8Array(buffer))
-}
-
-const getAlignedBase64Chunk = (text: string) => {
-  const chunk = text.slice(0, DATA_URL_SAMPLE_CHARS)
-  return chunk.slice(0, chunk.length - (chunk.length % 4))
-}
-
-const isAnimatedDataUrl = (dataUrl: string) => {
-  if (!dataUrl.startsWith("data:image/")) return false
-
-  const commaIndex = dataUrl.indexOf(",")
-  if (commaIndex < 0) return false
-
-  const metadata = dataUrl.slice(0, commaIndex)
-  const payload = dataUrl.slice(commaIndex + 1)
-  const raw = metadata.includes(";base64")
-    ? atob(getAlignedBase64Chunk(payload))
-    : decodeURIComponent(payload.slice(0, DATA_URL_SAMPLE_CHARS))
-  const bytes = new Uint8Array(Math.min(raw.length, IMAGE_HEADER_BYTES))
-  for (let index = 0; index < bytes.length; index += 1)
-    bytes[index] = raw.charCodeAt(index)
-  return isAnimatedBytes(bytes)
-}
-
-const hasAnimatedBackground = (themes: CustomTheme[]) =>
-  themes.some((item) => {
-    try {
-      return isAnimatedDataUrl(item.bgUrl)
-    } catch {
-      return false
-    }
-  })
 
 const disabledControlStyle = (enabled: boolean) =>
   ({
@@ -388,11 +269,11 @@ export function FabPanelApp() {
   ) => setLocalCustomBgOptions((prev) => ({ ...prev, [key]: value }))
 
   const syncThemeToLegacyStorage = async (themeData: CustomTheme) => {
-    const nextText = themeData.text || ""
-    const nextAccent = themeData.accent || ""
-    const nextBgOptions = themeData.bgOptions || DEFAULT_CUSTOM_BG_OPTIONS
-    const nextBgUrl = themeData.bgUrl || ""
-    const nextBgColor = themeData.bgColor || ""
+    const nextText = sanitizeColor(themeData.text)
+    const nextAccent = sanitizeColor(themeData.accent)
+    const nextBgOptions = sanitizeCustomBgOptions(themeData.bgOptions)
+    const nextBgUrl = sanitizeCustomBgUrl(themeData.bgUrl)
+    const nextBgColor = sanitizeColor(themeData.bgColor)
 
     setCustomBg(nextBgUrl)
     setLocalCustomBgColor(nextBgColor)
@@ -529,13 +410,20 @@ export function FabPanelApp() {
 
   const onImportFile = async (file?: File) => {
     if (!file) return
+    if (file.size > MAX_IMPORT_FILE_BYTES) {
+      clearFileInput(importFileRef.current)
+      return
+    }
     if (!canImportTheme) {
       clearFileInput(importFileRef.current)
       return
     }
 
     const text = await file.text()
-    const imported = parseImportedThemes(text)
+    const imported = parseImportedThemes(
+      text,
+      (index) => `${t("custom")} ${index + 1}`
+    )
 
     if (!imported.length) return
     if (!isPremiumUser && hasAnimatedBackground(imported)) return
@@ -554,6 +442,10 @@ export function FabPanelApp() {
 
   const onUploadCustomBg = async (file?: File) => {
     if (!file) return
+    if (file.size > MAX_IMAGE_FILE_BYTES) {
+      clearFileInput(bgUploadRef.current)
+      return
+    }
     const animated = await isAnimatedImage(file)
     if (animated) {
       const canUsePremiumFeature = isPremiumUser || (await checkPremium())
@@ -564,7 +456,13 @@ export function FabPanelApp() {
     }
     const reader = new FileReader()
     reader.onload = () => {
-      const result = typeof reader.result === "string" ? reader.result : ""
+      const result = sanitizeCustomBgUrl(
+        typeof reader.result === "string" ? reader.result : ""
+      )
+      if (!result) {
+        clearFileInput(bgUploadRef.current)
+        return
+      }
       setCustomBg(result)
       if (theme === "custom" && editingCustomThemeId === selectedCustomThemeId)
         chrome.storage.local.set({ "custom-bg-image": result })
@@ -614,7 +512,9 @@ export function FabPanelApp() {
       const canUsePremiumFeature = isPremiumUser || (await checkPremium())
       if (!canUsePremiumFeature) return
     }
-    const created = createCustomTheme(customThemes.length)
+    const created = createCustomTheme(
+      `${t("custom")} ${customThemes.length + 1}`
+    )
     setCustomThemes((prev) => [...prev, created])
   }
 
@@ -1123,9 +1023,7 @@ export function FabPanelApp() {
                           onChange={(v) =>
                             updateCustomBgOption("opacity", Number(v))
                           }
-                          onReset={() =>
-                            updateCustomBgOption("opacity", 0.8)
-                          }
+                          onReset={() => updateCustomBgOption("opacity", 0.8)}
                         />
                       </div>
                       <div style={cardStyle}>
@@ -1147,10 +1045,16 @@ export function FabPanelApp() {
               </>
             )}
           </div>
-          <div className="footer" style={{ display: "flex", flexDirection: "column", padding: "10px 20px", gap: 8 }}>
+          <div
+            className="footer"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              padding: "10px 20px",
+              gap: 8
+            }}>
             {themeTab === "custom" && view !== "custom" && (
-              <div
-                style={{ ...rowStyle, gap: 8 }}>
+              <div style={{ ...rowStyle, gap: 8 }}>
                 <button
                   type="button"
                   onClick={onExportClick}
@@ -1287,7 +1191,7 @@ function ColorSettingCard({
         <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
           <input
             type="color"
-            value={value}
+            value={value || "#000000"}
             onChange={(e) => onChange(e.target.value)}
             className="color-picker"
             style={colorInputStyle}

@@ -1,16 +1,29 @@
-import { Storage } from "@plasmohq/storage"
+import { getAuth, onAuthStateChanged, type User } from "firebase/auth"
 import { Vibrant } from "node-vibrant/browser"
 import type { PlasmoCSConfig } from "plasmo"
 import { createElement } from "react"
 import { createRoot, type Root } from "react-dom/client"
+
+import { Storage } from "@plasmohq/storage"
+
+import { app } from "./firebase"
 import { FabPanelApp } from "./panel"
+import {
+  clampNumber,
+  isAnimatedDataUrl,
+  sanitizeColor,
+  sanitizeCustomBgOptions,
+  sanitizeCustomBgUrl,
+  sanitizePosition,
+  type CustomBgOptions
+} from "./theme-utils"
 
 export const config: PlasmoCSConfig = {
   matches: [
     "https://chatgpt.com/*",
     "https://gemini.google.com/*",
     "https://claude.ai/*",
-    "https://grok.com/*",
+    "https://grok.com/*"
   ],
   run_at: "document_start"
 }
@@ -23,52 +36,59 @@ interface ThemeConfig {
   darkTextColor: string
 }
 
-interface CustomBgOptions {
-  scaleX: number
-  invert: number
-  grayscale: number
-  blur: number
-  brightness: number
-  position: string
-  glassBlur: number
-  opacity: number
-  hideHeader: boolean
-  hideFooter: boolean
-}
-
 type SiteType = "chatgpt" | "gemini" | "claude" | "grok"
-type ThemeName = "random" | "nasa" | "neon" | "pink" | "vintage" | "fractal" | "terminal" | "custom" | "default"
-type ModelEnabledMap = { chatgpt: boolean; gemini: boolean; claude: boolean; grok: boolean }
+type ThemeName =
+  | "random"
+  | "nasa"
+  | "neon"
+  | "pink"
+  | "vintage"
+  | "fractal"
+  | "terminal"
+  | "custom"
+  | "default"
+type ModelEnabledMap = {
+  chatgpt: boolean
+  gemini: boolean
+  claude: boolean
+  grok: boolean
+}
 
 const SITE_SELECTORS = {
   chatgpt: {
     container: "body",
     header: "header",
-    footer: "#thread-bottom-container > div:is(.mt-auto, .-mt-4) > div > div > div > div",
-    elements: '[data-testid="use-case-prompt-chips"] button, .agent-turn, .user-message-bubble-color, .shadow-short-composer',
+    footer:
+      "#thread-bottom-container > div:is(.mt-auto, .-mt-4) > div > div > div > div",
+    elements:
+      '[data-testid="use-case-prompt-chips"] button, .agent-turn, .user-message-bubble-color, .shadow-short-composer',
     darkClass: "html.dark"
   },
   gemini: {
     container: "body",
     header: "top-bar-actions",
     footer: ".capabilities-disclaimer p",
-    elements: "model-response, .dual-response-panel, .user-query-bubble-with-background, .input-box-shadow",
+    elements:
+      "model-response, .dual-response-panel, .user-query-bubble-with-background, .input-box-shadow",
     darkClass: "body.dark-theme"
   },
   claude: {
     container: "body",
-    header: 'header, #main-content > div > div > main > div:first-child, .z-header, [data-testid="wiggle-controls-actions"]',
+    header:
+      'header, #main-content > div > div > main > div:first-child, .z-header, [data-testid="wiggle-controls-actions"]',
     footer: 'div[data-disclaimer="true"]',
-    elements: 'li.inline-block button, .font-claude-response, div[data-user-message-bubble="true"], .\\!box-content',
+    elements:
+      'li.inline-block button, .font-claude-response, div[data-user-message-bubble="true"], .\\!box-content',
     darkClass: 'html[data-mode="dark"]'
   },
   grok: {
     container: "body",
     header: ".from-surface-base",
     footer: "",
-    elements: '[data-testid="assistant-message"], [data-testid="user-message"], .query-bar',
+    elements:
+      '[data-testid="assistant-message"], [data-testid="user-message"], .query-bar',
     darkClass: "html.dark"
-  },
+  }
 }
 
 const storage = new Storage()
@@ -82,7 +102,13 @@ let fabPanelRoot: Root | null = null
 let cachedThemeKey: string | null = null
 let cachedThemeData: ThemeConfig | null = null
 
-const EMPTY_THEME: ThemeConfig = { bgUrl: "", bgColor: "", accentColor: "", lightTextColor: "", darkTextColor: "" }
+const EMPTY_THEME: ThemeConfig = {
+  bgUrl: "",
+  bgColor: "",
+  accentColor: "",
+  lightTextColor: "",
+  darkTextColor: ""
+}
 
 const TERMINAL_THEME: ThemeConfig = {
   bgUrl: "",
@@ -90,19 +116,6 @@ const TERMINAL_THEME: ThemeConfig = {
   accentColor: "#33ff33",
   lightTextColor: "#33ff33",
   darkTextColor: "#33ff33"
-}
-
-const DEFAULT_CUSTOM_BG_OPTIONS: CustomBgOptions = {
-  scaleX: 1,
-  invert: 0,
-  grayscale: 0,
-  blur: 0,
-  brightness: 1,
-  position: "center center",
-  glassBlur: 10,
-  opacity: 0.8,
-  hideHeader: true,
-  hideFooter: true
 }
 
 const THEME_BG_URLS: Partial<Record<ThemeName, string>> = {
@@ -131,11 +144,55 @@ const MODEL_ENABLED_STORAGE_KEY = "model-enabled-map"
 const FAB_MAIN_BTN_ICON = `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M7.5 5.6 10 7 8.6 4.5 10 2 7.5 3.4 5 2l1.4 2.5L5 7l2.5-1.4zm12 9.8L17 14l1.4 2.5L17 19l2.5-1.4L22 19l-1.4-2.5L22 14l-2.5 1.4zM22 2l-2.5 1.4L17 2l1.4 2.5L17 7l2.5-1.4L22 7l-1.4-2.5L22 2zM13.34 12.78l2.44-2.44-2.12-2.12-2.44 2.44 2.12 2.12zm1.03-5.49 2.34 2.34c.39.39.39 1.03 0 1.42l-7.66 7.66c-.39.39-1.03.39-1.42 0l-2.34-2.34a.9959.9959 0 0 1 0-1.42l7.66-7.66c.39-.39 1.03-.39 1.42 0z"></path></svg>`
 const THEME_LOADING_EVENT = "kasutamu:theme-loading"
 const FAB_OPEN_EVENT = "kasutamu:fab-open"
-const CUSTOM_THEME_DATA_STORAGE_KEYS = ["custom-bg-image", "custom-bg-color", "custom-text-color", "custom-text-accent"]
-const CUSTOM_THEME_WATCH_STORAGE_KEYS = [...CUSTOM_THEME_DATA_STORAGE_KEYS, "custom-bg-options"]
+const CUSTOM_THEME_DATA_STORAGE_KEYS = [
+  "custom-bg-image",
+  "custom-bg-color",
+  "custom-text-color",
+  "custom-text-accent"
+]
+const CUSTOM_THEME_WATCH_STORAGE_KEYS = [
+  ...CUSTOM_THEME_DATA_STORAGE_KEYS,
+  "custom-bg-options"
+]
+const PREMIUM_CACHE_MS = 5 * 60 * 1000
+let premiumCache: { checkedAt: number; value: boolean } | null = null
 
 const emitThemeLoading = (loading: boolean) => {
-  window.dispatchEvent(new CustomEvent(THEME_LOADING_EVENT, { detail: { loading } }))
+  window.dispatchEvent(
+    new CustomEvent(THEME_LOADING_EVENT, { detail: { loading } })
+  )
+}
+
+const waitForAuthUser = () =>
+  new Promise<User | null>((resolve) => {
+    const auth = getAuth(app)
+    if (auth.currentUser) {
+      resolve(auth.currentUser)
+      return
+    }
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      unsubscribe()
+      resolve(user)
+    })
+  })
+
+const isPremiumUser = async () => {
+  if (premiumCache && Date.now() - premiumCache.checkedAt < PREMIUM_CACHE_MS)
+    return premiumCache.value
+  try {
+    const user = await waitForAuthUser()
+    if (!user) {
+      premiumCache = { checkedAt: Date.now(), value: false }
+      return false
+    }
+    const tokenResult = await user.getIdTokenResult(true)
+    const value = tokenResult.claims.premium === true
+    premiumCache = { checkedAt: Date.now(), value }
+    return value
+  } catch {
+    premiumCache = { checkedAt: Date.now(), value: false }
+    return false
+  }
 }
 
 const detectCurrentSite = (): SiteType | null => {
@@ -270,7 +327,8 @@ const getFABStyle = () => {
 
 const convertToDataUrl = async (url: string): Promise<string> =>
   new Promise((resolve) => {
-    chrome.runtime.sendMessage({ type: "FETCH_IMAGE_AS_DATA_URL", url },
+    chrome.runtime.sendMessage(
+      { type: "FETCH_IMAGE_AS_DATA_URL", url },
       (response) => resolve(response?.success ? response.dataUrl : "")
     )
   })
@@ -291,14 +349,18 @@ const getPaletteData = async (bgUrl: string): Promise<ThemeConfig> => {
 }
 
 const getCustomThemeData = async (): Promise<ThemeConfig> => {
-  const customData = await chrome.storage.local.get(CUSTOM_THEME_DATA_STORAGE_KEYS)
+  const customData = await chrome.storage.local.get(
+    CUSTOM_THEME_DATA_STORAGE_KEYS
+  )
+  const bgUrl = sanitizeCustomBgUrl(customData["custom-bg-image"])
+  const canUseAnimatedBackground = await isPremiumUser()
 
   return {
-    bgUrl: customData["custom-bg-image"] || "",
-    bgColor: customData["custom-bg-color"] || "",
-    accentColor: customData["custom-text-accent"] || "",
-    lightTextColor: customData["custom-text-color"] || "",
-    darkTextColor: customData["custom-text-color"] || ""
+    bgUrl: !canUseAnimatedBackground && isAnimatedDataUrl(bgUrl) ? "" : bgUrl,
+    bgColor: sanitizeColor(customData["custom-bg-color"]),
+    accentColor: sanitizeColor(customData["custom-text-accent"]),
+    lightTextColor: sanitizeColor(customData["custom-text-color"]),
+    darkTextColor: sanitizeColor(customData["custom-text-color"])
   }
 }
 
@@ -440,13 +502,13 @@ const mapSelectors = (
 
 const getCustomBgOptions = async (): Promise<CustomBgOptions> => {
   const optionsResult = await chrome.storage.local.get("custom-bg-options")
-  const options = optionsResult["custom-bg-options"] as Partial<CustomBgOptions> | undefined
-  if (!options) return DEFAULT_CUSTOM_BG_OPTIONS
-
-  return {
-    ...DEFAULT_CUSTOM_BG_OPTIONS,
-    ...options
-  }
+  const options = optionsResult["custom-bg-options"] as
+    | Partial<CustomBgOptions>
+    | undefined
+  const safeOptions = sanitizeCustomBgOptions(options)
+  return options
+    ? safeOptions
+    : { ...safeOptions, hideHeader: true, hideFooter: true }
 }
 
 const generateCSS = (
@@ -461,14 +523,19 @@ const generateCSS = (
   const darkSelectors = mapSelectors(elements, { prefix: `${darkClass} ` })
   const hoverSelectors = mapSelectors(elements, { suffix: ":hover" })
 
-  const position = customBgOptions?.position || "center center"
-  const scaleX = customBgOptions?.scaleX || 1
-  const invert = customBgOptions?.invert ?? 0
-  const grayscale = customBgOptions?.grayscale ?? 0
-  const blur = customBgOptions?.blur ?? 0
-  const brightness = customBgOptions?.brightness ?? 1
-  const glassBlur = customBgOptions?.glassBlur ?? 10
-  const opacity = customBgOptions?.opacity ?? 0.8
+  const safeBgUrl = sanitizeCustomBgUrl(bgUrl)
+  const safeBgColor = sanitizeColor(bgColor)
+  const safeAccentColor = sanitizeColor(accentColor)
+  const safeLightTextColor = sanitizeColor(lightTextColor)
+  const safeDarkTextColor = sanitizeColor(darkTextColor)
+  const position = sanitizePosition(customBgOptions?.position)
+  const scaleX = customBgOptions?.scaleX === -1 ? -1 : 1
+  const invert = clampNumber(customBgOptions?.invert, 0, 1, 0)
+  const grayscale = clampNumber(customBgOptions?.grayscale, 0, 1, 0)
+  const blur = clampNumber(customBgOptions?.blur, 0, 50, 0)
+  const brightness = clampNumber(customBgOptions?.brightness, 0, 5, 1)
+  const glassBlur = clampNumber(customBgOptions?.glassBlur, 0, 50, 10)
+  const opacity = clampNumber(customBgOptions?.opacity, 0, 1, 0.8)
   const hideHeader = customBgOptions?.hideHeader ?? true
   const hideFooter = customBgOptions?.hideFooter ?? true
 
@@ -477,11 +544,13 @@ const generateCSS = (
     ${hideFooter ? `${SITE_SELECTORS[site].footer} { font-size: 0 !important; line-height: normal !important }` : ""}
   `
 
-  const getBgStyle = () => (bgUrl || bgColor) ? `
+  const getBgStyle = () =>
+    safeBgUrl || safeBgColor
+      ? `
     body::before {
       content: ""; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-      ${bgUrl ? `background-image: url('${bgUrl}') !important;` : "background-image: none !important;"}
-      ${bgColor ? `background-color: ${bgColor} !important;` : ""}
+      ${safeBgUrl ? `background-image: url("${safeBgUrl}") !important;` : "background-image: none !important;"}
+      ${safeBgColor ? `background-color: ${safeBgColor} !important;` : ""}
       background-position: ${position} !important;
       background-size: cover !important;
       background-repeat: no-repeat !important;
@@ -495,12 +564,13 @@ const generateCSS = (
     ${site === "gemini" ? ".input-gradient { background-color: transparent !important; } .input-gradient::before { content: none !important; }" : ""}
     ${site === "claude" ? 'header { background-color: transparent !important; } header > div:first-of-type { display: none !important } div[role="note"][data-disclaimer="true"] { background-color: transparent !important; }' : ""}
     ${site === "grok" ? "main > div > div { background-image: none !important; } .chat-input-backdrop { background-color: transparent !important; }" : ""}
-  ` : ""
+  `
+      : ""
 
   const getElStyle = () => `
     ${elements} {
       background-color: rgba(255, 255, 255, ${opacity}) !important;
-      box-shadow: inset 0 2px 16px ${accentColor}4D !important;
+      box-shadow: inset 0 2px 16px ${safeAccentColor || "#66cdaa"}4D !important;
       backdrop-filter: blur(${glassBlur}px) saturate(140%) !important;
       opacity: 0.8 !important;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
@@ -511,15 +581,19 @@ const generateCSS = (
     ${hoverSelectors} {
       opacity: 1 !important;
     }
-    ${site === "chatgpt" ? `
+    ${site === "chatgpt"
+      ? `
       .agent-turn {
         margin-top: 5px !important;
         margin-bottom: 5px !important;
         padding: 10px 16px !important;
         border-radius: 22px !important;
       }
-    ` : ""}
-    ${site === "gemini" ? `
+    `
+      : ""
+    }
+    ${site === "gemini"
+      ? `
       .show-lm-background::before {
         background: none !important;
       }
@@ -527,28 +601,44 @@ const generateCSS = (
         padding: 20px 28px !important;
         border-radius: 40px !important;
       }
-    ` : ""}
-    ${site === "claude" ? `
+    `
+      : ""
+    }
+    ${site === "claude"
+      ? `
       .font-claude-response {
         padding: 10px 16px !important;
         border-radius: 12px !important;
       }
-    ` : ""}
-    ${site === "grok" ? `
+    `
+      : ""
+    }
+    ${site === "grok"
+      ? `
       [data-testid="assistant-message"] {
         padding: 8px 16px !important;
         border-radius: 24px !important;
       }
-    ` : ""}
-    ${accentColor ? `::-webkit-scrollbar { width: auto !important; }::-webkit-scrollbar-thumb { background-color: ${accentColor}4D !important; border-radius: 22px !important; }` : ""}
+    `
+      : ""
+    }
+    ${safeAccentColor ? `::-webkit-scrollbar { width: auto !important; }::-webkit-scrollbar-thumb { background-color: ${safeAccentColor}4D !important; border-radius: 22px !important; }` : ""}
   `
 
-  const getTextStyle = () => (lightTextColor && darkTextColor) ? `
-    *:not(pre *) { color: ${lightTextColor} !important; }
-    ${darkClass} *:not(pre *) { color: ${darkTextColor} !important; }
-  ` : ""
+  const getTextStyle = () =>
+    safeLightTextColor && safeDarkTextColor
+      ? `
+    *:not(pre *) { color: ${safeLightTextColor} !important; }
+    ${darkClass} *:not(pre *) { color: ${safeDarkTextColor} !important; }
+  `
+      : ""
 
-  return [getBgStyle(), getElStyle(), getTextStyle(), getVisibilityStyle()].join("\n")
+  return [
+    getBgStyle(),
+    getElStyle(),
+    getTextStyle(),
+    getVisibilityStyle()
+  ].join("\n")
 }
 
 const applyTheme = async (requestId: number) => {
@@ -579,7 +669,9 @@ const applyTheme = async (requestId: number) => {
 
   const [themeData, customBgOptions] = await Promise.all([
     getThemeData(currentTheme),
-    currentTheme === "custom" ? getCustomBgOptions() : Promise.resolve(undefined)
+    currentTheme === "custom"
+      ? getCustomBgOptions()
+      : Promise.resolve(undefined)
   ])
 
   if (requestId !== applyThemeRequestId) return
@@ -619,8 +711,9 @@ const invalidateThemeCache = () => {
   cachedThemeData = null
 }
 
-const hasCustomThemeStorageChange = (changes: Record<string, chrome.storage.StorageChange>) =>
-  CUSTOM_THEME_WATCH_STORAGE_KEYS.some((key) => changes[key])
+const hasCustomThemeStorageChange = (
+  changes: Record<string, chrome.storage.StorageChange>
+) => CUSTOM_THEME_WATCH_STORAGE_KEYS.some((key) => changes[key])
 
 const watchLocationChange = () => {
   const originalPushState = history.pushState
