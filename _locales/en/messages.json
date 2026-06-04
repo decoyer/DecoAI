@@ -56,6 +56,9 @@
   "backgroundColor": {
     "message": "Background Color"
   },
+  "background": {
+    "message": "Background"
+  },
   "backgroundImage": {
     "message": "Background Image"
   },
@@ -88,6 +91,27 @@
   },
   "grayscale": {
     "message": "Grayscale"
+  },
+  "glassBlur": {
+    "message": "Glass Blur"
+  },
+  "opacity": {
+    "message": "Opacity"
+  },
+  "layout": {
+    "message": "Layout"
+  },
+  "hideHeader": {
+    "message": "Hide Header"
+  },
+  "hideFooter": {
+    "message": "Hide Footer"
+  },
+  "exportTheme": {
+    "message": "Export"
+  },
+  "importTheme": {
+    "message": "Import"
   },
   "random": {
     "message": "Random"

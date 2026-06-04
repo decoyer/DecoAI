@@ -2,7 +2,7 @@
   "name": "kasutamu",
   "displayName": "kasutamu",
   "version": "1.0.0",
-  "description": "Customize your AI chat",
+  "description": "Customize Your Ai Chat",
   "author": "decoyer <nockback@naver.com>",
   "scripts": {
     "dev": "node scripts/locales.cjs dev",

@@ -56,6 +56,9 @@
   "backgroundColor": {
     "message": "背景颜色"
   },
+  "background": {
+    "message": "背景"
+  },
   "backgroundImage": {
     "message": "背景图片"
   },
@@ -88,6 +91,27 @@
   },
   "grayscale": {
     "message": "灰度效果"
+  },
+  "glassBlur": {
+    "message": "玻璃效果"
+  },
+  "opacity": {
+    "message": "透明度"
+  },
+  "layout": {
+    "message": "布局"
+  },
+  "hideHeader": {
+    "message": "隐藏页眉"
+  },
+  "hideFooter": {
+    "message": "隐藏页脚"
+  },
+  "exportTheme": {
+    "message": "导出"
+  },
+  "importTheme": {
+    "message": "导入"
   },
   "random": {
     "message": "随机"

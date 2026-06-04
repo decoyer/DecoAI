@@ -1,7 +1,14 @@
+import {
+  getAuth,
+  GoogleAuthProvider,
+  onAuthStateChanged,
+  signInWithCredential,
+  type User
+} from "firebase/auth"
+import { useEffect, useRef, useState, type ReactNode } from "react"
+
 import { Storage } from "@plasmohq/storage"
 import { useStorage } from "@plasmohq/storage/hook"
-import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithCredential, type User } from "firebase/auth"
-import { useEffect, useRef, useState, type ReactNode } from "react"
 
 import { app } from "./firebase"
 
@@ -21,33 +28,123 @@ const THEME_LIST = [
 
 type ViewType = "themes" | "custom"
 type ThemeTabType = "preset" | "custom"
-type CustomTheme = { id: string; name: string; text: string; accent: string; bgUrl: string; bgColor: string; bgOptions: CustomBgOptions }
-type CustomBgOptions = { scaleX: number; invert: number; grayscale: number; blur: number; brightness: number; position: string }
+type CustomEditTabType = "general" | "background" | "layout"
+type CustomTheme = {
+  id: string
+  name: string
+  text: string
+  accent: string
+  bgUrl: string
+  bgColor: string
+  bgOptions: CustomBgOptions
+}
+type CustomBgOptions = {
+  scaleX: number
+  invert: number
+  grayscale: number
+  blur: number
+  brightness: number
+  position: string
+  glassBlur: number
+  opacity: number
+  hideHeader: boolean
+  hideFooter: boolean
+}
+type ThemeImportData = {
+  customThemes?: Partial<CustomTheme>[]
+  themes?: Partial<CustomTheme>[]
+}
 
-const DEFAULT_CUSTOM_BG_OPTIONS: CustomBgOptions = { scaleX: 1, invert: 0, grayscale: 0, blur: 0, brightness: 1, position: "center center" }
+const DEFAULT_CUSTOM_BG_OPTIONS: CustomBgOptions = {
+  scaleX: 1,
+  invert: 0,
+  grayscale: 0,
+  blur: 0,
+  brightness: 1,
+  position: "center center",
+  glassBlur: 10,
+  opacity: 0.8,
+  hideHeader: false,
+  hideFooter: false
+}
 const THEME_LOADING_EVENT = "kasutamu:theme-loading"
 const FAB_OPEN_EVENT = "kasutamu:fab-open"
 const DEBOUNCE_MS = 100
-const CUSTOM_THEME_LEGACY_STORAGE_KEYS = ["custom-bg-image", "custom-bg-color", "custom-text-color", "custom-text-accent", "custom-bg-options"]
+const IMAGE_HEADER_BYTES = 64 * 1024
+const DATA_URL_SAMPLE_CHARS = 96 * 1024
+const CUSTOM_THEME_LEGACY_STORAGE_KEYS = [
+  "custom-bg-image",
+  "custom-bg-color",
+  "custom-text-color",
+  "custom-text-accent",
+  "custom-bg-options"
+]
 
 const wrapperStyle = { position: "relative", width: 250, height: 500 } as const
-const rootStyle = { width: 250, height: 500, display: "flex", flexDirection: "column", fontFamily: "sans-serif", color: "#fff", overflow: "hidden" } as const
-const contentStyle = { flex: 1, minHeight: 0, overflow: "hidden", padding: "20px 20px 0", display: "flex", flexDirection: "column" } as const
-const themeSectionStyle = { marginTop: 20, display: "flex", flexDirection: "column", flex: 1, minHeight: 0 } as const
-const themeGridScrollStyle = { flex: 1, minHeight: 0, padding: "10px 5px", overflow: "auto" } as const
-const sectionStyle = { padding: "20px 0 10px", display: "flex", flexDirection: "column", gap: 8 } as const
-const editSectionScrollStyle = { ...sectionStyle, flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden" } as const
+const rootStyle = {
+  width: 250,
+  height: 500,
+  display: "flex",
+  flexDirection: "column",
+  fontFamily: "sans-serif",
+  color: "#fff",
+  overflow: "hidden"
+} as const
+const contentStyle = {
+  flex: 1,
+  minHeight: 0,
+  overflow: "hidden",
+  padding: "20px 20px 0",
+  display: "flex",
+  flexDirection: "column"
+} as const
+const themeSectionStyle = {
+  marginTop: 20,
+  display: "flex",
+  flexDirection: "column",
+  flex: 1,
+  minHeight: 0
+} as const
+const themeGridScrollStyle = {
+  flex: 1,
+  minHeight: 0,
+  padding: "10px 5px",
+  overflow: "auto"
+} as const
+const sectionStyle = {
+  padding: "10px 5px",
+  display: "flex",
+  flexDirection: "column",
+  gap: 8
+} as const
+const editSectionScrollStyle = {
+  ...sectionStyle,
+  flex: 1,
+  minHeight: 0,
+  overflowY: "auto",
+  overflowX: "hidden"
+} as const
 const cardStyle = {
   backgroundColor: "#3f3f46",
   border: "1px solid transparent",
-  borderRadius: "8px",
-  padding: 10,
-  backdropFilter: "blur(12px) saturate(140%)",
-  WebkitBackdropFilter: "blur(12px) saturate(140%)",
-  transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
+  borderRadius: 8,
+  padding: 10
 } as const
-const rowStyle = { display: "flex", justifyContent: "space-between", alignItems: "center" } as const
-const colorInputStyle = { width: 45, height: 25, border: "none", borderRadius: "12px", padding: 0, cursor: "pointer", overflow: "hidden" } as const
+const rowStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center"
+} as const
+const colorInputStyle = {
+  width: 50,
+  height: 30,
+  backgroundColor: "#4b5563",
+  border: "none",
+  borderRadius: 8,
+  padding: 4,
+  cursor: "pointer",
+  overflow: "hidden"
+} as const
 const controlButtonStyle = {
   paddingTop: 4,
   paddingBottom: 4,
@@ -55,10 +152,8 @@ const controlButtonStyle = {
   color: "#fff",
   border: "1px solid transparent",
   borderRadius: 12,
-  cursor: "pointer",
-  transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-  backdropFilter: "blur(12px) saturate(140%)",
-  WebkitBackdropFilter: "blur(12px) saturate(140%)"
+  whiteSpace: "nowrap",
+  cursor: "pointer"
 } as const
 const proButtonStyle = {
   ...controlButtonStyle,
@@ -66,22 +161,142 @@ const proButtonStyle = {
   border: "none",
   padding: 8,
   color: "#fff",
-  background: "linear-gradient(90deg, #F472B6, #C084FC, #60A5FA, #C084FC, #F472B6)",
+  background:
+    "linear-gradient(90deg, #F472B6, #C084FC, #60A5FA, #C084FC, #F472B6)",
   backgroundSize: "500% 100%"
 } as const
+
+const normalizeCustomTheme = (
+  themeData: Partial<CustomTheme>,
+  index: number
+): CustomTheme => ({
+  id: crypto.randomUUID(),
+  name: String(themeData.name || `${t("custom")} ${index + 1}`).slice(0, 10),
+  text: typeof themeData.text === "string" ? themeData.text : "",
+  accent: typeof themeData.accent === "string" ? themeData.accent : "",
+  bgUrl: typeof themeData.bgUrl === "string" ? themeData.bgUrl : "",
+  bgColor: typeof themeData.bgColor === "string" ? themeData.bgColor : "",
+  bgOptions: { ...DEFAULT_CUSTOM_BG_OPTIONS, ...(themeData.bgOptions || {}) }
+})
+
+const createCustomTheme = (index: number): CustomTheme => ({
+  id: crypto.randomUUID(),
+  name: `${t("custom")} ${index + 1}`,
+  text: "",
+  accent: "",
+  bgUrl: "",
+  bgColor: "",
+  bgOptions: { ...DEFAULT_CUSTOM_BG_OPTIONS }
+})
+
+const getImportedThemes = (data: ThemeImportData) =>
+  Array.isArray(data.customThemes) ? data.customThemes : data.themes || []
+
+const parseImportedThemes = (text: string) =>
+  getImportedThemes(JSON.parse(text) as ThemeImportData).map(
+    normalizeCustomTheme
+  )
+
+const downloadCustomTheme = (themeData: CustomTheme) => {
+  const blob = new Blob(
+    [JSON.stringify({ customThemes: [themeData] }, null, 2)],
+    { type: "application/json" }
+  )
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = `kasutamu-theme-${themeData.name}.json`
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+const isAnimatedBytes = (bytes: Uint8Array) => {
+  const text = new TextDecoder("latin1").decode(bytes)
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46)
+    return text.includes("NETSCAPE2.0")
+  if (
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47
+  )
+    return text.includes("acTL")
+  if (text.includes("WEBP")) return text.includes("ANIM")
+  if (text.includes("ftypavif") || text.includes("ftypavis"))
+    return (
+      text.includes("avis") || text.includes("msf1") || text.includes("aseq")
+    )
+  return false
+}
+
+const isAnimatedImage = async (file: File) => {
+  const buffer = await file.slice(0, IMAGE_HEADER_BYTES).arrayBuffer()
+  return isAnimatedBytes(new Uint8Array(buffer))
+}
+
+const getAlignedBase64Chunk = (text: string) => {
+  const chunk = text.slice(0, DATA_URL_SAMPLE_CHARS)
+  return chunk.slice(0, chunk.length - (chunk.length % 4))
+}
+
+const isAnimatedDataUrl = (dataUrl: string) => {
+  if (!dataUrl.startsWith("data:image/")) return false
+
+  const commaIndex = dataUrl.indexOf(",")
+  if (commaIndex < 0) return false
+
+  const metadata = dataUrl.slice(0, commaIndex)
+  const payload = dataUrl.slice(commaIndex + 1)
+  const raw = metadata.includes(";base64")
+    ? atob(getAlignedBase64Chunk(payload))
+    : decodeURIComponent(payload.slice(0, DATA_URL_SAMPLE_CHARS))
+  const bytes = new Uint8Array(Math.min(raw.length, IMAGE_HEADER_BYTES))
+  for (let index = 0; index < bytes.length; index += 1)
+    bytes[index] = raw.charCodeAt(index)
+  return isAnimatedBytes(bytes)
+}
+
+const hasAnimatedBackground = (themes: CustomTheme[]) =>
+  themes.some((item) => {
+    try {
+      return isAnimatedDataUrl(item.bgUrl)
+    } catch {
+      return false
+    }
+  })
+
+const disabledControlStyle = (enabled: boolean) =>
+  ({
+    opacity: enabled ? 1 : 0.5,
+    cursor: enabled ? "pointer" : "not-allowed"
+  }) as const
+
+const clearFileInput = (input: HTMLInputElement | null) => {
+  if (input) input.value = ""
+}
 
 export function FabPanelApp() {
   const [theme, setTheme] = useStorage("selected-theme", "default")
   const [view, setView] = useState<ViewType>("themes")
   const [themeTab, setThemeTab] = useState<ThemeTabType>("preset")
+  const [customEditTab, setCustomEditTab] =
+    useState<CustomEditTabType>("general")
   const bgUploadRef = useRef<HTMLInputElement>(null)
+  const importFileRef = useRef<HTMLInputElement>(null)
   const [customBg, setCustomBg] = useState("")
-  const [customThemes, setCustomThemes] = useStorage<CustomTheme[]>({ key: "custom-themes", instance: localStorageInstance }, [])
-  const [selectedCustomThemeId, setSelectedCustomThemeId] = useStorage({ key: "selected-custom-theme-id", instance: localStorageInstance }, "")
+  const [customThemes, setCustomThemes] = useStorage<CustomTheme[]>(
+    { key: "custom-themes", instance: localStorageInstance },
+    []
+  )
+  const [selectedCustomThemeId, setSelectedCustomThemeId] = useStorage(
+    { key: "selected-custom-theme-id", instance: localStorageInstance },
+    ""
+  )
   const [editingCustomThemeId, setEditingCustomThemeId] = useState("")
   const [isPremiumUser, setIsPremiumUser] = useState(false)
   const [isPremiumLoaded, setIsPremiumLoaded] = useState(false)
-  const [localCustomBgOptions, setLocalCustomBgOptions] = useState<CustomBgOptions>(DEFAULT_CUSTOM_BG_OPTIONS)
+  const [localCustomBgOptions, setLocalCustomBgOptions] =
+    useState<CustomBgOptions>(DEFAULT_CUSTOM_BG_OPTIONS)
   const [localText, setLocalText] = useState("")
   const [localAccent, setLocalAccent] = useState("")
   const [localCustomThemeName, setLocalCustomThemeName] = useState("")
@@ -89,10 +304,20 @@ export function FabPanelApp() {
   const [isThemeLoading, setIsThemeLoading] = useState(false)
   const canResetText = Boolean((localText || "").trim())
   const canResetAccent = Boolean((localAccent || "").trim())
+  const selectedCustomTheme = customThemes.find(
+    (item) => item.id === selectedCustomThemeId
+  )
+  const canExportTheme = Boolean(selectedCustomTheme)
+  const canImportTheme = isPremiumUser || customThemes.length === 0
 
   useEffect(() => {
-    if (!customThemes.length && selectedCustomThemeId) setSelectedCustomThemeId("")
-    if (selectedCustomThemeId && !customThemes.some((item) => item.id === selectedCustomThemeId)) setSelectedCustomThemeId("")
+    if (!customThemes.length && selectedCustomThemeId)
+      setSelectedCustomThemeId("")
+    if (
+      selectedCustomThemeId &&
+      !customThemes.some((item) => item.id === selectedCustomThemeId)
+    )
+      setSelectedCustomThemeId("")
   }, [customThemes, selectedCustomThemeId, setSelectedCustomThemeId])
 
   useEffect(() => {
@@ -106,6 +331,23 @@ export function FabPanelApp() {
     })
     return unsubscribe
   }, [])
+
+  useEffect(() => {
+    if (!isPremiumLoaded || isPremiumUser || customThemes.length <= 1) return
+
+    const retainedTheme = selectedCustomTheme || customThemes[0]
+    setCustomThemes([retainedTheme])
+    setSelectedCustomThemeId(retainedTheme.id)
+    if (theme === "custom") void syncThemeToLegacyStorage(retainedTheme)
+  }, [
+    customThemes,
+    isPremiumLoaded,
+    isPremiumUser,
+    selectedCustomTheme,
+    setCustomThemes,
+    setSelectedCustomThemeId,
+    theme
+  ])
 
   useEffect(() => {
     const onThemeLoading = (event: Event) => {
@@ -125,8 +367,9 @@ export function FabPanelApp() {
     return () => window.removeEventListener(FAB_OPEN_EVENT, onFabOpen)
   }, [])
 
-  const createCustomTheme = () => ({ id: crypto.randomUUID(), name: `${t("custom")} ${customThemes.length + 1}`, text: "", accent: "", bgUrl: "", bgColor: "", bgOptions: { ...DEFAULT_CUSTOM_BG_OPTIONS } })
-  const editingTheme = customThemes.find((item) => item.id === editingCustomThemeId)
+  const editingTheme = customThemes.find(
+    (item) => item.id === editingCustomThemeId
+  )
 
   useEffect(() => {
     if (!editingTheme) return
@@ -136,9 +379,13 @@ export function FabPanelApp() {
     setLocalCustomBgColor(editingTheme.bgColor || "")
     setLocalCustomBgOptions(editingTheme.bgOptions || DEFAULT_CUSTOM_BG_OPTIONS)
     setLocalCustomThemeName(editingTheme.name || "")
+    setCustomEditTab("general")
   }, [editingTheme?.id])
 
-  const updateCustomBgOption = (key: keyof CustomBgOptions, value: string | number) => setLocalCustomBgOptions((prev) => ({ ...prev, [key]: value }))
+  const updateCustomBgOption = (
+    key: keyof CustomBgOptions,
+    value: string | number | boolean
+  ) => setLocalCustomBgOptions((prev) => ({ ...prev, [key]: value }))
 
   const syncThemeToLegacyStorage = async (themeData: CustomTheme) => {
     const nextText = themeData.text || ""
@@ -162,55 +409,75 @@ export function FabPanelApp() {
   const upsertEditingTheme = () => {
     if (!editingCustomThemeId) return
     setCustomThemes((prev) => {
-      const nextThemes = prev.map((item) => item.id === editingCustomThemeId ? { ...item, name: localCustomThemeName, text: localText, accent: localAccent, bgUrl: customBg, bgColor: localCustomBgColor, bgOptions: localCustomBgOptions } : item)
-      const updated = nextThemes.find((item) => item.id === editingCustomThemeId)
-      if (updated && theme === "custom" && selectedCustomThemeId === updated.id) void syncThemeToLegacyStorage(updated)
+      const nextThemes = prev.map((item) =>
+        item.id === editingCustomThemeId
+          ? {
+            ...item,
+            name: localCustomThemeName,
+            text: localText,
+            accent: localAccent,
+            bgUrl: customBg,
+            bgColor: localCustomBgColor,
+            bgOptions: localCustomBgOptions
+          }
+          : item
+      )
+      const updated = nextThemes.find(
+        (item) => item.id === editingCustomThemeId
+      )
+      if (updated && theme === "custom" && selectedCustomThemeId === updated.id)
+        void syncThemeToLegacyStorage(updated)
       return nextThemes
     })
   }
 
-  useDebouncedEffect(upsertEditingTheme, DEBOUNCE_MS, [editingCustomThemeId, localCustomThemeName, localText, localAccent, customBg, localCustomBgColor, localCustomBgOptions])
-
-  const isAnimatedImage = async (file: File) => {
-    const buffer = await file.slice(0, 64 * 1024).arrayBuffer()
-    const bytes = new Uint8Array(buffer)
-    const text = new TextDecoder("latin1").decode(bytes)
-    if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return text.includes("NETSCAPE2.0")
-    if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return text.includes("acTL")
-    if (text.includes("WEBP")) return text.includes("ANIM")
-    if (text.includes("ftypavif") || text.includes("ftypavis")) return text.includes("avis") || text.includes("msf1") || text.includes("aseq")
-    return false
-  }
+  useDebouncedEffect(upsertEditingTheme, DEBOUNCE_MS, [
+    editingCustomThemeId,
+    localCustomThemeName,
+    localText,
+    localAccent,
+    customBg,
+    localCustomBgColor,
+    localCustomBgOptions
+  ])
 
   const openCheckout = async (idToken: string) => {
     await new Promise<void>((resolve, reject) => {
-      chrome.runtime.sendMessage({ type: "OPEN_CHECKOUT", idToken }, (response) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message))
-          return
+      chrome.runtime.sendMessage(
+        { type: "OPEN_CHECKOUT", idToken },
+        (response) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message))
+            return
+          }
+          if (!response?.success) {
+            reject(new Error(response?.error || "Failed to open checkout"))
+            return
+          }
+          resolve()
         }
-        if (!response?.success) {
-          reject(new Error(response?.error || "Failed to open checkout"))
-          return
-        }
-        resolve()
-      })
+      )
     })
   }
 
   const getGoogleAccessToken = () =>
     new Promise<string>((resolve, reject) => {
-      chrome.runtime.sendMessage({ type: "GET_GOOGLE_ACCESS_TOKEN" }, (response) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message))
-          return
+      chrome.runtime.sendMessage(
+        { type: "GET_GOOGLE_ACCESS_TOKEN" },
+        (response) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message))
+            return
+          }
+          if (!response?.success || !response?.token) {
+            reject(
+              new Error(response?.error || "Failed to get Google access token")
+            )
+            return
+          }
+          resolve(response.token)
         }
-        if (!response?.success || !response?.token) {
-          reject(new Error(response?.error || "Failed to get Google access token"))
-          return
-        }
-        resolve(response.token)
-      })
+      )
     })
 
   const syncPremiumStatus = async (userArg?: User | null) => {
@@ -231,37 +498,67 @@ export function FabPanelApp() {
   }
 
   const checkPremium = async () => {
-    try {
-      if (isPremiumUser) return true
-      const auth = getAuth(app)
-      let user = auth.currentUser
-      if (!user) {
-        const accessToken = await getGoogleAccessToken()
-        const credential = GoogleAuthProvider.credential(null, accessToken)
-        const result = await signInWithCredential(auth, credential)
-        user = result.user
-      }
-      const tokenResult = await user.getIdTokenResult(true)
-      const isPremium = tokenResult.claims.premium === true
-      setIsPremiumUser(isPremium)
-      if (!isPremium) {
-        const idToken = await user.getIdToken()
-        await openCheckout(idToken)
-      }
-      return isPremium
-    } catch (error) {
-      console.error("Premium check failed:", error)
-      return false
+    if (isPremiumUser) return true
+
+    const auth = getAuth(app)
+    let user = auth.currentUser
+
+    if (!user) {
+      const accessToken = await getGoogleAccessToken()
+      const credential = GoogleAuthProvider.credential(null, accessToken)
+      const result = await signInWithCredential(auth, credential)
+      user = result.user
     }
+    const tokenResult = await user.getIdTokenResult(true)
+    const isPremium = tokenResult.claims.premium === true
+    setIsPremiumUser(isPremium)
+
+    if (!isPremium) {
+      const idToken = await user.getIdToken()
+      await openCheckout(idToken)
+    }
+
+    return isPremium
+  }
+
+  const onExportClick = () => {
+    if (!selectedCustomTheme) return
+
+    downloadCustomTheme(selectedCustomTheme)
+  }
+
+  const onImportFile = async (file?: File) => {
+    if (!file) return
+    if (!canImportTheme) {
+      clearFileInput(importFileRef.current)
+      return
+    }
+
+    const text = await file.text()
+    const imported = parseImportedThemes(text)
+
+    if (!imported.length) return
+    if (!isPremiumUser && hasAnimatedBackground(imported)) return
+
+    if (isPremiumUser) {
+      setCustomThemes((prev) => [...prev, ...imported])
+    } else {
+      setCustomThemes([imported[0]])
+      setSelectedCustomThemeId(imported[0].id)
+      setTheme("custom")
+      await syncThemeToLegacyStorage(imported[0])
+    }
+    setThemeTab("custom")
+    clearFileInput(importFileRef.current)
   }
 
   const onUploadCustomBg = async (file?: File) => {
     if (!file) return
     const animated = await isAnimatedImage(file)
     if (animated) {
-      const canUsePremiumFeature = isPremiumUser || await checkPremium()
+      const canUsePremiumFeature = isPremiumUser || (await checkPremium())
       if (!canUsePremiumFeature) {
-        if (bgUploadRef.current) bgUploadRef.current.value = ""
+        clearFileInput(bgUploadRef.current)
         return
       }
     }
@@ -269,8 +566,9 @@ export function FabPanelApp() {
     reader.onload = () => {
       const result = typeof reader.result === "string" ? reader.result : ""
       setCustomBg(result)
-      if (theme === "custom" && editingCustomThemeId === selectedCustomThemeId) chrome.storage.local.set({ "custom-bg-image": result })
-      if (bgUploadRef.current) bgUploadRef.current.value = ""
+      if (theme === "custom" && editingCustomThemeId === selectedCustomThemeId)
+        chrome.storage.local.set({ "custom-bg-image": result })
+      clearFileInput(bgUploadRef.current)
     }
     reader.readAsDataURL(file)
   }
@@ -297,7 +595,8 @@ export function FabPanelApp() {
   }
 
   const onCustomCardClick = async (customThemeItem: CustomTheme) => {
-    const isSelected = theme === "custom" && selectedCustomThemeId === customThemeItem.id
+    const isSelected =
+      theme === "custom" && selectedCustomThemeId === customThemeItem.id
     if (isSelected) {
       setEditingCustomThemeId(customThemeItem.id)
       setView("custom")
@@ -312,17 +611,20 @@ export function FabPanelApp() {
 
   const onCustomPlusClick = async () => {
     if (customThemes.length > 0) {
-      const canUsePremiumFeature = isPremiumUser || await checkPremium()
+      const canUsePremiumFeature = isPremiumUser || (await checkPremium())
       if (!canUsePremiumFeature) return
     }
-    const created = createCustomTheme()
+    const created = createCustomTheme(customThemes.length)
     setCustomThemes((prev) => [...prev, created])
   }
 
   const onDeleteCustomTheme = () => {
     if (!editingCustomThemeId) return
-    const deletingSelected = selectedCustomThemeId === editingCustomThemeId && theme === "custom"
-    const nextThemes = customThemes.filter((item) => item.id !== editingCustomThemeId)
+    const deletingSelected =
+      selectedCustomThemeId === editingCustomThemeId && theme === "custom"
+    const nextThemes = customThemes.filter(
+      (item) => item.id !== editingCustomThemeId
+    )
     setCustomThemes(nextThemes)
     if (deletingSelected) {
       setSelectedCustomThemeId("")
@@ -362,7 +664,6 @@ export function FabPanelApp() {
           bottom: 0;
           z-index: 2;
           padding: 4px;
-          font-size: 12px;
           color: #fff;
           background-color: #0000008D;
           text-align: center;
@@ -390,9 +691,6 @@ export function FabPanelApp() {
           border-radius: 12px;
           cursor: pointer;
           overflow: hidden;
-          backdrop-filter: blur(12px) saturate(140%);
-          isolation: isolate;
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .custom-theme-card__bg {
           position: absolute;
@@ -409,7 +707,6 @@ export function FabPanelApp() {
           right: 0;
           bottom: 0;
           padding: 4px;
-          font-size: 12px;
           background-color: #0000008D;
           color: #fff;
           text-align: center;
@@ -429,53 +726,145 @@ export function FabPanelApp() {
           <div style={contentStyle}>
             {view === "themes" && (
               <>
-                <h3 style={{ margin: 0, textAlign: "center" }}>{t("selectTheme")}</h3>
+                <h3 style={{ margin: 0, textAlign: "center" }}>
+                  {t("selectTheme")}
+                </h3>
                 <div style={themeSectionStyle}>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, borderBottom: "2px solid #66cdaa" }}>
-                    <button type="button" onClick={() => setThemeTab("preset")} style={{ ...controlButtonStyle, padding: "8px", borderRadius: "12px 12px 0 0", backgroundColor: themeTab === "preset" ? "#66cdaa" : "#4b5563" }}>{t("preset")}</button>
-                    <button type="button" onClick={() => setThemeTab("custom")} style={{ ...controlButtonStyle, padding: "8px", borderRadius: "12px 12px 0 0", backgroundColor: themeTab === "custom" ? "#66cdaa" : "#4b5563" }}>{t("custom")}</button>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: 8,
+                      borderBottom: "2px solid #66cdaa"
+                    }}>
+                    <button
+                      type="button"
+                      onClick={() => setThemeTab("preset")}
+                      style={{
+                        ...controlButtonStyle,
+                        padding: "8px",
+                        borderRadius: "12px 12px 0 0",
+                        backgroundColor:
+                          themeTab === "preset" ? "#66cdaa" : "#4b5563"
+                      }}>
+                      {t("preset")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setThemeTab("custom")}
+                      style={{
+                        ...controlButtonStyle,
+                        padding: "8px",
+                        borderRadius: "12px 12px 0 0",
+                        backgroundColor:
+                          themeTab === "custom" ? "#66cdaa" : "#4b5563"
+                      }}>
+                      {t("custom")}
+                    </button>
                   </div>
                   <div className="content-scroll" style={themeGridScrollStyle}>
                     {themeTab === "preset" && (
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(2, 1fr)",
+                          gap: 8
+                        }}>
                         {THEME_LIST.map((item) => (
-                          <button className="preset-theme-card" key={item.key} onClick={() => onThemeClick(item.key)} style={{ ...btnStyle(item.color, theme === item.key), backgroundColor: "transparent" }}>
+                          <button
+                            className="preset-theme-card"
+                            key={item.key}
+                            onClick={() => onThemeClick(item.key)}
+                            style={{
+                              ...btnStyle(item.color, theme === item.key),
+                              backgroundColor: "transparent"
+                            }}>
                             <div
                               className="preset-theme-card__bg"
-                              style={{ background: `linear-gradient(135deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.04) 48%, rgba(0,0,0,0.12) 100%), ${item.color}` }}
+                              style={{
+                                background: `linear-gradient(135deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.04) 48%, rgba(0,0,0,0.12) 100%), ${item.color}`
+                              }}
                             />
-                            <span className="preset-theme-card__emoji" aria-hidden="true">{item.emoji}</span>
-                            <span className="preset-theme-card__label">{t(item.key)}</span>
+                            <span
+                              className="preset-theme-card__emoji"
+                              aria-hidden="true">
+                              {item.emoji}
+                            </span>
+                            <span className="preset-theme-card__label">
+                              {t(item.key)}
+                            </span>
                           </button>
                         ))}
                       </div>
                     )}
                     {themeTab === "custom" && (
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
-                        {customThemes.map((item) => (
-                          <button key={item.id} type="button" className="custom-theme-card" onClick={() => onCustomCardClick(item)} style={{ boxShadow: theme === "custom" && selectedCustomThemeId === item.id ? "inset 2px 2px 5px rgba(0, 0, 0, 0.2), 0 0 0 3px #66cdaa" : "none" }}>
-                            <div
-                              className="custom-theme-card__bg"
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 8
+                        }}>
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(2, 1fr)",
+                            gap: 8
+                          }}>
+                          {customThemes.map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              className="custom-theme-card"
+                              onClick={() => onCustomCardClick(item)}
                               style={{
-                                backgroundImage: item.bgUrl ? `url(${item.bgUrl})` : "none",
-                                backgroundColor: !item.bgUrl ? item.bgColor : "transparent"
+                                boxShadow:
+                                  theme === "custom" &&
+                                    selectedCustomThemeId === item.id
+                                    ? "inset 2px 2px 5px rgba(0, 0, 0, 0.2), 0 0 0 3px #66cdaa"
+                                    : "none"
+                              }}>
+                              <div
+                                className="custom-theme-card__bg"
+                                style={{
+                                  backgroundImage: item.bgUrl
+                                    ? `url(${item.bgUrl})`
+                                    : "none",
+                                  backgroundColor: !item.bgUrl
+                                    ? item.bgColor
+                                    : "transparent"
+                                }}
+                              />
+                              <div className="custom-theme-card__title">
+                                {item.name}
+                              </div>
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            className="preset-theme-card add-theme-card"
+                            onClick={onCustomPlusClick}
+                            style={{
+                              ...btnStyle("#374151", false),
+                              backgroundColor: "transparent",
+                              cursor: "pointer"
+                            }}>
+                            <div
+                              className="preset-theme-card__bg"
+                              style={{
+                                background:
+                                  "linear-gradient(135deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.04) 48%, rgba(0,0,0,0.12) 100%), #374151"
                               }}
                             />
-                            <div className="custom-theme-card__title">{item.name}</div>
+                            <span
+                              className="preset-theme-card__emoji"
+                              aria-hidden="true">
+                              ✏️
+                            </span>
+                            <span className="preset-theme-card__label">
+                              {t("addTheme")}
+                            </span>
                           </button>
-                        ))}
-                        <button
-                          type="button"
-                          className="preset-theme-card add-theme-card"
-                          onClick={onCustomPlusClick}
-                          style={{ ...btnStyle("#374151", false), backgroundColor: "transparent", cursor: "pointer" }}>
-                          <div
-                            className="preset-theme-card__bg"
-                            style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.04) 48%, rgba(0,0,0,0.12) 100%), #374151" }}
-                          />
-                          <span className="preset-theme-card__emoji" aria-hidden="true">✏️</span>
-                          <span className="preset-theme-card__label">{t("addTheme")}</span>
-                        </button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -484,53 +873,273 @@ export function FabPanelApp() {
             )}
             {view === "custom" && (
               <>
-                <h3 style={{ margin: 0, textAlign: "center" }}>{t("editTheme")}</h3>
+                <h3 style={{ margin: 0, textAlign: "center" }}>
+                  {t("editTheme")}
+                </h3>
+                <div
+                  style={{
+                    marginTop: 20,
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr 1fr",
+                    gap: 8,
+                    borderBottom: "2px solid #66cdaa"
+                  }}>
+                  <button
+                    type="button"
+                    onClick={() => setCustomEditTab("general")}
+                    style={{
+                      ...controlButtonStyle,
+                      padding: "8px",
+                      borderRadius: "12px 12px 0 0",
+                      backgroundColor:
+                        customEditTab === "general" ? "#66cdaa" : "#4b5563"
+                    }}>
+                    {t("general")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCustomEditTab("background")}
+                    style={{
+                      ...controlButtonStyle,
+                      padding: "8px",
+                      borderRadius: "12px 12px 0 0",
+                      backgroundColor:
+                        customEditTab === "background" ? "#66cdaa" : "#4b5563"
+                    }}>
+                    {t("background")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCustomEditTab("layout")}
+                    style={{
+                      ...controlButtonStyle,
+                      padding: "8px",
+                      borderRadius: "12px 12px 0 0",
+                      backgroundColor:
+                        customEditTab === "layout" ? "#66cdaa" : "#4b5563"
+                    }}>
+                    {t("layout")}
+                  </button>
+                </div>
                 <div className="content-scroll" style={editSectionScrollStyle}>
-                  <div style={cardStyle}>
-                    <label style={rowStyle}>
-                      <span>{t("name")}</span>
-                      <input type="text" value={localCustomThemeName} maxLength={10} onChange={(e) => setLocalCustomThemeName(e.target.value)} style={{ width: 120, border: "none", borderRadius: 12, padding: 4, textAlign: "center", backgroundColor: "#4b5563", color: "#fff" }} />
-                    </label>
-                  </div>
-                  <ColorSettingCard label={t("text")} value={localText} onChange={setLocalText} onReset={resetCustomText} canReset={canResetText} />
-                  <ColorSettingCard label={t("accent")} value={localAccent} onChange={setLocalAccent} onReset={resetCustomAccent} canReset={canResetAccent} />
-                  <ColorSettingCard label={t("backgroundColor")} value={localCustomBgColor} onChange={setLocalCustomBgColor} onReset={resetCustomBgColor} canReset={Boolean(localCustomBgColor)} />
-                  <div style={cardStyle}>
-                    <label style={rowStyle}>
-                      <span>{t("backgroundImage")}</span>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <input ref={bgUploadRef} type="file" accept="image/*" onChange={(e) => onUploadCustomBg(e.target.files?.[0])} style={{ display: "none" }} />
-                        <button type="button" onClick={() => bgUploadRef.current?.click()} style={controlButtonStyle}>{t("upload")}</button>
-                        <button type="button" onClick={resetCustomBgImage} disabled={!customBg} style={{ ...controlButtonStyle, opacity: customBg ? 1 : 0.5, cursor: customBg ? "pointer" : "not-allowed" }}>{t("reset")}</button>
-                      </div>
-                    </label>
-                  </div>
-                  {customBg && (
+                  {customEditTab === "general" && (
                     <>
                       <div style={cardStyle}>
                         <label style={rowStyle}>
-                          <span>{t("imagePosition")}</span>
-                          <select value={localCustomBgOptions.position} onChange={(e) => updateCustomBgOption("position", e.target.value)} disabled={!customBg} style={{ border: "none", borderRadius: "12px", padding: 4, backgroundColor: "#4b5563", color: "#fff", cursor: customBg ? "pointer" : "not-allowed", opacity: customBg ? 1 : 0.5 }}>
-                            <option value="center top">{t("Top")}</option>
-                            <option value="center center">{t("Center")}</option>
-                            <option value="center bottom">{t("Bottom")}</option>
-                          </select>
+                          <span>{t("name")}</span>
+                          <input
+                            type="text"
+                            value={localCustomThemeName}
+                            maxLength={10}
+                            onChange={(e) =>
+                              setLocalCustomThemeName(e.target.value)
+                            }
+                            style={{
+                              width: 125,
+                              border: "none",
+                              borderRadius: 8,
+                              padding: "8px 4px",
+                              textAlign: "center",
+                              backgroundColor: "#4b5563",
+                              color: "#fff"
+                            }}
+                          />
                         </label>
                       </div>
                       <div style={cardStyle}>
-                        <CheckboxControl label={t("scaleX")} checked={localCustomBgOptions.scaleX === -1} disabled={!customBg} onChange={(c) => updateCustomBgOption("scaleX", c ? -1 : 1)} />
+                        <CheckboxControl
+                          label={t("hideHeader")}
+                          checked={localCustomBgOptions.hideHeader}
+                          onChange={(c) =>
+                            updateCustomBgOption("hideHeader", c)
+                          }
+                        />
                       </div>
                       <div style={cardStyle}>
-                        <RangeControl label={t("brightness")} min={0} max={5} step={0.1} value={localCustomBgOptions.brightness} disabled={!customBg} onChange={(v) => updateCustomBgOption("brightness", Number(v))} onReset={() => updateCustomBgOption("brightness", 1)} />
+                        <CheckboxControl
+                          label={t("hideFooter")}
+                          checked={localCustomBgOptions.hideFooter}
+                          onChange={(c) =>
+                            updateCustomBgOption("hideFooter", c)
+                          }
+                        />
+                      </div>
+                    </>
+                  )}
+                  {customEditTab === "background" && (
+                    <>
+                      <ColorSettingCard
+                        label={t("backgroundColor")}
+                        value={localCustomBgColor}
+                        onChange={setLocalCustomBgColor}
+                        onReset={resetCustomBgColor}
+                        canReset={Boolean(localCustomBgColor)}
+                      />
+                      <div style={cardStyle}>
+                        <label style={rowStyle}>
+                          <span>{t("backgroundImage")}</span>
+                          <div style={{ display: "flex", gap: 4 }}>
+                            <input
+                              ref={bgUploadRef}
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) =>
+                                onUploadCustomBg(e.target.files?.[0])
+                              }
+                              style={{ display: "none" }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => bgUploadRef.current?.click()}
+                              style={controlButtonStyle}>
+                              {t("upload")}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={resetCustomBgImage}
+                              disabled={!customBg}
+                              style={{
+                                ...controlButtonStyle,
+                                ...disabledControlStyle(Boolean(customBg))
+                              }}>
+                              {t("reset")}
+                            </button>
+                          </div>
+                        </label>
+                      </div>
+                      {customBg && (
+                        <>
+                          <div style={cardStyle}>
+                            <label style={rowStyle}>
+                              <span>{t("imagePosition")}</span>
+                              <select
+                                value={localCustomBgOptions.position}
+                                onChange={(e) =>
+                                  updateCustomBgOption(
+                                    "position",
+                                    e.target.value
+                                  )
+                                }
+                                style={{
+                                  border: "none",
+                                  borderRadius: 12,
+                                  padding: "6px 2px",
+                                  backgroundColor: "#4b5563",
+                                  color: "#fff",
+                                  cursor: "pointer"
+                                }}>
+                                <option value="center top">{t("Top")}</option>
+                                <option value="center center">
+                                  {t("Center")}
+                                </option>
+                                <option value="center bottom">
+                                  {t("Bottom")}
+                                </option>
+                              </select>
+                            </label>
+                          </div>
+                          <div style={cardStyle}>
+                            <CheckboxControl
+                              label={t("scaleX")}
+                              checked={localCustomBgOptions.scaleX === -1}
+                              onChange={(c) =>
+                                updateCustomBgOption("scaleX", c ? -1 : 1)
+                              }
+                            />
+                          </div>
+                          <div style={cardStyle}>
+                            <RangeControl
+                              label={t("brightness")}
+                              min={0}
+                              max={5}
+                              step={0.1}
+                              value={localCustomBgOptions.brightness}
+                              onChange={(v) =>
+                                updateCustomBgOption("brightness", Number(v))
+                              }
+                              onReset={() =>
+                                updateCustomBgOption("brightness", 1)
+                              }
+                            />
+                          </div>
+                          <div style={cardStyle}>
+                            <RangeControl
+                              label={t("blur")}
+                              min={0}
+                              max={50}
+                              step={1}
+                              value={localCustomBgOptions.blur}
+                              onChange={(v) =>
+                                updateCustomBgOption("blur", Number(v))
+                              }
+                              onReset={() => updateCustomBgOption("blur", 0)}
+                            />
+                          </div>
+                          <div style={cardStyle}>
+                            <CheckboxControl
+                              label={t("invert")}
+                              checked={localCustomBgOptions.invert === 1}
+                              onChange={(c) =>
+                                updateCustomBgOption("invert", c ? 1 : 0)
+                              }
+                            />
+                          </div>
+                          <div style={cardStyle}>
+                            <CheckboxControl
+                              label={t("grayscale")}
+                              checked={localCustomBgOptions.grayscale === 1}
+                              onChange={(c) =>
+                                updateCustomBgOption("grayscale", c ? 1 : 0)
+                              }
+                            />
+                          </div>
+                        </>
+                      )}
+                    </>
+                  )}
+                  {customEditTab === "layout" && (
+                    <>
+                      <ColorSettingCard
+                        label={t("text")}
+                        value={localText}
+                        onChange={setLocalText}
+                        onReset={resetCustomText}
+                        canReset={canResetText}
+                      />
+                      <ColorSettingCard
+                        label={t("accent")}
+                        value={localAccent}
+                        onChange={setLocalAccent}
+                        onReset={resetCustomAccent}
+                        canReset={canResetAccent}
+                      />
+                      <div style={cardStyle}>
+                        <RangeControl
+                          label={t("opacity")}
+                          min={0}
+                          max={1}
+                          step={0.1}
+                          value={localCustomBgOptions.opacity}
+                          onChange={(v) =>
+                            updateCustomBgOption("opacity", Number(v))
+                          }
+                          onReset={() =>
+                            updateCustomBgOption("opacity", 0.8)
+                          }
+                        />
                       </div>
                       <div style={cardStyle}>
-                        <RangeControl label={t("blur")} min={0} max={50} step={1} value={localCustomBgOptions.blur} disabled={!customBg} onChange={(v) => updateCustomBgOption("blur", Number(v))} onReset={() => updateCustomBgOption("blur", 0)} />
-                      </div>
-                      <div style={cardStyle}>
-                        <CheckboxControl label={t("invert")} checked={localCustomBgOptions.invert === 1} disabled={!customBg} onChange={(c) => updateCustomBgOption("invert", c ? 1 : 0)} />
-                      </div>
-                      <div style={cardStyle}>
-                        <CheckboxControl label={t("grayscale")} checked={localCustomBgOptions.grayscale === 1} disabled={!customBg} onChange={(c) => updateCustomBgOption("grayscale", c ? 1 : 0)} />
+                        <RangeControl
+                          label={t("glassBlur")}
+                          min={0}
+                          max={50}
+                          step={1}
+                          value={localCustomBgOptions.glassBlur}
+                          onChange={(v) =>
+                            updateCustomBgOption("glassBlur", Number(v))
+                          }
+                          onReset={() => updateCustomBgOption("glassBlur", 10)}
+                        />
                       </div>
                     </>
                   )}
@@ -538,20 +1147,102 @@ export function FabPanelApp() {
               </>
             )}
           </div>
-          <div className="footer" style={{ padding: "10px 20px" }}>
+          <div className="footer" style={{ display: "flex", flexDirection: "column", padding: "10px 20px", gap: 8 }}>
+            {themeTab === "custom" && view !== "custom" && (
+              <div
+                style={{ ...rowStyle, gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={onExportClick}
+                  disabled={!canExportTheme}
+                  style={{
+                    ...controlButtonStyle,
+                    flex: 1,
+                    border: "none",
+                    padding: 8,
+                    ...disabledControlStyle(canExportTheme)
+                  }}>
+                  {t("exportTheme")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => importFileRef.current?.click()}
+                  disabled={!canImportTheme}
+                  style={{
+                    ...controlButtonStyle,
+                    flex: 1,
+                    border: "none",
+                    padding: 8,
+                    ...disabledControlStyle(canImportTheme)
+                  }}>
+                  {t("importTheme")}
+                </button>
+                <input
+                  ref={importFileRef}
+                  type="file"
+                  accept="application/json"
+                  disabled={!canImportTheme}
+                  onChange={(e) => onImportFile(e.target.files?.[0])}
+                  style={{ display: "none" }}
+                />
+              </div>
+            )}
             {view === "custom" && (
               <div style={{ ...rowStyle, gap: 8 }}>
-                <button type="button" onClick={onDeleteCustomTheme} style={{ ...controlButtonStyle, flex: 1, border: "none", padding: 8, backgroundColor: "#d32f2f", color: "#fff" }}>{t("delete")}</button>
-                <button type="button" onClick={onSaveClick} style={{ ...controlButtonStyle, flex: 1, border: "none", padding: 8, backgroundColor: "#1976d2", color: "#fff" }}>{t("save")}</button>
+                <button
+                  type="button"
+                  onClick={onDeleteCustomTheme}
+                  style={{
+                    ...controlButtonStyle,
+                    flex: 1,
+                    border: "none",
+                    padding: 8,
+                    backgroundColor: "#d32f2f",
+                    color: "#fff"
+                  }}>
+                  {t("delete")}
+                </button>
+                <button
+                  type="button"
+                  onClick={onSaveClick}
+                  style={{
+                    ...controlButtonStyle,
+                    flex: 1,
+                    border: "none",
+                    padding: 8,
+                    backgroundColor: "#1976d2",
+                    color: "#fff"
+                  }}>
+                  {t("save")}
+                </button>
               </div>
             )}
             {view !== "custom" && isPremiumLoaded && !isPremiumUser && (
-              <button type="button" className="pro-button" onClick={checkPremium} style={{ ...proButtonStyle }}><span>💎 {t("upgradePro")}</span></button>
+              <button
+                type="button"
+                className="pro-button"
+                onClick={checkPremium}
+                style={{ ...proButtonStyle }}>
+                <span>💎 {t("upgradePro")}</span>
+              </button>
             )}
           </div>
         </div>
         {isThemeLoading && (
-          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0, 0, 0, 0.42)", color: "#fff", fontSize: 14, fontWeight: 700, zIndex: 10, pointerEvents: "none" }}>
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: "rgba(0, 0, 0, 0.42)",
+              color: "#fff",
+              fontSize: 14,
+              fontWeight: 700,
+              zIndex: 10,
+              pointerEvents: "none"
+            }}>
             {t("loading")}...
           </div>
         )}
@@ -560,51 +1251,159 @@ export function FabPanelApp() {
   )
 }
 
-const btnStyle = (color: string, active: boolean) => ({ height: 100, backgroundColor: color, border: "none", borderRadius: "12px", cursor: "pointer", boxShadow: active ? "inset 2px 2px 5px rgba(0, 0, 0, 0.2), 0 0 0 3px #66cdaa" : "none", transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)" })
+const btnStyle = (color: string, active: boolean) => ({
+  height: 100,
+  backgroundColor: color,
+  border: "none",
+  borderRadius: "12px",
+  cursor: "pointer",
+  boxShadow: active
+    ? "inset 2px 2px 5px rgba(0, 0, 0, 0.2), 0 0 0 3px #66cdaa"
+    : "none",
+  transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
+})
 
 function Card({ children }: { children: ReactNode }) {
   return <div style={cardStyle}>{children}</div>
 }
 
-function ColorSettingCard({ label, value, onChange, onReset, canReset }: { label: string; value: string; onChange: (value: string) => void; onReset: () => void; canReset: boolean }) {
+function ColorSettingCard({
+  label,
+  value,
+  onChange,
+  onReset,
+  canReset
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  onReset: () => void
+  canReset: boolean
+}) {
   return (
     <Card>
       <label style={rowStyle}>
         <span>{label}</span>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="color-picker" style={colorInputStyle} />
-          <button type="button" onClick={onReset} disabled={!canReset} style={{ ...controlButtonStyle, opacity: canReset ? 1 : 0.5, cursor: canReset ? "pointer" : "not-allowed" }}>{t("reset")}</button>
+        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+          <input
+            type="color"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="color-picker"
+            style={colorInputStyle}
+          />
+          <button
+            type="button"
+            onClick={onReset}
+            disabled={!canReset}
+            style={{
+              ...controlButtonStyle,
+              ...disabledControlStyle(canReset)
+            }}>
+            {t("reset")}
+          </button>
         </div>
       </label>
     </Card>
   )
 }
 
-function RangeControl({ label, min, max, step, value, disabled = false, onChange, onReset }: { label: string; min: number; max: number; step: number; value: number; disabled?: boolean; onChange: (value: string) => void; onReset?: () => void }) {
+function RangeControl({
+  label,
+  min,
+  max,
+  step,
+  value,
+  disabled = false,
+  onChange,
+  onReset
+}: {
+  label: string
+  min: number
+  max: number
+  step: number
+  value: number
+  disabled?: boolean
+  onChange: (value: string) => void
+  onReset?: () => void
+}) {
   return (
     <label style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center"
+        }}>
         <span>{label}</span>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
           <span style={{ color: "#d1d5db" }}>{value}</span>
-          {onReset && <button type="button" onClick={onReset} disabled={disabled} style={{ ...controlButtonStyle, paddingLeft: 8, paddingRight: 8, opacity: disabled ? 0.5 : 1 }}>{t("reset")}</button>}
+          {onReset && (
+            <button
+              type="button"
+              onClick={onReset}
+              disabled={disabled}
+              style={{
+                ...controlButtonStyle,
+                paddingLeft: 8,
+                paddingRight: 8,
+                ...disabledControlStyle(!disabled)
+              }}>
+              {t("reset")}
+            </button>
+          )}
         </div>
       </div>
-      <input type="range" min={min} max={max} step={step} value={value} disabled={disabled} style={{ accentColor: "#66cdaa", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1 }} onChange={(e) => onChange(e.target.value)} />
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        disabled={disabled}
+        style={{ accentColor: "#66cdaa", ...disabledControlStyle(!disabled) }}
+        onChange={(e) => onChange(e.target.value)}
+      />
     </label>
   )
 }
 
-function CheckboxControl({ label, checked, disabled = false, onChange }: { label: string; checked: boolean; disabled?: boolean; onChange: (checked: boolean) => void }) {
+function CheckboxControl({
+  label,
+  checked,
+  disabled = false,
+  onChange
+}: {
+  label: string
+  checked: boolean
+  disabled?: boolean
+  onChange: (checked: boolean) => void
+}) {
   return (
     <label style={rowStyle}>
       <span>{label}</span>
-      <input type="checkbox" checked={checked} disabled={disabled} style={{ width: 20, height: 20, margin: 0, accentColor: "#66cdaa", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1 }} onChange={(e) => onChange(e.target.checked)} />
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        style={{
+          width: 20,
+          height: 20,
+          margin: 0,
+          accentColor: "#66cdaa",
+          ...disabledControlStyle(!disabled)
+        }}
+        onChange={(e) => onChange(e.target.checked)}
+      />
     </label>
   )
 }
 
-function useDebouncedEffect(effect: () => void, delay: number, deps: unknown[]) {
+function useDebouncedEffect(
+  effect: () => void,
+  delay: number,
+  deps: unknown[]
+) {
   useEffect(() => {
     const timer = setTimeout(effect, delay)
     return () => clearTimeout(timer)

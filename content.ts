@@ -30,6 +30,10 @@ interface CustomBgOptions {
   blur: number
   brightness: number
   position: string
+  glassBlur: number
+  opacity: number
+  hideHeader: boolean
+  hideFooter: boolean
 }
 
 type SiteType = "chatgpt" | "gemini" | "claude" | "grok"
@@ -38,22 +42,30 @@ type ModelEnabledMap = { chatgpt: boolean; gemini: boolean; claude: boolean; gro
 
 const SITE_SELECTORS = {
   chatgpt: {
-    container: "#main, body",
+    container: "body",
+    header: "header",
+    footer: "#thread-bottom-container > div:is(.mt-auto, .-mt-4) > div > div > div > div",
     elements: '[data-testid="use-case-prompt-chips"] button, .agent-turn, .user-message-bubble-color, .shadow-short-composer',
     darkClass: "html.dark"
   },
   gemini: {
-    container: "#main, body",
+    container: "body",
+    header: "top-bar-actions",
+    footer: ".capabilities-disclaimer p",
     elements: "model-response, .dual-response-panel, .user-query-bubble-with-background, .input-box-shadow",
     darkClass: "body.dark-theme"
   },
   claude: {
-    container: "#main, body",
+    container: "body",
+    header: 'header, #main-content > div > div > main > div:first-child, .z-header, [data-testid="wiggle-controls-actions"]',
+    footer: 'div[data-disclaimer="true"]',
     elements: 'li.inline-block button, .font-claude-response, div[data-user-message-bubble="true"], .\\!box-content',
     darkClass: 'html[data-mode="dark"]'
   },
   grok: {
-    container: "#main, body",
+    container: "body",
+    header: ".from-surface-base",
+    footer: "",
     elements: '[data-testid="assistant-message"], [data-testid="user-message"], .query-bar',
     darkClass: "html.dark"
   },
@@ -86,7 +98,11 @@ const DEFAULT_CUSTOM_BG_OPTIONS: CustomBgOptions = {
   grayscale: 0,
   blur: 0,
   brightness: 1,
-  position: "center center"
+  position: "center center",
+  glassBlur: 10,
+  opacity: 0.8,
+  hideHeader: true,
+  hideFooter: true
 }
 
 const THEME_BG_URLS: Partial<Record<ThemeName, string>> = {
@@ -451,6 +467,15 @@ const generateCSS = (
   const grayscale = customBgOptions?.grayscale ?? 0
   const blur = customBgOptions?.blur ?? 0
   const brightness = customBgOptions?.brightness ?? 1
+  const glassBlur = customBgOptions?.glassBlur ?? 10
+  const opacity = customBgOptions?.opacity ?? 0.8
+  const hideHeader = customBgOptions?.hideHeader ?? true
+  const hideFooter = customBgOptions?.hideFooter ?? true
+
+  const getVisibilityStyle = () => `
+    ${hideHeader ? `${SITE_SELECTORS[site].header} { display: none !important; }` : ""}
+    ${hideFooter ? `${SITE_SELECTORS[site].footer} { font-size: 0 !important; line-height: normal !important }` : ""}
+  `
 
   const getBgStyle = () => (bgUrl || bgColor) ? `
     body::before {
@@ -474,14 +499,14 @@ const generateCSS = (
 
   const getElStyle = () => `
     ${elements} {
-      background-color: rgba(255, 255, 255, 0.8) !important;
+      background-color: rgba(255, 255, 255, ${opacity}) !important;
       box-shadow: inset 0 2px 16px ${accentColor}4D !important;
-      backdrop-filter: blur(12px) saturate(140%) !important;
-      opacity: 0.9 !important;
+      backdrop-filter: blur(${glassBlur}px) saturate(140%) !important;
+      opacity: 0.8 !important;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
     }
     ${darkSelectors} {
-      background-color: rgba(24, 24, 24, 0.8) !important;
+      background-color: rgba(24, 24, 24, ${opacity}) !important;
     }
     ${hoverSelectors} {
       opacity: 1 !important;
@@ -498,7 +523,7 @@ const generateCSS = (
       .show-lm-background::before {
         background: none !important;
       }
-      model-response {
+      model-response, .dual-response-panel {
         padding: 20px 28px !important;
         border-radius: 40px !important;
       }
@@ -523,7 +548,7 @@ const generateCSS = (
     ${darkClass} *:not(pre *) { color: ${darkTextColor} !important; }
   ` : ""
 
-  return [getBgStyle(), getElStyle(), getTextStyle()].join("\n")
+  return [getBgStyle(), getElStyle(), getTextStyle(), getVisibilityStyle()].join("\n")
 }
 
 const applyTheme = async (requestId: number) => {
