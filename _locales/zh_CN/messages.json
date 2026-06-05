@@ -161,6 +161,9 @@
   "success_themeDelete": {
     "message": "主题已成功删除。"
   },
+  "success_themeDuplicate": {
+    "message": "主题已成功复制。"
+  },
   "pro_themePreset": {
     "message": "升级到 Pro 即可使用无限主题预设。"
   },

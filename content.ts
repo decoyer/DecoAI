@@ -145,7 +145,7 @@ const TOAST_STYLE_ID = "kasutamu-toastify-style"
 const TOAST_ROOT_ID = "kasutamu-toast-root"
 const FAB_HIDDEN_STORAGE_KEY = "fab-hidden"
 const MODEL_ENABLED_STORAGE_KEY = "model-enabled-map"
-const FAB_MAIN_BTN_ICON = `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M7.5 5.6 10 7 8.6 4.5 10 2 7.5 3.4 5 2l1.4 2.5L5 7l2.5-1.4zm12 9.8L17 14l1.4 2.5L17 19l2.5-1.4L22 19l-1.4-2.5L22 14l-2.5 1.4zM22 2l-2.5 1.4L17 2l1.4 2.5L17 7l2.5-1.4L22 7l-1.4-2.5L22 2zM13.34 12.78l2.44-2.44-2.12-2.12-2.44 2.44 2.12 2.12zm1.03-5.49 2.34 2.34c.39.39.39 1.03 0 1.42l-7.66 7.66c-.39.39-1.03.39-1.42 0l-2.34-2.34a.9959.9959 0 0 1 0-1.42l7.66-7.66c.39-.39 1.03-.39 1.42 0z"></path></svg>`
+const FAB_MAIN_BTN_ICON = `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path fill="none" d="M0 0h24v24H0z"/><path fill="currentColor" d="M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z"/></svg>`
 const THEME_LOADING_EVENT = "kasutamu:theme-loading"
 const FAB_OPEN_EVENT = "kasutamu:fab-open"
 const CUSTOM_THEME_DATA_STORAGE_KEYS = [

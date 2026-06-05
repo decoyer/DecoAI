@@ -161,6 +161,9 @@
   "success_themeDelete": {
     "message": "Theme deleted successfully."
   },
+  "success_themeDuplicate": {
+    "message": "Theme duplicated successfully."
+  },
   "pro_themePreset": {
     "message": "Upgrade to Pro for unlimited theme presets."
   },

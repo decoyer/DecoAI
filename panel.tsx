@@ -184,6 +184,7 @@ export function FabPanelApp() {
   const [localCustomThemeName, setLocalCustomThemeName] = useState("")
   const [localCustomBgColor, setLocalCustomBgColor] = useState("")
   const [isThemeLoading, setIsThemeLoading] = useState(false)
+  const [draggingCustomThemeId, setDraggingCustomThemeId] = useState("")
   const canResetText = Boolean((localText || "").trim())
   const canResetAccent = Boolean((localAccent || "").trim())
   const selectedCustomTheme = customThemes.find(
@@ -527,6 +528,53 @@ export function FabPanelApp() {
     setView("themes")
   }
 
+  const onCustomCardDragStart = (
+    event: React.DragEvent<HTMLElement>,
+    customThemeItem: CustomTheme
+  ) => {
+    setDraggingCustomThemeId(customThemeItem.id)
+    event.dataTransfer.effectAllowed = "move"
+    event.dataTransfer.setData("text/plain", customThemeItem.id)
+  }
+
+  const onCustomCardDragOver = (
+    event: React.DragEvent<HTMLElement>,
+    customThemeItem: CustomTheme
+  ) => {
+    if (!draggingCustomThemeId || draggingCustomThemeId === customThemeItem.id)
+      return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = "move"
+  }
+
+  const onCustomCardDrop = (
+    event: React.DragEvent<HTMLElement>,
+    customThemeItem: CustomTheme
+  ) => {
+    event.preventDefault()
+    event.stopPropagation()
+
+    const sourceId =
+      event.dataTransfer.getData("text/plain") || draggingCustomThemeId
+    const targetId = customThemeItem.id
+    if (!sourceId || sourceId === targetId) return
+
+    setCustomThemes((prev) => {
+      const sourceIndex = prev.findIndex((item) => item.id === sourceId)
+      const targetIndex = prev.findIndex((item) => item.id === targetId)
+      if (sourceIndex < 0 || targetIndex < 0) return prev
+
+      const nextThemes = [...prev]
+      const [movedTheme] = nextThemes.splice(sourceIndex, 1)
+      nextThemes.splice(targetIndex, 0, movedTheme)
+      return nextThemes
+    })
+  }
+
+  const onCustomCardDragEnd = () => {
+    setDraggingCustomThemeId("")
+  }
+
   const onCustomPlusClick = async () => {
     if (customThemes.length > 0 && !isPremiumUser) {
       toast.error(t("pro_themePreset"))
@@ -538,12 +586,12 @@ export function FabPanelApp() {
     setCustomThemes((prev) => [...prev, created])
   }
 
-  const onDeleteCustomTheme = () => {
-    if (!editingCustomThemeId) return
+  const deleteCustomTheme = (customThemeId: string) => {
+    if (!customThemeId) return
     const deletingSelected =
-      selectedCustomThemeId === editingCustomThemeId && theme === "custom"
+      selectedCustomThemeId === customThemeId && theme === "custom"
     const nextThemes = customThemes.filter(
-      (item) => item.id !== editingCustomThemeId
+      (item) => item.id !== customThemeId
     )
     setCustomThemes(nextThemes)
     if (deletingSelected) {
@@ -551,9 +599,57 @@ export function FabPanelApp() {
       setTheme("default")
       chrome.storage.local.remove(CUSTOM_THEME_LEGACY_STORAGE_KEYS)
     }
-    setEditingCustomThemeId("")
+    if (editingCustomThemeId === customThemeId) setEditingCustomThemeId("")
     setView("themes")
     toast.success(t("success_themeDelete"))
+  }
+
+  const onDeleteCustomTheme = () => {
+    deleteCustomTheme(editingCustomThemeId)
+  }
+
+  const onCustomCardDeleteClick = (
+    event: React.MouseEvent<HTMLButtonElement>,
+    customThemeItem: CustomTheme
+  ) => {
+    event.preventDefault()
+    event.stopPropagation()
+    deleteCustomTheme(customThemeItem.id)
+  }
+
+  const onCustomCardDuplicateClick = async (
+    event: React.MouseEvent<HTMLButtonElement>,
+    customThemeItem: CustomTheme
+  ) => {
+    event.preventDefault()
+    event.stopPropagation()
+
+    if (customThemes.length > 0 && !isPremiumUser) {
+      toast.error(t("pro_themePreset"))
+      return
+    }
+
+    const copiedTheme = {
+      ...customThemeItem,
+      id: crypto.randomUUID(),
+      name: String(customThemeItem.name || t("custom")).slice(0, 10)
+    }
+    const sourceIndex = customThemes.findIndex(
+      (item) => item.id === customThemeItem.id
+    )
+
+    setCustomThemes((prev) => {
+      const nextThemes = [...prev]
+      nextThemes.splice(sourceIndex + 1, 0, copiedTheme)
+      return nextThemes
+    })
+    setEditingCustomThemeId("")
+    setSelectedCustomThemeId(copiedTheme.id)
+    setTheme("custom")
+    await syncThemeToLegacyStorage(copiedTheme)
+    setView("themes")
+
+    toast.success(t("success_themeDuplicate"))
   }
 
   return (
@@ -613,6 +709,10 @@ export function FabPanelApp() {
           cursor: pointer;
           overflow: hidden;
         }
+        .custom-theme-card.is-dragging {
+          opacity: 0.5;
+          transform: scale(0.9);
+        }
         .custom-theme-card__bg {
           position: absolute;
           inset: 0;
@@ -633,8 +733,49 @@ export function FabPanelApp() {
           text-align: center;
           transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
+        .custom-theme-card__action {
+          position: absolute;
+          top: 2px;
+          z-index: 3;
+          width: 24px;
+          height: 24px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0;
+          border: none;
+          border-radius: 999px;
+          background-color: #0000004D;
+          cursor: pointer;
+          opacity: 0;
+          transform: scale(0.9);
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .custom-theme-card__duplicate {
+          right: 26px;
+        }
+        .custom-theme-card__delete {
+          right: 2px;
+        }
+        .custom-theme-card:hover .custom-theme-card__action {
+          opacity: 1;
+          transform: scale(1);
+        }
+        .custom-theme-card__duplicate:hover {
+          background-color: #1976d2;
+        }
+        .custom-theme-card__delete:hover {
+          background-color: #d32f2f;
+        }
         .custom-theme-card:hover .custom-theme-card__bg { transform: scale(1.1); }
         .custom-theme-card:hover .custom-theme-card__title { background-color: #0000004D; }
+        .custom-theme-card-wrap {
+          position: relative;
+        }
+        .custom-theme-card-wrap:hover .custom-theme-card__action {
+          opacity: 1;
+          transform: scale(1);
+        }
         .pro-button { animation: pro-gradient 20s linear infinite; }
         .footer button:hover { filter: brightness(1.1); }
         @keyframes pro-gradient {
@@ -732,33 +873,57 @@ export function FabPanelApp() {
                             gap: 8
                           }}>
                           {customThemes.map((item) => (
-                            <button
+                            <div
                               key={item.id}
-                              type="button"
-                              className="custom-theme-card"
-                              onClick={() => onCustomCardClick(item)}
-                              style={{
-                                boxShadow:
-                                  theme === "custom" &&
-                                    selectedCustomThemeId === item.id
-                                    ? "inset 2px 2px 5px rgba(0, 0, 0, 0.2), 0 0 0 3px #66cdaa"
-                                    : "none"
-                              }}>
-                              <div
-                                className="custom-theme-card__bg"
+                              className="custom-theme-card-wrap"
+                              onDragOver={(e) => onCustomCardDragOver(e, item)}
+                              onDrop={(e) => onCustomCardDrop(e, item)}>
+                              <button
+                                type="button"
+                                draggable
+                                className={`custom-theme-card${draggingCustomThemeId === item.id ? " is-dragging" : ""}`}
+                                onClick={() => onCustomCardClick(item)}
+                                onDragStart={(e) => onCustomCardDragStart(e, item)}
+                                onDragEnd={onCustomCardDragEnd}
                                 style={{
-                                  backgroundImage: item.bgUrl
-                                    ? `url(${item.bgUrl})`
-                                    : "none",
-                                  backgroundColor: !item.bgUrl
-                                    ? item.bgColor
-                                    : "transparent"
-                                }}
-                              />
-                              <div className="custom-theme-card__title">
-                                {item.name}
-                              </div>
-                            </button>
+                                  boxShadow:
+                                    theme === "custom" &&
+                                      selectedCustomThemeId === item.id
+                                      ? "inset 2px 2px 5px rgba(0, 0, 0, 0.2), 0 0 0 3px #66cdaa"
+                                      : "none"
+                                }}>
+                                <div
+                                  className="custom-theme-card__bg"
+                                  style={{
+                                    backgroundImage: item.bgUrl
+                                      ? `url(${item.bgUrl})`
+                                      : "none",
+                                    backgroundColor: !item.bgUrl
+                                      ? item.bgColor
+                                      : "transparent"
+                                  }}
+                                />
+                                <div className="custom-theme-card__title">
+                                  {item.name}
+                                </div>
+                              </button>
+                              <button
+                                type="button"
+                                className="custom-theme-card__action custom-theme-card__duplicate"
+                                aria-label="Duplicate"
+                                draggable={false}
+                                onClick={(e) => onCustomCardDuplicateClick(e, item)}>
+                                <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path d="M0 0h24v24H0z" fill="none"/><path d="M13 7h-2v4H7v2h4v4h2v-4h4v-2h-4V7zm-1-5C6.49 2 2 6.49 2 12s4.49 10 10 10 10-4.49 10-10S17.51 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="#fff"/></svg>
+                              </button>
+                              <button
+                                type="button"
+                                className="custom-theme-card__action custom-theme-card__delete"
+                                aria-label={t("delete")}
+                                draggable={false}
+                                onClick={(e) => onCustomCardDeleteClick(e, item)}>
+                                <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path d="M0 0h24v24H0z" fill="none"/><path d="M14.59 8L12 10.59 9.41 8 8 9.41 10.59 12 8 14.59 9.41 16 12 13.41 14.59 16 16 14.59 13.41 12 16 9.41 14.59 8zM12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="#fff"/></svg>
+                              </button>
+                            </div>
                           ))}
                           <button
                             type="button"

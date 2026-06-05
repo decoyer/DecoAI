@@ -161,6 +161,9 @@
   "success_themeDelete": {
     "message": "테마를 성공적으로 삭제했습니다."
   },
+  "success_themeDuplicate": {
+    "message": "테마를 성공적으로 복제했습니다."
+  },
   "pro_themePreset": {
     "message": "커스텀 테마를 더 추가하려면 Pro로 업그레이드하세요."
   },
