@@ -32,9 +32,7 @@ export const THEME_FILE_APP_ID = "kasutamu"
 export const THEME_FILE_VERSION = 1
 export const IMAGE_HEADER_BYTES = 64 * 1024
 export const DATA_URL_SAMPLE_CHARS = 96 * 1024
-export const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024
-export const MAX_IMAGE_FILE_BYTES = 10 * 1024 * 1024
-export const MAX_FETCH_IMAGE_BYTES = 10 * 1024 * 1024
+export const MAX_FILE_BYTES = 10 * 1024 * 1024
 
 export const CUSTOM_THEME_LEGACY_STORAGE_KEYS = [
   "custom-bg-image",

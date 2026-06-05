@@ -1,4 +1,4 @@
-import { ALLOWED_IMAGE_SOURCE_URLS, MAX_FETCH_IMAGE_BYTES } from "./theme-utils"
+import { ALLOWED_IMAGE_SOURCE_URLS, MAX_FILE_BYTES } from "./theme-utils"
 
 const isHttpsUrl = (value: unknown) => {
   if (typeof value !== "string") return false
@@ -22,7 +22,7 @@ const isSupportedImageResponse = (response: Response) => {
   const contentLength = getContentLength(response)
   return (
     contentType.startsWith("image/") &&
-    (!contentLength || contentLength <= MAX_FETCH_IMAGE_BYTES)
+    (!contentLength || contentLength <= MAX_FILE_BYTES)
   )
 }
 
@@ -117,7 +117,7 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
       }
 
       const blob = await url.blob()
-      if (blob.size > MAX_FETCH_IMAGE_BYTES) {
+      if (blob.size > MAX_FILE_BYTES) {
         sendResponse({ success: false })
         return
       }

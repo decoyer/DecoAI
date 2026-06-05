@@ -136,5 +136,35 @@
   },
   "default": {
     "message": "기본"
+  },
+  "error_fileNotSelected": {
+    "message": "먼저 파일을 선택해 주세요."
+  },
+  "error_fileExceed": {
+    "message": "10MB보다 작은 파일을 업로드해 주세요."
+  },
+  "error_fileInvalid": {
+    "message": "올바른 파일을 업로드해 주세요."
+  },
+  "error_checkoutFail": {
+    "message": "결제창을 열 수 없습니다. 다시 시도해 주세요."
+  },
+  "success_themeExport": {
+    "message": "테마를 성공적으로 내보냈습니다."
+  },
+  "success_themeImport": {
+    "message": "테마를 성공적으로 가져왔습니다."
+  },
+  "success_themeSave": {
+    "message": "테마를 성공적으로 저장했습니다."
+  },
+  "success_themeDelete": {
+    "message": "테마를 성공적으로 삭제했습니다."
+  },
+  "pro_themePreset": {
+    "message": "커스텀 테마를 더 추가하려면 Pro로 업그레이드하세요."
+  },
+  "pro_animatedImage": {
+    "message": "움직이는 배경을 사용하려면 Pro로 업그레이드하세요."
   }
 }

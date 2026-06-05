@@ -10,6 +10,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react"
 import { Storage } from "@plasmohq/storage"
 import { useStorage } from "@plasmohq/storage/hook"
 
+import { toast } from "react-toastify"
 import { app } from "./firebase"
 import {
   createCustomTheme,
@@ -18,8 +19,7 @@ import {
   DEFAULT_CUSTOM_BG_OPTIONS,
   hasAnimatedBackground,
   isAnimatedImage,
-  MAX_IMAGE_FILE_BYTES,
-  MAX_IMPORT_FILE_BYTES,
+  MAX_FILE_BYTES,
   parseImportedThemes,
   sanitizeColor,
   sanitizeCustomBgOptions,
@@ -141,7 +141,7 @@ const downloadCustomTheme = (themeData: CustomTheme) => {
   const url = URL.createObjectURL(blob)
   const link = document.createElement("a")
   link.href = url
-  link.download = `kasutamu-theme-${themeData.name}.json`
+  link.download = `${themeData.name}_kasutamu-theme.json`
   link.click()
   URL.revokeObjectURL(url)
 }
@@ -149,7 +149,8 @@ const downloadCustomTheme = (themeData: CustomTheme) => {
 const disabledControlStyle = (enabled: boolean) =>
   ({
     opacity: enabled ? 1 : 0.5,
-    cursor: enabled ? "pointer" : "not-allowed"
+    cursor: enabled ? "pointer" : "not-allowed",
+    pointerEvents: enabled ? "auto" : "none"
   }) as const
 
 const clearFileInput = (input: HTMLInputElement | null) => {
@@ -188,8 +189,6 @@ export function FabPanelApp() {
   const selectedCustomTheme = customThemes.find(
     (item) => item.id === selectedCustomThemeId
   )
-  const canExportTheme = Boolean(selectedCustomTheme)
-  const canImportTheme = isPremiumUser || customThemes.length === 0
 
   useEffect(() => {
     if (!customThemes.length && selectedCustomThemeId)
@@ -202,7 +201,7 @@ export function FabPanelApp() {
   }, [customThemes, selectedCustomThemeId, setSelectedCustomThemeId])
 
   useEffect(() => {
-    setThemeTab(theme === "custom" ? "custom" : "preset")
+    if (theme === "custom") setThemeTab("custom")
   }, [theme])
 
   useEffect(() => {
@@ -242,11 +241,12 @@ export function FabPanelApp() {
   useEffect(() => {
     const onFabOpen = () => {
       setEditingCustomThemeId("")
+      setThemeTab(theme === "custom" ? "custom" : "preset")
       setView("themes")
     }
     window.addEventListener(FAB_OPEN_EVENT, onFabOpen)
     return () => window.removeEventListener(FAB_OPEN_EVENT, onFabOpen)
-  }, [])
+  }, [theme])
 
   const editingTheme = customThemes.find(
     (item) => item.id === editingCustomThemeId
@@ -361,6 +361,16 @@ export function FabPanelApp() {
       )
     })
 
+  const getSignedInUser = async () => {
+    const auth = getAuth(app)
+    if (auth.currentUser) return auth.currentUser
+
+    const accessToken = await getGoogleAccessToken()
+    const credential = GoogleAuthProvider.credential(null, accessToken)
+    const result = await signInWithCredential(auth, credential)
+    return result.user
+  }
+
   const syncPremiumStatus = async (userArg?: User | null) => {
     try {
       const auth = getAuth(app)
@@ -378,43 +388,38 @@ export function FabPanelApp() {
     }
   }
 
-  const checkPremium = async () => {
-    if (isPremiumUser) return true
-
-    const auth = getAuth(app)
-    let user = auth.currentUser
-
-    if (!user) {
-      const accessToken = await getGoogleAccessToken()
-      const credential = GoogleAuthProvider.credential(null, accessToken)
-      const result = await signInWithCredential(auth, credential)
-      user = result.user
-    }
-    const tokenResult = await user.getIdTokenResult(true)
-    const isPremium = tokenResult.claims.premium === true
-    setIsPremiumUser(isPremium)
-
-    if (!isPremium) {
+  const onProClick = async () => {
+    try {
+      const user = await getSignedInUser()
       const idToken = await user.getIdToken()
       await openCheckout(idToken)
+    } catch (e) {
+      toast.error(t("error_checkout"))
     }
-
-    return isPremium
   }
 
   const onExportClick = () => {
-    if (!selectedCustomTheme) return
+    if (theme !== 'custom') return
 
     downloadCustomTheme(selectedCustomTheme)
+    toast.success(t("success_themeExport"))
+  }
+
+  const onImportClick = () => {
+    if (!isPremiumUser && customThemes.length > 0) {
+      toast.error(t("pro_themePreset"))
+      return
+    }
+    importFileRef.current?.click()
   }
 
   const onImportFile = async (file?: File) => {
-    if (!file) return
-    if (file.size > MAX_IMPORT_FILE_BYTES) {
-      clearFileInput(importFileRef.current)
+    if (!file) {
+      toast.error(t("error_fileNotSelected"))
       return
     }
-    if (!canImportTheme) {
+    if (file.size > MAX_FILE_BYTES) {
+      toast.error(t("error_fileExceed"))
       clearFileInput(importFileRef.current)
       return
     }
@@ -425,8 +430,16 @@ export function FabPanelApp() {
       (index) => `${t("custom")} ${index + 1}`
     )
 
-    if (!imported.length) return
-    if (!isPremiumUser && hasAnimatedBackground(imported)) return
+    if (!imported.length) {
+      toast.error(t("error_fileInvalid"))
+      clearFileInput(importFileRef.current)
+      return
+    }
+    if (!isPremiumUser && hasAnimatedBackground(imported)) {
+      toast.error(t("pro_animatedImage"))
+      clearFileInput(importFileRef.current)
+      return
+    }
 
     if (isPremiumUser) {
       setCustomThemes((prev) => [...prev, ...imported])
@@ -436,23 +449,28 @@ export function FabPanelApp() {
       setTheme("custom")
       await syncThemeToLegacyStorage(imported[0])
     }
+
+    toast.success(t("success_themeImport"))
+
     setThemeTab("custom")
     clearFileInput(importFileRef.current)
   }
 
   const onUploadCustomBg = async (file?: File) => {
-    if (!file) return
-    if (file.size > MAX_IMAGE_FILE_BYTES) {
-      clearFileInput(bgUploadRef.current)
+    if (!file) {
+      toast.error(t("error_fileNotSelected"))
+      return
+    }
+    if (file.size > MAX_FILE_BYTES) {
+      toast.error(t("error_fileExceed"))
+      clearFileInput(importFileRef.current)
       return
     }
     const animated = await isAnimatedImage(file)
-    if (animated) {
-      const canUsePremiumFeature = isPremiumUser || (await checkPremium())
-      if (!canUsePremiumFeature) {
-        clearFileInput(bgUploadRef.current)
-        return
-      }
+    if (animated && !isPremiumUser) {
+      toast.error(t("pro_animatedImage"))
+      clearFileInput(bgUploadRef.current)
+      return
     }
     const reader = new FileReader()
     reader.onload = () => {
@@ -460,6 +478,7 @@ export function FabPanelApp() {
         typeof reader.result === "string" ? reader.result : ""
       )
       if (!result) {
+        toast.error(t("error_fileInvalid"))
         clearFileInput(bgUploadRef.current)
         return
       }
@@ -481,6 +500,7 @@ export function FabPanelApp() {
     upsertEditingTheme()
     setEditingCustomThemeId("")
     setView("themes")
+    toast.success(t("success_themeSave"))
   }
   const resetCustomText = () => setLocalText("")
   const resetCustomAccent = () => setLocalAccent("")
@@ -508,9 +528,9 @@ export function FabPanelApp() {
   }
 
   const onCustomPlusClick = async () => {
-    if (customThemes.length > 0) {
-      const canUsePremiumFeature = isPremiumUser || (await checkPremium())
-      if (!canUsePremiumFeature) return
+    if (customThemes.length > 0 && !isPremiumUser) {
+      toast.error(t("pro_themePreset"))
+      return
     }
     const created = createCustomTheme(
       `${t("custom")} ${customThemes.length + 1}`
@@ -533,6 +553,7 @@ export function FabPanelApp() {
     }
     setEditingCustomThemeId("")
     setView("themes")
+    toast.success(t("success_themeDelete"))
   }
 
   return (
@@ -1058,26 +1079,24 @@ export function FabPanelApp() {
                 <button
                   type="button"
                   onClick={onExportClick}
-                  disabled={!canExportTheme}
+                  disabled={theme !== 'custom'}
                   style={{
                     ...controlButtonStyle,
                     flex: 1,
                     border: "none",
                     padding: 8,
-                    ...disabledControlStyle(canExportTheme)
+                    ...disabledControlStyle(theme === 'custom')
                   }}>
                   {t("exportTheme")}
                 </button>
                 <button
                   type="button"
-                  onClick={() => importFileRef.current?.click()}
-                  disabled={!canImportTheme}
+                  onClick={onImportClick}
                   style={{
                     ...controlButtonStyle,
                     flex: 1,
                     border: "none",
-                    padding: 8,
-                    ...disabledControlStyle(canImportTheme)
+                    padding: 8
                   }}>
                   {t("importTheme")}
                 </button>
@@ -1085,7 +1104,6 @@ export function FabPanelApp() {
                   ref={importFileRef}
                   type="file"
                   accept="application/json"
-                  disabled={!canImportTheme}
                   onChange={(e) => onImportFile(e.target.files?.[0])}
                   style={{ display: "none" }}
                 />
@@ -1125,7 +1143,7 @@ export function FabPanelApp() {
               <button
                 type="button"
                 className="pro-button"
-                onClick={checkPremium}
+                onClick={onProClick}
                 style={{ ...proButtonStyle }}>
                 <span>💎 {t("upgradePro")}</span>
               </button>
@@ -1145,7 +1163,7 @@ export function FabPanelApp() {
               fontSize: 14,
               fontWeight: 700,
               zIndex: 10,
-              pointerEvents: "none"
+              pointerEvents: "auto"
             }}>
             {t("loading")}...
           </div>

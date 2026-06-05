@@ -136,5 +136,35 @@
   },
   "default": {
     "message": "默认"
+  },
+  "error_fileNotSelected": {
+    "message": "请先选择一个文件。"
+  },
+  "error_fileExceed": {
+    "message": "请上传小于 10MB 的文件。"
+  },
+  "error_fileInvalid": {
+    "message": "请上传有效的主题文件。"
+  },
+  "error_checkoutFail": {
+    "message": "无法打开结账页面。请重试。"
+  },
+  "success_themeExport": {
+    "message": "主题已成功导出。"
+  },
+  "success_themeImport": {
+    "message": "主题已成功导入。"
+  },
+  "success_themeSave": {
+    "message": "主题已成功保存。"
+  },
+  "success_themeDelete": {
+    "message": "主题已成功删除。"
+  },
+  "pro_themePreset": {
+    "message": "升级到 Pro 即可使用无限主题预设。"
+  },
+  "pro_animatedImage": {
+    "message": "升级到 Pro 即可使用动态背景。"
   }
 }

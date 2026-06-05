@@ -136,5 +136,35 @@
   },
   "default": {
     "message": "Default"
+  },
+  "error_fileNotSelected": {
+    "message": "Please select a file first."
+  },
+  "error_fileExceed": {
+    "message": "Please upload a file smaller than 10MB."
+  },
+  "error_fileInvalid": {
+    "message": "Please upload a valid file."
+  },
+  "error_checkoutFail": {
+    "message": "Unable to open checkout. Please try again."
+  },
+  "success_themeExport": {
+    "message": "Theme exported successfully."
+  },
+  "success_themeImport": {
+    "message": "Theme imported successfully."
+  },
+  "success_themeSave": {
+    "message": "Theme saved successfully."
+  },
+  "success_themeDelete": {
+    "message": "Theme deleted successfully."
+  },
+  "pro_themePreset": {
+    "message": "Upgrade to Pro for unlimited theme presets."
+  },
+  "pro_animatedImage": {
+    "message": "Upgrade to Pro for animated backgrounds."
   }
 }
