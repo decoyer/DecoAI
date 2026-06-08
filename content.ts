@@ -11,12 +11,23 @@ import { app } from "./firebase"
 import { FabPanelApp } from "./panel"
 import {
   clampNumber,
-  isAnimatedDataUrl,
+  clearAnimatedBgUrl,
+  CUSTOM_THEMES_STORAGE_KEY,
+  detectCurrentSite,
+  FAB_HIDDEN_STORAGE_KEY,
+  FAB_OPEN_EVENT,
+  isAnimatedCustomTheme,
+  MODEL_ENABLED_STORAGE_KEY,
   sanitizeColor,
   sanitizeCustomBgOptions,
   sanitizeCustomBgUrl,
   sanitizePosition,
-  type CustomBgOptions
+  SELECTED_CUSTOM_THEME_ID_STORAGE_KEY,
+  THEME_LOADING_EVENT,
+  type CustomBgOptions,
+  type CustomTheme,
+  type ModelEnabledMap,
+  type SiteType
 } from "./theme-utils"
 
 export const config: PlasmoCSConfig = {
@@ -26,6 +37,7 @@ export const config: PlasmoCSConfig = {
     "https://claude.ai/*",
     "https://grok.com/*"
   ],
+  all_frames: false,
   run_at: "document_start"
 }
 
@@ -37,7 +49,6 @@ interface ThemeConfig {
   darkTextColor: string
 }
 
-type SiteType = "chatgpt" | "gemini" | "claude" | "grok"
 type ThemeName =
   | "random"
   | "nasa"
@@ -48,12 +59,6 @@ type ThemeName =
   | "terminal"
   | "custom"
   | "default"
-type ModelEnabledMap = {
-  chatgpt: boolean
-  gemini: boolean
-  claude: boolean
-  grok: boolean
-}
 
 const SITE_SELECTORS = {
   chatgpt: {
@@ -62,7 +67,7 @@ const SITE_SELECTORS = {
     footer:
       "#thread-bottom-container > div:is(.mt-auto, .-mt-4) > div > div > div > div",
     elements:
-      '[data-testid="use-case-prompt-chips"] button, .agent-turn, .user-message-bubble-color, .shadow-short-composer',
+      '[data-testid="use-case-prompt-chips"] button, .btn-secondary, .agent-turn, .user-message-bubble-color, .shadow-short-composer',
     darkClass: "html.dark"
   },
   gemini: {
@@ -93,6 +98,7 @@ const SITE_SELECTORS = {
 }
 
 const storage = new Storage()
+const localStorageInstance = new Storage({ area: "local" })
 let applyThemeQueued = false
 let applyThemeRunning = false
 let applyThemeRequestId = 0
@@ -143,20 +149,10 @@ const FAB_PANEL_CLASS = "kasutamu-fab-panel"
 const FAB_PANEL_MOUNT_ID = "kasutamu-fab-panel-mount"
 const TOAST_STYLE_ID = "kasutamu-toastify-style"
 const TOAST_ROOT_ID = "kasutamu-toast-root"
-const FAB_HIDDEN_STORAGE_KEY = "fab-hidden"
-const MODEL_ENABLED_STORAGE_KEY = "model-enabled-map"
-const FAB_MAIN_BTN_ICON = `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path fill="none" d="M0 0h24v24H0z"/><path fill="currentColor" d="M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z"/></svg>`
-const THEME_LOADING_EVENT = "kasutamu:theme-loading"
-const FAB_OPEN_EVENT = "kasutamu:fab-open"
-const CUSTOM_THEME_DATA_STORAGE_KEYS = [
-  "custom-bg-image",
-  "custom-bg-color",
-  "custom-text-color",
-  "custom-text-accent"
-]
+const FAB_MAIN_BTN_ICON = `<img src="${chrome.runtime.getURL("assets/wallpaper.svg")}" alt="theme select" draggable="false" style={{ height: 24 }} />`
 const CUSTOM_THEME_WATCH_STORAGE_KEYS = [
-  ...CUSTOM_THEME_DATA_STORAGE_KEYS,
-  "custom-bg-options"
+  CUSTOM_THEMES_STORAGE_KEY,
+  SELECTED_CUSTOM_THEME_ID_STORAGE_KEY
 ]
 const PREMIUM_CACHE_MS = 5 * 60 * 1000
 let premiumCache: { checkedAt: number; value: boolean } | null = null
@@ -180,8 +176,12 @@ const waitForAuthUser = () =>
     })
   })
 
-const isPremiumUser = async () => {
-  if (premiumCache && Date.now() - premiumCache.checkedAt < PREMIUM_CACHE_MS)
+const isPremiumUser = async ({ forceRefresh = false } = {}) => {
+  if (
+    !forceRefresh &&
+    premiumCache &&
+    Date.now() - premiumCache.checkedAt < PREMIUM_CACHE_MS
+  )
     return premiumCache.value
   try {
     const user = await waitForAuthUser()
@@ -197,16 +197,6 @@ const isPremiumUser = async () => {
     premiumCache = { checkedAt: Date.now(), value: false }
     return false
   }
-}
-
-const detectCurrentSite = (): SiteType | null => {
-  const { hostname } = window.location
-  if (hostname.includes("chatgpt.com")) return "chatgpt"
-  if (hostname.includes("gemini.google.com")) return "gemini"
-  if (hostname.includes("claude.ai")) return "claude"
-  if (hostname.includes("grok.com")) return "grok"
-
-  return null
 }
 
 const isThemeAllowedForCurrentUrl = (site: SiteType) => {
@@ -231,7 +221,7 @@ const getThemeStyle = () => {
   if (!style) {
     style = document.createElement("style")
     style.id = THEME_STYLE_ID
-      ; (document.head || document.documentElement).appendChild(style)
+    ;(document.head || document.documentElement).appendChild(style)
   }
   return style
 }
@@ -305,11 +295,10 @@ const getFABStyle = () => {
       .${FAB_PANEL_CLASS} {
         display: block;
         overflow: hidden;
-        background-color: rgba(24, 24, 24, 0.8);
-        border: 1px solid #66cdaa4D;
+        background-color: rgba(24, 24, 24, var(--kasutamu-surface-opacity, 0.8));
         border-radius: 14px;
-        backdrop-filter: blur(10px);
-        box-shadow: inset 0 2px 16px var(--kasutamu-accent);
+        backdrop-filter: blur(var(--kasutamu-glass-blur, 10px)) saturate(140%);
+        box-shadow: var(--kasutamu-accent-shadow, none);
         opacity: 0;
         pointer-events: none;
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -317,14 +306,14 @@ const getFABStyle = () => {
 
       .${FAB_ROOT_CLASS}.${FAB_OPEN_CLASS} .${FAB_PANEL_CLASS} {
         pointer-events: auto;
-        opacity: 0.7;
+        opacity: 0.8;
       }
 
       .${FAB_ROOT_CLASS}.${FAB_OPEN_CLASS} .${FAB_PANEL_CLASS}:hover {
         opacity: 1;
       }
     `
-      ; (document.head || document.documentElement).appendChild(style)
+    ;(document.head || document.documentElement).appendChild(style)
   }
   return style
 }
@@ -355,7 +344,7 @@ const mountToastContainer = () => {
       closeOnClick: true,
       pauseOnFocusLoss: false,
       newestOnTop: true,
-      limit: 3,
+      limit: 3
     })
   )
   toastMounted = true
@@ -384,18 +373,88 @@ const getPaletteData = async (bgUrl: string): Promise<ThemeConfig> => {
   }
 }
 
+const normalizeCustomThemesForFreeUser = async (
+  customThemes: CustomTheme[],
+  selectedCustomThemeId: string
+) => {
+  const retainedSource =
+    customThemes.find((theme) => theme.id === selectedCustomThemeId) ||
+    customThemes[0] ||
+    null
+  if (!retainedSource) return null
+
+  const retainedTheme = clearAnimatedBgUrl(retainedSource)
+  let changed = false
+  if (customThemes.length !== 1 || customThemes[0]?.id !== retainedTheme.id) {
+    changed = true
+  }
+  if (retainedTheme !== retainedSource) changed = true
+
+  if (changed) {
+    await localStorageInstance.set(CUSTOM_THEMES_STORAGE_KEY, [retainedTheme])
+  }
+  if (selectedCustomThemeId !== retainedTheme.id) {
+    await localStorageInstance.set(
+      SELECTED_CUSTOM_THEME_ID_STORAGE_KEY,
+      retainedTheme.id
+    )
+  }
+
+  return retainedTheme
+}
+
+const getSelectedCustomTheme = async (): Promise<{
+  isPremium: boolean
+  theme: CustomTheme | null
+}> => {
+  const customData = await localStorageInstance.getMany([
+    CUSTOM_THEMES_STORAGE_KEY,
+    SELECTED_CUSTOM_THEME_ID_STORAGE_KEY
+  ])
+  const customThemes = customData[CUSTOM_THEMES_STORAGE_KEY] as
+    | CustomTheme[]
+    | undefined
+  const selectedCustomThemeId = customData[
+    SELECTED_CUSTOM_THEME_ID_STORAGE_KEY
+  ] as string | undefined
+
+  if (!Array.isArray(customThemes) || !selectedCustomThemeId) {
+    return { isPremium: false, theme: null }
+  }
+
+  let selectedTheme =
+    customThemes.find((item) => item.id === selectedCustomThemeId) || null
+  const hasAnimatedTheme = customThemes.some(isAnimatedCustomTheme)
+  const needsPremium = customThemes.length > 1 || hasAnimatedTheme
+  const isPremium = needsPremium
+    ? await isPremiumUser({ forceRefresh: true })
+    : false
+
+  if (!isPremium && needsPremium) {
+    return {
+      isPremium,
+      theme: await normalizeCustomThemesForFreeUser(
+        customThemes,
+        selectedCustomThemeId
+      )
+    }
+  }
+
+  return { isPremium, theme: selectedTheme }
+}
+
 const getCustomThemeData = async (): Promise<ThemeConfig> => {
-  const customData = await chrome.storage.local.get(
-    CUSTOM_THEME_DATA_STORAGE_KEYS
-  )
-  const bgUrl = sanitizeCustomBgUrl(customData["custom-bg-image"])
+  const { theme: customTheme } = await getSelectedCustomTheme()
+  if (!customTheme) return EMPTY_THEME
+
+  const bgUrl = sanitizeCustomBgUrl(customTheme.bgUrl)
 
   return {
-    bgUrl: !await isPremiumUser() && isAnimatedDataUrl(bgUrl) ? "" : bgUrl,
-    bgColor: sanitizeColor(customData["custom-bg-color"]),
-    accentColor: sanitizeColor(customData["custom-text-accent"]),
-    lightTextColor: sanitizeColor(customData["custom-text-color"]),
-    darkTextColor: sanitizeColor(customData["custom-text-color"])
+    bgUrl,
+    bgColor: sanitizeColor(customTheme.bgColor),
+    accentColor: sanitizeColor(customTheme.accent),
+    lightTextColor: sanitizeColor(customTheme.text),
+    darkTextColor: sanitizeColor(customTheme.text)
   }
 }
 
@@ -443,7 +502,19 @@ const closeFabDock = () => {
 const setFabAccentColor = (accentColor?: string) => {
   const root = document.getElementById(FAB_ROOT_ID)
   if (!root) return
-  root.style.setProperty("--kasutamu-accent", (accentColor || "#66cdaa") + "4D")
+  root.style.setProperty(
+    "--kasutamu-accent-shadow",
+    accentColor ? `inset 0 2px 16px ${accentColor}4D` : "none"
+  )
+}
+
+const setFabSurfaceOptions = (customBgOptions?: CustomBgOptions) => {
+  const root = document.getElementById(FAB_ROOT_ID)
+  if (!root) return
+  const glassBlur = clampNumber(customBgOptions?.glassBlur, 0, 50, 10)
+  const opacity = clampNumber(customBgOptions?.opacity, 0, 1, 0.8)
+  root.style.setProperty("--kasutamu-glass-blur", `${glassBlur}px`)
+  root.style.setProperty("--kasutamu-surface-opacity", `${opacity}`)
 }
 
 const setFabVisibility = async () => {
@@ -507,7 +578,7 @@ const mountFab = async () => {
 
   root.appendChild(panel)
   root.appendChild(action)
-    ; (document.body || document.documentElement).appendChild(root)
+  ;(document.body || document.documentElement).appendChild(root)
   document.addEventListener("click", onOutsideFabClick, { capture: true })
   const shadowRoot = panelHost.attachShadow({ mode: "open" })
   const shadowMount = document.createElement("div")
@@ -538,14 +609,8 @@ const mapSelectors = (
     .join(", ")
 
 const getCustomBgOptions = async (): Promise<CustomBgOptions> => {
-  const optionsResult = await chrome.storage.local.get("custom-bg-options")
-  const options = optionsResult["custom-bg-options"] as
-    | Partial<CustomBgOptions>
-    | undefined
-  const safeOptions = sanitizeCustomBgOptions(options)
-  return options
-    ? safeOptions
-    : { ...safeOptions, hideHeader: true, hideFooter: true }
+  const { theme: customTheme } = await getSelectedCustomTheme()
+  return sanitizeCustomBgOptions(customTheme?.bgOptions)
 }
 
 const generateCSS = (
@@ -607,7 +672,8 @@ const generateCSS = (
   const getElStyle = () => `
     ${elements} {
       background-color: rgba(255, 255, 255, ${opacity}) !important;
-      box-shadow: inset 0 2px 16px ${safeAccentColor || "#66cdaa"}4D !important;
+      ${safeAccentColor ? `box-shadow: inset 0 2px 16px ${safeAccentColor}4D !important;` : ""}
+      border: none !important;
       backdrop-filter: blur(${glassBlur}px) saturate(140%) !important;
       opacity: 0.8 !important;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
@@ -618,8 +684,9 @@ const generateCSS = (
     ${hoverSelectors} {
       opacity: 1 !important;
     }
-    ${site === "chatgpt"
-      ? `
+    ${
+      site === "chatgpt"
+        ? `
       .agent-turn {
         margin-top: 5px !important;
         margin-bottom: 5px !important;
@@ -627,10 +694,11 @@ const generateCSS = (
         border-radius: 22px !important;
       }
     `
-      : ""
+        : ""
     }
-    ${site === "gemini"
-      ? `
+    ${
+      site === "gemini"
+        ? `
       .show-lm-background::before {
         background: none !important;
       }
@@ -639,25 +707,27 @@ const generateCSS = (
         border-radius: 40px !important;
       }
     `
-      : ""
+        : ""
     }
-    ${site === "claude"
-      ? `
+    ${
+      site === "claude"
+        ? `
       .font-claude-response {
         padding: 10px 16px !important;
         border-radius: 12px !important;
       }
     `
-      : ""
+        : ""
     }
-    ${site === "grok"
-      ? `
+    ${
+      site === "grok"
+        ? `
       [data-testid="assistant-message"] {
         padding: 8px 16px !important;
         border-radius: 24px !important;
       }
     `
-      : ""
+        : ""
     }
     ${safeAccentColor ? `::-webkit-scrollbar { width: auto !important; }::-webkit-scrollbar-thumb { background-color: ${safeAccentColor}4D !important; border-radius: 22px !important; }` : ""}
   `
@@ -688,6 +758,8 @@ const applyTheme = async (requestId: number) => {
   const style = getThemeStyle()
   if (!isThemeAllowedForCurrentUrl(currentSite)) {
     style.textContent = ""
+    setFabAccentColor("")
+    setFabSurfaceOptions()
     return
   }
 
@@ -701,6 +773,7 @@ const applyTheme = async (requestId: number) => {
     if (requestId !== applyThemeRequestId) return
     style.textContent = ""
     setFabAccentColor("")
+    setFabSurfaceOptions()
     return
   }
 
@@ -714,6 +787,7 @@ const applyTheme = async (requestId: number) => {
   if (requestId !== applyThemeRequestId) return
   style.textContent = generateCSS(currentSite, themeData, customBgOptions)
   setFabAccentColor(themeData.accentColor)
+  setFabSurfaceOptions(customBgOptions)
 }
 
 const flushApplyTheme = async () => {

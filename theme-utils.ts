@@ -21,26 +21,27 @@ export type CustomTheme = {
   bgOptions: CustomBgOptions
 }
 
+export type SiteType = "chatgpt" | "gemini" | "claude" | "grok"
+
+export type ModelEnabledMap = Record<SiteType, boolean>
+
 type ThemeImportData = {
   app?: string
   version?: number
   customThemes?: Partial<CustomTheme>[]
-  themes?: Partial<CustomTheme>[]
 }
 
+export const CUSTOM_THEMES_STORAGE_KEY = "custom-themes"
+export const SELECTED_CUSTOM_THEME_ID_STORAGE_KEY = "selected-custom-theme-id"
+export const FAB_HIDDEN_STORAGE_KEY = "fab-hidden"
+export const MODEL_ENABLED_STORAGE_KEY = "model-enabled-map"
+export const THEME_LOADING_EVENT = "kasutamu:theme-loading"
+export const FAB_OPEN_EVENT = "kasutamu:fab-open"
 export const THEME_FILE_APP_ID = "kasutamu"
 export const THEME_FILE_VERSION = 1
 export const IMAGE_HEADER_BYTES = 64 * 1024
 export const DATA_URL_SAMPLE_CHARS = 96 * 1024
 export const MAX_FILE_BYTES = 10 * 1024 * 1024
-
-export const CUSTOM_THEME_LEGACY_STORAGE_KEYS = [
-  "custom-bg-image",
-  "custom-bg-color",
-  "custom-text-color",
-  "custom-text-accent",
-  "custom-bg-options"
-]
 
 export const DEFAULT_CUSTOM_BG_OPTIONS: CustomBgOptions = {
   scaleX: 1,
@@ -48,11 +49,18 @@ export const DEFAULT_CUSTOM_BG_OPTIONS: CustomBgOptions = {
   grayscale: 0,
   blur: 0,
   brightness: 1,
-  position: "center center",
+  position: "50% 50%",
   glassBlur: 10,
   opacity: 0.8,
   hideHeader: false,
   hideFooter: false
+}
+
+export const DEFAULT_MODEL_ENABLED: ModelEnabledMap = {
+  chatgpt: true,
+  gemini: true,
+  claude: true,
+  grok: true
 }
 
 export const ALLOWED_IMAGE_SOURCE_URLS = new Set([
@@ -63,6 +71,16 @@ export const ALLOWED_IMAGE_SOURCE_URLS = new Set([
   "https://wallpaperaccess.com/full/1461802.jpg",
   "https://i.imgur.com/H1rtAbm.png"
 ])
+
+export const detectCurrentSite = (): SiteType | null => {
+  const { hostname } = window.location
+  if (hostname.includes("chatgpt.com")) return "chatgpt"
+  if (hostname.includes("gemini.google.com")) return "gemini"
+  if (hostname.includes("claude.ai")) return "claude"
+  if (hostname.includes("grok.com")) return "grok"
+
+  return null
+}
 
 export const clampNumber = (
   value: unknown,
@@ -87,10 +105,38 @@ export const sanitizeCustomBgUrl = (value: unknown) => {
     : ""
 }
 
-export const sanitizePosition = (value: unknown) =>
-  ["center top", "center center", "center bottom"].includes(String(value))
-    ? String(value)
-    : DEFAULT_CUSTOM_BG_OPTIONS.position
+export const sanitizePosition = (value: unknown) => {
+  const position = String(value)
+  const percentMatch = position.match(
+    /^(-?\d+(?:\.\d+)?)%\s+(-?\d+(?:\.\d+)?)%$/
+  )
+  if (percentMatch) {
+    return `${clampNumber(percentMatch[1], 0, 100, 50)}% ${clampNumber(
+      percentMatch[2],
+      0,
+      100,
+      50
+    )}%`
+  }
+
+  return DEFAULT_CUSTOM_BG_OPTIONS.position
+}
+
+export const getPositionXPercent = (value: unknown) => {
+  const safePosition = sanitizePosition(value)
+  const percentMatch = safePosition.match(
+    /^(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%$/
+  )
+  return percentMatch ? clampNumber(percentMatch[1], 0, 100, 50) : 50
+}
+
+export const getPositionYPercent = (value: unknown) => {
+  const safePosition = sanitizePosition(value)
+  const percentMatch = safePosition.match(
+    /^(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%$/
+  )
+  return percentMatch ? clampNumber(percentMatch[2], 0, 100, 50) : 50
+}
 
 export const sanitizeCustomBgOptions = (
   options?: Partial<CustomBgOptions>
@@ -160,9 +206,7 @@ export const parseImportedThemes = (
     return []
   }
 
-  const themes = Array.isArray(data.customThemes)
-    ? data.customThemes
-    : data.themes || []
+  const themes = Array.isArray(data.customThemes) ? data.customThemes : []
 
   return themes.map((theme, index) =>
     normalizeCustomTheme(theme, index, getFallbackName(index))
@@ -236,11 +280,19 @@ export const isAnimatedDataUrl = (dataUrl: string) => {
   return isAnimatedBytes(bytes)
 }
 
+export const isAnimatedBgUrl = (value: string) => {
+  try {
+    return Boolean(value && isAnimatedDataUrl(value))
+  } catch {
+    return false
+  }
+}
+
 export const hasAnimatedBackground = (themes: CustomTheme[]) =>
-  themes.some((theme) => {
-    try {
-      return isAnimatedDataUrl(theme.bgUrl)
-    } catch {
-      return false
-    }
-  })
+  themes.some((theme) => isAnimatedBgUrl(theme.bgUrl))
+
+export const isAnimatedCustomTheme = (theme: CustomTheme) =>
+  isAnimatedBgUrl(theme.bgUrl)
+
+export const clearAnimatedBgUrl = (theme: CustomTheme) =>
+  isAnimatedCustomTheme(theme) ? { ...theme, bgUrl: "" } : theme

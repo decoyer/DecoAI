@@ -5,27 +5,39 @@ import {
   signInWithCredential,
   type User
 } from "firebase/auth"
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import { Vibrant } from "node-vibrant/browser"
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode
+} from "react"
+import { toast } from "react-toastify"
 
 import { Storage } from "@plasmohq/storage"
 import { useStorage } from "@plasmohq/storage/hook"
 
-import { toast } from "react-toastify"
 import { app } from "./firebase"
 import {
+  clearAnimatedBgUrl,
   createCustomTheme,
   createThemeExportBlob,
-  CUSTOM_THEME_LEGACY_STORAGE_KEYS,
   DEFAULT_CUSTOM_BG_OPTIONS,
+  detectCurrentSite,
+  FAB_OPEN_EVENT,
+  getPositionXPercent,
+  getPositionYPercent,
   hasAnimatedBackground,
+  isAnimatedBgUrl,
   isAnimatedImage,
   MAX_FILE_BYTES,
   parseImportedThemes,
-  sanitizeColor,
-  sanitizeCustomBgOptions,
   sanitizeCustomBgUrl,
+  THEME_LOADING_EVENT,
   type CustomBgOptions,
-  type CustomTheme
+  type CustomTheme,
+  type SiteType
 } from "./theme-utils"
 
 const t = (key: string) => chrome.i18n.getMessage(key)
@@ -45,9 +57,13 @@ const THEME_LIST = [
 type ViewType = "themes" | "custom"
 type ThemeTabType = "preset" | "custom"
 type CustomEditTabType = "general" | "background" | "layout"
+const SITE_DARK_SELECTORS: Record<SiteType, string> = {
+  chatgpt: "html.dark",
+  gemini: "body.dark-theme",
+  claude: 'html[data-mode="dark"]',
+  grok: "html.dark"
+}
 
-const THEME_LOADING_EVENT = "kasutamu:theme-loading"
-const FAB_OPEN_EVENT = "kasutamu:fab-open"
 const DEBOUNCE_MS = 100
 
 const wrapperStyle = { position: "relative", width: 250, height: 500 } as const
@@ -120,7 +136,7 @@ const controlButtonStyle = {
   paddingBottom: 4,
   backgroundColor: "#4b5563",
   color: "#fff",
-  border: "1px solid transparent",
+  border: "none",
   borderRadius: 12,
   whiteSpace: "nowrap",
   cursor: "pointer"
@@ -134,6 +150,19 @@ const proButtonStyle = {
   background:
     "linear-gradient(90deg, #F472B6, #C084FC, #60A5FA, #C084FC, #F472B6)",
   backgroundSize: "500% 100%"
+} as const
+const iconLabelStyle = {
+  display: "flex",
+  gap: 4,
+  alignItems: "center"
+} as const
+const footerButtonStyle = {
+  ...controlButtonStyle,
+  display: "flex",
+  justifyContent: "center",
+  flex: 1,
+  border: "none",
+  padding: 8
 } as const
 
 const downloadCustomTheme = (themeData: CustomTheme) => {
@@ -156,6 +185,18 @@ const disabledControlStyle = (enabled: boolean) =>
 const clearFileInput = (input: HTMLInputElement | null) => {
   if (input) input.value = ""
 }
+
+const isCurrentPageDarkMode = () => {
+  const currentSite = detectCurrentSite()
+  return currentSite
+    ? document.querySelector(SITE_DARK_SELECTORS[currentSite]) !== null
+    : false
+}
+
+const wait = (ms: number) =>
+  new Promise<void>((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
 
 export function FabPanelApp() {
   const [theme, setTheme] = useStorage("selected-theme", "default")
@@ -214,23 +255,6 @@ export function FabPanelApp() {
   }, [])
 
   useEffect(() => {
-    if (!isPremiumLoaded || isPremiumUser || customThemes.length <= 1) return
-
-    const retainedTheme = selectedCustomTheme || customThemes[0]
-    setCustomThemes([retainedTheme])
-    setSelectedCustomThemeId(retainedTheme.id)
-    if (theme === "custom") void syncThemeToLegacyStorage(retainedTheme)
-  }, [
-    customThemes,
-    isPremiumLoaded,
-    isPremiumUser,
-    selectedCustomTheme,
-    setCustomThemes,
-    setSelectedCustomThemeId,
-    theme
-  ])
-
-  useEffect(() => {
     const onThemeLoading = (event: Event) => {
       const customEvent = event as CustomEvent<{ loading?: boolean }>
       setIsThemeLoading(customEvent.detail?.loading === true)
@@ -241,6 +265,7 @@ export function FabPanelApp() {
 
   useEffect(() => {
     const onFabOpen = () => {
+      void syncPremiumStatus()
       setEditingCustomThemeId("")
       setThemeTab(theme === "custom" ? "custom" : "preset")
       setView("themes")
@@ -269,29 +294,47 @@ export function FabPanelApp() {
     value: string | number | boolean
   ) => setLocalCustomBgOptions((prev) => ({ ...prev, [key]: value }))
 
-  const syncThemeToLegacyStorage = async (themeData: CustomTheme) => {
-    const nextText = sanitizeColor(themeData.text)
-    const nextAccent = sanitizeColor(themeData.accent)
-    const nextBgOptions = sanitizeCustomBgOptions(themeData.bgOptions)
-    const nextBgUrl = sanitizeCustomBgUrl(themeData.bgUrl)
-    const nextBgColor = sanitizeColor(themeData.bgColor)
+  const normalizeCustomThemesForFreeUser = () => {
+    if (!customThemes.length) return
 
-    setCustomBg(nextBgUrl)
-    setLocalCustomBgColor(nextBgColor)
+    const retainedSource = selectedCustomTheme || customThemes[0]
+    const retainedTheme = clearAnimatedBgUrl(retainedSource)
+    const nextThemes = [retainedTheme]
+    const changed =
+      customThemes.length !== 1 || retainedTheme !== retainedSource
 
-    await chrome.storage.local.set({
-      "custom-bg-image": nextBgUrl,
-      "custom-bg-color": nextBgColor,
-      "custom-text-color": nextText,
-      "custom-text-accent": nextAccent,
-      "custom-bg-options": nextBgOptions
-    })
+    if (changed) setCustomThemes(nextThemes)
+    if (selectedCustomThemeId !== retainedTheme.id)
+      setSelectedCustomThemeId(retainedTheme.id)
+    if (
+      editingCustomThemeId &&
+      !nextThemes.some((item) => item.id === editingCustomThemeId)
+    ) {
+      setEditingCustomThemeId("")
+      setView("themes")
+    }
+    if (customBg) {
+      if (isAnimatedBgUrl(customBg)) setCustomBg("")
+    }
   }
+
+  useEffect(() => {
+    if (!isPremiumLoaded || isPremiumUser || !customThemes.length) return
+    normalizeCustomThemesForFreeUser()
+  }, [
+    customBg,
+    customThemes,
+    editingCustomThemeId,
+    isPremiumLoaded,
+    isPremiumUser,
+    selectedCustomTheme,
+    selectedCustomThemeId
+  ])
 
   const upsertEditingTheme = () => {
     if (!editingCustomThemeId) return
     setCustomThemes((prev) => {
-      const nextThemes = prev.map((item) =>
+      return prev.map((item) =>
         item.id === editingCustomThemeId
           ? {
             ...item,
@@ -304,12 +347,6 @@ export function FabPanelApp() {
           }
           : item
       )
-      const updated = nextThemes.find(
-        (item) => item.id === editingCustomThemeId
-      )
-      if (updated && theme === "custom" && selectedCustomThemeId === updated.id)
-        void syncThemeToLegacyStorage(updated)
-      return nextThemes
     })
   }
 
@@ -389,6 +426,23 @@ export function FabPanelApp() {
     }
   }
 
+  const refreshPremiumStatus = async () => {
+    try {
+      const user = await getSignedInUser()
+      const tokenResult = await user.getIdTokenResult(true)
+      const premium = tokenResult.claims.premium === true
+      setIsPremiumUser(premium)
+      if (!premium) normalizeCustomThemesForFreeUser()
+      return premium
+    } catch {
+      setIsPremiumUser(false)
+      normalizeCustomThemesForFreeUser()
+      return false
+    } finally {
+      setIsPremiumLoaded(true)
+    }
+  }
+
   const onProClick = async () => {
     try {
       const user = await getSignedInUser()
@@ -400,14 +454,14 @@ export function FabPanelApp() {
   }
 
   const onExportClick = () => {
-    if (theme !== 'custom') return
+    if (theme !== "custom" || !selectedCustomTheme) return
 
     downloadCustomTheme(selectedCustomTheme)
     toast.success(t("success_themeExport"))
   }
 
-  const onImportClick = () => {
-    if (!isPremiumUser && customThemes.length > 0) {
+  const onImportClick = async () => {
+    if (customThemes.length > 0 && !(await refreshPremiumStatus())) {
       toast.error(t("pro_themePreset"))
       return
     }
@@ -436,19 +490,19 @@ export function FabPanelApp() {
       clearFileInput(importFileRef.current)
       return
     }
-    if (!isPremiumUser && hasAnimatedBackground(imported)) {
+    const premium = await refreshPremiumStatus()
+    if (!premium && hasAnimatedBackground(imported)) {
       toast.error(t("pro_animatedImage"))
       clearFileInput(importFileRef.current)
       return
     }
 
-    if (isPremiumUser) {
+    if (premium) {
       setCustomThemes((prev) => [...prev, ...imported])
     } else {
       setCustomThemes([imported[0]])
       setSelectedCustomThemeId(imported[0].id)
       setTheme("custom")
-      await syncThemeToLegacyStorage(imported[0])
     }
 
     toast.success(t("success_themeImport"))
@@ -468,7 +522,7 @@ export function FabPanelApp() {
       return
     }
     const animated = await isAnimatedImage(file)
-    if (animated && !isPremiumUser) {
+    if (animated && !(await refreshPremiumStatus())) {
       toast.error(t("pro_animatedImage"))
       clearFileInput(bgUploadRef.current)
       return
@@ -484,8 +538,6 @@ export function FabPanelApp() {
         return
       }
       setCustomBg(result)
-      if (theme === "custom" && editingCustomThemeId === selectedCustomThemeId)
-        chrome.storage.local.set({ "custom-bg-image": result })
       clearFileInput(bgUploadRef.current)
     }
     reader.readAsDataURL(file)
@@ -512,8 +564,30 @@ export function FabPanelApp() {
   const resetCustomBgColor = () => {
     setLocalCustomBgColor("")
   }
+  const onAutoFitColorsClick = async () => {
+    if (!(await refreshPremiumStatus())) {
+      toast.error(t("pro_autoFitColors"))
+      return
+    }
 
-  const onCustomCardClick = async (customThemeItem: CustomTheme) => {
+    setIsThemeLoading(true)
+    await wait(2000)
+
+    const palette = await Vibrant.from(customBg).getPalette()
+    const isDarkMode = isCurrentPageDarkMode()
+    const nextAccent = palette.Vibrant?.hex || ""
+    const nextText = isDarkMode
+      ? palette.LightVibrant?.hex || ""
+      : palette.DarkVibrant?.hex || ""
+
+    if (nextAccent) setLocalAccent(nextAccent)
+    if (nextText) setLocalText(nextText)
+
+    setIsThemeLoading(false)
+    toast.success(t("success_autoFitColors"))
+  }
+
+  const onCustomCardClick = (customThemeItem: CustomTheme) => {
     const isSelected =
       theme === "custom" && selectedCustomThemeId === customThemeItem.id
     if (isSelected) {
@@ -524,7 +598,6 @@ export function FabPanelApp() {
     setEditingCustomThemeId("")
     setSelectedCustomThemeId(customThemeItem.id)
     setTheme("custom")
-    await syncThemeToLegacyStorage(customThemeItem)
     setView("themes")
   }
 
@@ -576,7 +649,7 @@ export function FabPanelApp() {
   }
 
   const onCustomPlusClick = async () => {
-    if (customThemes.length > 0 && !isPremiumUser) {
+    if (customThemes.length > 0 && !(await refreshPremiumStatus())) {
       toast.error(t("pro_themePreset"))
       return
     }
@@ -590,14 +663,11 @@ export function FabPanelApp() {
     if (!customThemeId) return
     const deletingSelected =
       selectedCustomThemeId === customThemeId && theme === "custom"
-    const nextThemes = customThemes.filter(
-      (item) => item.id !== customThemeId
-    )
+    const nextThemes = customThemes.filter((item) => item.id !== customThemeId)
     setCustomThemes(nextThemes)
     if (deletingSelected) {
       setSelectedCustomThemeId("")
       setTheme("default")
-      chrome.storage.local.remove(CUSTOM_THEME_LEGACY_STORAGE_KEYS)
     }
     if (editingCustomThemeId === customThemeId) setEditingCustomThemeId("")
     setView("themes")
@@ -624,7 +694,7 @@ export function FabPanelApp() {
     event.preventDefault()
     event.stopPropagation()
 
-    if (customThemes.length > 0 && !isPremiumUser) {
+    if (customThemes.length > 0 && !(await refreshPremiumStatus())) {
       toast.error(t("pro_themePreset"))
       return
     }
@@ -646,7 +716,6 @@ export function FabPanelApp() {
     setEditingCustomThemeId("")
     setSelectedCustomThemeId(copiedTheme.id)
     setTheme("custom")
-    await syncThemeToLegacyStorage(copiedTheme)
     setView("themes")
 
     toast.success(t("success_themeDuplicate"))
@@ -883,7 +952,9 @@ export function FabPanelApp() {
                                 draggable
                                 className={`custom-theme-card${draggingCustomThemeId === item.id ? " is-dragging" : ""}`}
                                 onClick={() => onCustomCardClick(item)}
-                                onDragStart={(e) => onCustomCardDragStart(e, item)}
+                                onDragStart={(e) =>
+                                  onCustomCardDragStart(e, item)
+                                }
                                 onDragEnd={onCustomCardDragEnd}
                                 style={{
                                   boxShadow:
@@ -912,16 +983,28 @@ export function FabPanelApp() {
                                 className="custom-theme-card__action custom-theme-card__duplicate"
                                 aria-label="Duplicate"
                                 draggable={false}
-                                onClick={(e) => onCustomCardDuplicateClick(e, item)}>
-                                <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path d="M0 0h24v24H0z" fill="none"/><path d="M13 7h-2v4H7v2h4v4h2v-4h4v-2h-4V7zm-1-5C6.49 2 2 6.49 2 12s4.49 10 10 10 10-4.49 10-10S17.51 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="#fff"/></svg>
+                                onClick={(e) =>
+                                  onCustomCardDuplicateClick(e, item)
+                                }>
+                                <img
+                                  src={chrome.runtime.getURL("assets/add.svg")}
+                                  alt="duplicate icon"
+                                  draggable="false"></img>
                               </button>
                               <button
                                 type="button"
                                 className="custom-theme-card__action custom-theme-card__delete"
                                 aria-label={t("delete")}
                                 draggable={false}
-                                onClick={(e) => onCustomCardDeleteClick(e, item)}>
-                                <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path d="M0 0h24v24H0z" fill="none"/><path d="M14.59 8L12 10.59 9.41 8 8 9.41 10.59 12 8 14.59 9.41 16 12 13.41 14.59 16 16 14.59 13.41 12 16 9.41 14.59 8zM12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="#fff"/></svg>
+                                onClick={(e) =>
+                                  onCustomCardDeleteClick(e, item)
+                                }>
+                                <img
+                                  src={chrome.runtime.getURL(
+                                    "assets/cancel.svg"
+                                  )}
+                                  alt="cancel icon"
+                                  draggable="false"></img>
                               </button>
                             </div>
                           ))}
@@ -1012,7 +1095,9 @@ export function FabPanelApp() {
                     <>
                       <div style={cardStyle}>
                         <label style={rowStyle}>
-                          <span>{t("name")}</span>
+                          <span style={{ padding: "4px 0px" }}>
+                            {t("name")}
+                          </span>
                           <input
                             type="text"
                             value={localCustomThemeName}
@@ -1063,7 +1148,9 @@ export function FabPanelApp() {
                       />
                       <div style={cardStyle}>
                         <label style={rowStyle}>
-                          <span>{t("backgroundImage")}</span>
+                          <span style={{ padding: "4px 0px" }}>
+                            {t("backgroundImage")}
+                          </span>
                           <div style={{ display: "flex", gap: 4 }}>
                             <input
                               ref={bgUploadRef}
@@ -1096,33 +1183,63 @@ export function FabPanelApp() {
                       {customBg && (
                         <>
                           <div style={cardStyle}>
-                            <label style={rowStyle}>
-                              <span>{t("imagePosition")}</span>
-                              <select
-                                value={localCustomBgOptions.position}
-                                onChange={(e) =>
+                            <div
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: 8
+                              }}>
+                              <RangeControl
+                                label={t("imagePositionX")}
+                                min={0}
+                                max={100}
+                                step={1}
+                                value={getPositionXPercent(
+                                  localCustomBgOptions.position
+                                )}
+                                onChange={(v) =>
                                   updateCustomBgOption(
                                     "position",
-                                    e.target.value
+                                    `${Number(v)}% ${getPositionYPercent(
+                                      localCustomBgOptions.position
+                                    )}%`
                                   )
                                 }
-                                style={{
-                                  border: "none",
-                                  borderRadius: 12,
-                                  padding: "6px 2px",
-                                  backgroundColor: "#4b5563",
-                                  color: "#fff",
-                                  cursor: "pointer"
-                                }}>
-                                <option value="center top">{t("Top")}</option>
-                                <option value="center center">
-                                  {t("Center")}
-                                </option>
-                                <option value="center bottom">
-                                  {t("Bottom")}
-                                </option>
-                              </select>
-                            </label>
+                                onReset={() =>
+                                  updateCustomBgOption(
+                                    "position",
+                                    `50% ${getPositionYPercent(
+                                      localCustomBgOptions.position
+                                    )}%`
+                                  )
+                                }
+                              />
+                              <RangeControl
+                                label={t("imagePositionY")}
+                                min={0}
+                                max={100}
+                                step={1}
+                                value={getPositionYPercent(
+                                  localCustomBgOptions.position
+                                )}
+                                onChange={(v) =>
+                                  updateCustomBgOption(
+                                    "position",
+                                    `${getPositionXPercent(
+                                      localCustomBgOptions.position
+                                    )}% ${Number(v)}%`
+                                  )
+                                }
+                                onReset={() =>
+                                  updateCustomBgOption(
+                                    "position",
+                                    `${getPositionXPercent(
+                                      localCustomBgOptions.position
+                                    )}% 50%`
+                                  )
+                                }
+                              />
+                            </div>
                           </div>
                           <div style={cardStyle}>
                             <CheckboxControl
@@ -1185,6 +1302,35 @@ export function FabPanelApp() {
                   )}
                   {customEditTab === "layout" && (
                     <>
+                      {customBg && (
+                        <>
+                          <div style={cardStyle}>
+                            <label style={rowStyle}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: 8,
+                                  alignItems: "center"
+                                }}>
+                                <img
+                                  src={chrome.runtime.getURL("assets/icon.png")}
+                                  alt="app icon"
+                                  draggable="false"
+                                  style={{ height: 16 }}></img>
+                                <span style={{ padding: "4px 0px" }}>
+                                  {t("autoFitColors")}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={onAutoFitColorsClick}
+                                style={controlButtonStyle}>
+                                {t("apply")}
+                              </button>
+                            </label>
+                          </div>
+                        </>
+                      )}
                       <ColorSettingCard
                         label={t("text")}
                         value={localText}
@@ -1241,30 +1387,24 @@ export function FabPanelApp() {
             }}>
             {themeTab === "custom" && view !== "custom" && (
               <div style={{ ...rowStyle, gap: 8 }}>
-                <button
-                  type="button"
+                <FooterButton
                   onClick={onExportClick}
-                  disabled={theme !== 'custom'}
+                  disabled={theme !== "custom"}
                   style={{
-                    ...controlButtonStyle,
-                    flex: 1,
-                    border: "none",
-                    padding: 8,
-                    ...disabledControlStyle(theme === 'custom')
-                  }}>
-                  {t("exportTheme")}
-                </button>
-                <button
-                  type="button"
+                    ...footerButtonStyle,
+                    ...disabledControlStyle(theme === "custom")
+                  }}
+                  icon="assets/upload.svg"
+                  iconAlt="export icon"
+                  label={t("exportTheme")}
+                />
+                <FooterButton
                   onClick={onImportClick}
-                  style={{
-                    ...controlButtonStyle,
-                    flex: 1,
-                    border: "none",
-                    padding: 8
-                  }}>
-                  {t("importTheme")}
-                </button>
+                  style={footerButtonStyle}
+                  icon="assets/download.svg"
+                  iconAlt="import icon"
+                  label={t("importTheme")}
+                />
                 <input
                   ref={importFileRef}
                   type="file"
@@ -1276,42 +1416,42 @@ export function FabPanelApp() {
             )}
             {view === "custom" && (
               <div style={{ ...rowStyle, gap: 8 }}>
-                <button
-                  type="button"
+                <FooterButton
                   onClick={onDeleteCustomTheme}
                   style={{
-                    ...controlButtonStyle,
-                    flex: 1,
-                    border: "none",
-                    padding: 8,
-                    backgroundColor: "#d32f2f",
-                    color: "#fff"
-                  }}>
-                  {t("delete")}
-                </button>
-                <button
-                  type="button"
+                    ...footerButtonStyle,
+                    backgroundColor: "#d32f2f"
+                  }}
+                  icon="assets/delete.svg"
+                  iconAlt="delete icon"
+                  label={t("delete")}
+                />
+                <FooterButton
                   onClick={onSaveClick}
                   style={{
-                    ...controlButtonStyle,
-                    flex: 1,
-                    border: "none",
-                    padding: 8,
-                    backgroundColor: "#1976d2",
-                    color: "#fff"
-                  }}>
-                  {t("save")}
-                </button>
+                    ...footerButtonStyle,
+                    backgroundColor: "#1976d2"
+                  }}
+                  icon="assets/save.svg"
+                  iconAlt="save icon"
+                  label={t("save")}
+                />
               </div>
             )}
             {view !== "custom" && isPremiumLoaded && !isPremiumUser && (
-              <button
-                type="button"
+              <FooterButton
                 className="pro-button"
                 onClick={onProClick}
-                style={{ ...proButtonStyle }}>
-                <span>💎 {t("upgradePro")}</span>
-              </button>
+                style={{
+                  ...proButtonStyle,
+                  display: "flex",
+                  justifyContent: "center"
+                }}
+                icon="assets/gem_stone.gif"
+                iconAlt="pro icon"
+                iconGap={8}
+                label={t("upgradePro")}
+              />
             )}
           </div>
         </div>
@@ -1323,10 +1463,9 @@ export function FabPanelApp() {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              backgroundColor: "rgba(0, 0, 0, 0.42)",
+              backgroundColor: "rgba(0, 0, 0, 0.5)",
               color: "#fff",
-              fontSize: 14,
-              fontWeight: 700,
+              fontSize: 16,
               zIndex: 10,
               pointerEvents: "auto"
             }}>
@@ -1354,6 +1493,36 @@ function Card({ children }: { children: ReactNode }) {
   return <div style={cardStyle}>{children}</div>
 }
 
+function FooterButton({
+  icon,
+  iconAlt,
+  iconGap,
+  label,
+  ...buttonProps
+}: {
+  icon: string
+  iconAlt: string
+  iconGap?: number
+  label: string
+  className?: string
+  disabled?: boolean
+  onClick: () => void
+  style?: CSSProperties
+}) {
+  return (
+    <button type="button" {...buttonProps}>
+      <div style={{ ...iconLabelStyle, gap: iconGap ?? iconLabelStyle.gap }}>
+        <img
+          src={chrome.runtime.getURL(icon)}
+          alt={iconAlt}
+          draggable="false"
+          style={{ height: 16 }}></img>
+        <span>{label}</span>
+      </div>
+    </button>
+  )
+}
+
 function ColorSettingCard({
   label,
   value,
@@ -1370,7 +1539,7 @@ function ColorSettingCard({
   return (
     <Card>
       <label style={rowStyle}>
-        <span>{label}</span>
+        <span style={{ padding: "4px 0px" }}>{label}</span>
         <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
           <input
             type="color"
@@ -1422,9 +1591,9 @@ function RangeControl({
           justifyContent: "space-between",
           alignItems: "center"
         }}>
-        <span>{label}</span>
-        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-          <span style={{ color: "#d1d5db" }}>{value}</span>
+        <span style={{ padding: "4px 0px" }}>{label}</span>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <span style={{ padding: "4px 0px" }}>{value}</span>
           {onReset && (
             <button
               type="button"
@@ -1432,8 +1601,6 @@ function RangeControl({
               disabled={disabled}
               style={{
                 ...controlButtonStyle,
-                paddingLeft: 8,
-                paddingRight: 8,
                 ...disabledControlStyle(!disabled)
               }}>
               {t("reset")}
@@ -1468,7 +1635,7 @@ function CheckboxControl({
 }) {
   return (
     <label style={rowStyle}>
-      <span>{label}</span>
+      <span style={{ padding: "4px 0px" }}>{label}</span>
       <input
         type="checkbox"
         checked={checked}
@@ -1476,7 +1643,6 @@ function CheckboxControl({
         style={{
           width: 20,
           height: 20,
-          margin: 0,
           accentColor: "#66cdaa",
           ...disabledControlStyle(!disabled)
         }}

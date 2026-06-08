@@ -38,6 +38,9 @@
   "reset": {
     "message": "Reset"
   },
+  "apply": {
+    "message": "Apply"
+  },
   "save": {
     "message": "Save"
   },
@@ -53,29 +56,26 @@
   "accent": {
     "message": "Accent"
   },
-  "backgroundColor": {
-    "message": "Background Color"
+  "autoFitColors": {
+    "message": "Auto-fit colors"
   },
   "background": {
-    "message": "Background"
+    "message": "BG"
+  },
+  "backgroundColor": {
+    "message": "Color"
   },
   "backgroundImage": {
-    "message": "Background Image"
+    "message": "Image"
   },
   "upload": {
     "message": "Upload"
   },
-  "imagePosition": {
-    "message": "Image Position"
+  "imagePositionX": {
+    "message": "Horizontal"
   },
-  "Top": {
-    "message": "Top"
-  },
-  "Center": {
-    "message": "Center"
-  },
-  "Bottom": {
-    "message": "Bottom"
+  "imagePositionY": {
+    "message": "Vertical"
   },
   "brightness": {
     "message": "Brightness"
@@ -164,10 +164,16 @@
   "success_themeDuplicate": {
     "message": "Theme duplicated successfully."
   },
+  "success_autoFitColors": {
+    "message": "Auto-fit colors completed successfully."
+  },
   "pro_themePreset": {
     "message": "Upgrade to Pro for unlimited theme presets."
   },
   "pro_animatedImage": {
     "message": "Upgrade to Pro for animated backgrounds."
+  },
+  "pro_autoFitColors": {
+    "message": "Upgrade to Pro to use auto-fit colors."
   }
 }

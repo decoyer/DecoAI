@@ -1,36 +1,34 @@
 import { useStorage } from "@plasmohq/storage/hook"
 
-const t = (key: string) => chrome.i18n.getMessage(key)
-const FAB_HIDDEN_STORAGE_KEY = "fab-hidden"
-const MODEL_ENABLED_STORAGE_KEY = "model-enabled-map"
+import {
+  DEFAULT_MODEL_ENABLED,
+  FAB_HIDDEN_STORAGE_KEY,
+  MODEL_ENABLED_STORAGE_KEY,
+  type ModelEnabledMap
+} from "./theme-utils"
 
-type ModelEnabledMap = {
-  chatgpt: boolean
-  gemini: boolean
-  claude: boolean
-  grok: boolean
-}
+const t = (key: string) => chrome.i18n.getMessage(key)
 type ModelKey = keyof ModelEnabledMap
 
-const DEFAULT_MODEL_ENABLED: ModelEnabledMap = {
-  chatgpt: true,
-  gemini: true,
-  claude: true,
-  grok: true
-}
-
 const MODEL_LIST = [
-  { key: "chatgpt", label: "ChatGPT" },
-  { key: "gemini", label: "Gemini" },
-  { key: "claude", label: "Claude" },
-  { key: "grok", label: "Grok" }
+  { key: "chatgpt", icon: "assets/chatgpt.ico", label: "ChatGPT" },
+  { key: "gemini", icon: "assets/gemini.ico", label: "Gemini" },
+  { key: "claude", icon: "assets/claude.ico", label: "Claude" },
+  { key: "grok", icon: "assets/grok.ico", label: "Grok" }
 ] as const
 
 function IndexPopup() {
-  const [fabHidden, setFabHidden] = useStorage<boolean>(FAB_HIDDEN_STORAGE_KEY, false)
-  const [modelEnabled, setModelEnabled] = useStorage<ModelEnabledMap>(MODEL_ENABLED_STORAGE_KEY, DEFAULT_MODEL_ENABLED)
+  const [fabHidden, setFabHidden] = useStorage<boolean>(
+    FAB_HIDDEN_STORAGE_KEY,
+    false
+  )
+  const [modelEnabled, setModelEnabled] = useStorage<ModelEnabledMap>(
+    MODEL_ENABLED_STORAGE_KEY,
+    DEFAULT_MODEL_ENABLED
+  )
   const version = chrome.runtime.getManifest().version
-  const setModelChecked = (key: ModelKey, checked: boolean) => setModelEnabled({ ...modelEnabled, [key]: checked })
+  const setModelChecked = (key: ModelKey, checked: boolean) =>
+    setModelEnabled({ ...modelEnabled, [key]: checked })
 
   return (
     <>
@@ -73,9 +71,24 @@ function IndexPopup() {
       `}</style>
       <div style={rootStyle}>
         <div style={headerStyle}>
-          <div style={{ display: "flex", alignItems: "end", justifyContent: "space-between" }}>
-            <img src={chrome.runtime.getURL("assets/icon.png")} alt="app icon" style={{ height: 24 }} />
-            <img src={chrome.runtime.getURL("assets/logo.png")} alt="app logo" style={{ height: 24 }} />
+          <div
+            style={{
+              display: "flex",
+              alignItems: "end",
+              justifyContent: "space-between"
+            }}>
+            <img
+              src={chrome.runtime.getURL("assets/icon.png")}
+              alt="app icon"
+              draggable="false"
+              style={{ height: 24 }}
+            />
+            <img
+              src={chrome.runtime.getURL("assets/logo.png")}
+              alt="app logo"
+              draggable="false"
+              style={{ height: 24 }}
+            />
             <span>v{version}</span>
           </div>
         </div>
@@ -83,16 +96,38 @@ function IndexPopup() {
         <div style={contentStyle}>
           <h2 style={{ textAlign: "center" }}>{t("setting")}</h2>
           <h3 style={{ marginTop: 10 }}>{t("general")}</h3>
-          <label style={rowStyle}>
-            <span>{t("selectTheme")} {t("button")}</span>
-            <ToggleSwitch checked={!fabHidden} onChange={(checked) => setFabHidden(!checked)} />
+          <label style={{ ...rowStyle, padding: "2px 4px" }}>
+            <div style={{ ...rowStyle, gap: 8 }}>
+              <img
+                src={chrome.runtime.getURL("assets/wallpaper.svg")}
+                alt="theme select"
+                draggable="false"
+                style={{ height: 16 }}></img>
+              <span>
+                {t("selectTheme")} {t("button")}
+              </span>
+            </div>
+            <ToggleSwitch
+              checked={!fabHidden}
+              onChange={(checked) => setFabHidden(!checked)}
+            />
           </label>
 
           <h3 style={{ marginTop: 10 }}>{t("manageModel")}</h3>
           {MODEL_LIST.map((site) => (
-            <label key={site.key} style={rowStyle}>
-              <span>{site.label}</span>
-              <ToggleSwitch checked={Boolean(modelEnabled?.[site.key])} onChange={(checked) => setModelChecked(site.key, checked)} />
+            <label key={site.key} style={{ ...rowStyle, padding: "2px 4px" }}>
+              <div style={{ ...rowStyle, gap: 8 }}>
+                <img
+                  src={chrome.runtime.getURL(site.icon)}
+                  alt="site icon"
+                  draggable="false"
+                  style={{ height: 16 }}></img>
+                <span>{site.label}</span>
+              </div>
+              <ToggleSwitch
+                checked={Boolean(modelEnabled?.[site.key])}
+                onChange={(checked) => setModelChecked(site.key, checked)}
+              />
             </label>
           ))}
         </div>
@@ -101,7 +136,13 @@ function IndexPopup() {
   )
 }
 
-function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
+function ToggleSwitch({
+  checked,
+  onChange
+}: {
+  checked: boolean
+  onChange: (checked: boolean) => void
+}) {
   return (
     <input
       className="toggle-switch"
@@ -138,7 +179,6 @@ const contentStyle = {
 } as const
 
 const rowStyle = {
-  padding: "2px 8px",
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center"

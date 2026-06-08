@@ -38,6 +38,9 @@
   "reset": {
     "message": "초기화"
   },
+  "apply": {
+    "message": "적용"
+  },
   "save": {
     "message": "저장"
   },
@@ -53,11 +56,14 @@
   "accent": {
     "message": "강조색"
   },
-  "backgroundColor": {
-    "message": "배경색"
+  "autoFitColors": {
+    "message": "색상 자동 맞춤"
   },
   "background": {
     "message": "배경"
+  },
+  "backgroundColor": {
+    "message": "배경색"
   },
   "backgroundImage": {
     "message": "배경 사진"
@@ -65,17 +71,11 @@
   "upload": {
     "message": "업로드"
   },
-  "imagePosition": {
-    "message": "사진 위치"
+  "imagePositionX": {
+    "message": "가로 위치"
   },
-  "Top": {
-    "message": "위"
-  },
-  "Center": {
-    "message": "가운데"
-  },
-  "Bottom": {
-    "message": "아래"
+  "imagePositionY": {
+    "message": "세로 위치"
   },
   "brightness": {
     "message": "밝기 효과"
@@ -164,10 +164,16 @@
   "success_themeDuplicate": {
     "message": "테마를 성공적으로 복제했습니다."
   },
+  "success_autoFitColors": {
+    "message": "색상 자동 맞춤을 완료했습니다."
+  },
   "pro_themePreset": {
     "message": "커스텀 테마를 더 추가하려면 Pro로 업그레이드하세요."
   },
   "pro_animatedImage": {
     "message": "움직이는 배경을 사용하려면 Pro로 업그레이드하세요."
+  },
+  "pro_autoFitColors": {
+    "message": "색상 자동 맞춤을 사용하려면 Pro로 업그레이드하세요."
   }
 }

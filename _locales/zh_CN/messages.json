@@ -38,6 +38,9 @@
   "reset": {
     "message": "重置"
   },
+  "apply": {
+    "message": "应用"
+  },
   "save": {
     "message": "保存"
   },
@@ -53,11 +56,14 @@
   "accent": {
     "message": "强调色"
   },
-  "backgroundColor": {
-    "message": "背景颜色"
+  "autoFitColors": {
+    "message": "自动匹配颜色"
   },
   "background": {
     "message": "背景"
+  },
+  "backgroundColor": {
+    "message": "背景颜色"
   },
   "backgroundImage": {
     "message": "背景图片"
@@ -65,17 +71,11 @@
   "upload": {
     "message": "上传"
   },
-  "imagePosition": {
-    "message": "图片位置"
+  "imagePositionX": {
+    "message": "水平位置"
   },
-  "Top": {
-    "message": "上"
-  },
-  "Center": {
-    "message": "中间"
-  },
-  "Bottom": {
-    "message": "下"
+  "imagePositionY": {
+    "message": "垂直位置"
   },
   "brightness": {
     "message": "亮度效果"
@@ -164,10 +164,16 @@
   "success_themeDuplicate": {
     "message": "主题已成功复制。"
   },
+  "success_autoFitColors": {
+    "message": "颜色已成功自动适配。"
+  },
   "pro_themePreset": {
     "message": "升级到 Pro 即可使用无限主题预设。"
   },
   "pro_animatedImage": {
     "message": "升级到 Pro 即可使用动态背景。"
+  },
+  "pro_autoFitColors": {
+    "message": "升级到 Pro 即可使用颜色自动适配。"
   }
 }
