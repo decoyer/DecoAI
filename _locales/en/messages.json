@@ -11,7 +11,10 @@
   "button": {
     "message": "Button"
   },
-  "manageModel": {
+  "visibility": {
+    "message": "Visibility"
+  },
+  "models": {
     "message": "Models"
   },
   "selectTheme": {

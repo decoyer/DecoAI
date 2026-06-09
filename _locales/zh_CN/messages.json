@@ -6,13 +6,16 @@
     "message": "设置"
   },
   "general": {
-    "message": "一般"
+    "message": "通用"
   },
   "button": {
     "message": "按钮"
   },
-  "manageModel": {
-    "message": "模型管理"
+  "visibility": {
+    "message": "显示"
+  },
+  "models": {
+    "message": "模型"
   },
   "selectTheme": {
     "message": "选择主题"
@@ -51,7 +54,7 @@
     "message": "名称"
   },
   "text": {
-    "message": "文字颜色"
+    "message": "文本颜色"
   },
   "accent": {
     "message": "强调色"
@@ -84,7 +87,7 @@
     "message": "模糊效果"
   },
   "scaleX": {
-    "message": "镜像翻转"
+    "message": "水平翻转"
   },
   "invert": {
     "message": "反相效果"
@@ -108,10 +111,10 @@
     "message": "隐藏页脚"
   },
   "exportTheme": {
-    "message": "导出"
+    "message": "导出主题"
   },
   "importTheme": {
-    "message": "导入"
+    "message": "导入主题"
   },
   "random": {
     "message": "随机"
@@ -162,7 +165,7 @@
     "message": "主题已成功删除。"
   },
   "success_themeDuplicate": {
-    "message": "主题已成功复制。"
+    "message": "主题副本已创建。"
   },
   "success_autoFitColors": {
     "message": "颜色已成功自动适配。"

@@ -449,7 +449,7 @@ export function FabPanelApp() {
       const idToken = await user.getIdToken()
       await openCheckout(idToken)
     } catch (e) {
-      toast.error(t("error_checkout"))
+      toast.error(t("error_checkoutFail"))
     }
   }
 

@@ -65,7 +65,7 @@ const SITE_SELECTORS = {
     container: "body",
     header: "header",
     footer:
-      "#thread-bottom-container > div:is(.mt-auto, .-mt-4) > div > div > div > div",
+      "#thread-bottom-container > div:is(.mt-auto, .-mt-4) > div > div > div > div, .leading-none",
     elements:
       '[data-testid="use-case-prompt-chips"] button, .btn-secondary, .agent-turn, .user-message-bubble-color, .shadow-short-composer',
     darkClass: "html.dark"

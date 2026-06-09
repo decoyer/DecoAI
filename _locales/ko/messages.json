@@ -11,8 +11,11 @@
   "button": {
     "message": "버튼"
   },
-  "manageModel": {
-    "message": "모델 관리"
+  "visibility": {
+    "message": "표시"
+  },
+  "models": {
+    "message": "모델"
   },
   "selectTheme": {
     "message": "테마 선택"

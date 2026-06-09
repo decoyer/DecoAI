@@ -89,23 +89,30 @@ function IndexPopup() {
               draggable="false"
               style={{ height: 24 }}
             />
-            <span>v{version}</span>
+            <span style={{ lineHeight: 1 }}>v{version}</span>
           </div>
         </div>
 
         <div style={contentStyle}>
           <h2 style={{ textAlign: "center" }}>{t("setting")}</h2>
-          <h3 style={{ marginTop: 10 }}>{t("general")}</h3>
-          <label style={{ ...rowStyle, padding: "2px 4px" }}>
+          <div style={{ ...rowStyle, justifyContent: "flex-start", gap: 8, paddingTop: 12 }}>
+            <img
+              src={chrome.runtime.getURL("assets/visibility.svg")}
+              alt="visibility settings"
+              draggable="false"
+              style={{ height: 24 }}
+            />
+            <h3 style={{ margin: 0 }}>{t("visibility")}</h3>
+          </div>
+          <label style={{ ...rowStyle, padding: "0px 8px" }}>
             <div style={{ ...rowStyle, gap: 8 }}>
               <img
                 src={chrome.runtime.getURL("assets/wallpaper.svg")}
                 alt="theme select"
                 draggable="false"
-                style={{ height: 16 }}></img>
-              <span>
-                {t("selectTheme")} {t("button")}
-              </span>
+                style={{ height: 16 }}
+              />
+              <span style={{ lineHeight: 1 }}>{t("selectTheme")}</span>
             </div>
             <ToggleSwitch
               checked={!fabHidden}
@@ -113,16 +120,25 @@ function IndexPopup() {
             />
           </label>
 
-          <h3 style={{ marginTop: 10 }}>{t("manageModel")}</h3>
+          <div style={{ ...rowStyle, justifyContent: "flex-start", gap: 8, paddingTop: 12 }}>
+            <img
+              src={chrome.runtime.getURL("assets/smart_toy.svg")}
+              alt="model settings"
+              draggable="false"
+              style={{ height: 24 }}
+            />
+            <h3 style={{ margin: 0 }}>{t("models")}</h3>
+          </div>
           {MODEL_LIST.map((site) => (
-            <label key={site.key} style={{ ...rowStyle, padding: "2px 4px" }}>
+            <label key={site.key} style={{ ...rowStyle, padding: "0px 8px" }}>
               <div style={{ ...rowStyle, gap: 8 }}>
                 <img
                   src={chrome.runtime.getURL(site.icon)}
                   alt="site icon"
                   draggable="false"
-                  style={{ height: 16 }}></img>
-                <span>{site.label}</span>
+                  style={{ height: 16 }}
+                />
+                <span style={{ lineHeight: 1 }}>{site.label}</span>
               </div>
               <ToggleSwitch
                 checked={Boolean(modelEnabled?.[site.key])}
@@ -175,7 +191,7 @@ const contentStyle = {
   padding: 20,
   display: "flex",
   flexDirection: "column",
-  gap: 10
+  gap: 8
 } as const
 
 const rowStyle = {
