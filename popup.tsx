@@ -2,8 +2,8 @@ import { useStorage } from "@plasmohq/storage/hook"
 
 import {
   DEFAULT_MODEL_ENABLED,
-  FAB_HIDDEN_STORAGE_KEY,
   MODEL_ENABLED_STORAGE_KEY,
+  THEME_HIDDEN_STORAGE_KEY,
   type ModelEnabledMap
 } from "./theme-utils"
 
@@ -18,8 +18,8 @@ const MODEL_LIST = [
 ] as const
 
 function IndexPopup() {
-  const [fabHidden, setFabHidden] = useStorage<boolean>(
-    FAB_HIDDEN_STORAGE_KEY,
+  const [themeHidden, setThemeHidden] = useStorage<boolean>(
+    THEME_HIDDEN_STORAGE_KEY,
     false
   )
   const [modelEnabled, setModelEnabled] = useStorage<ModelEnabledMap>(
@@ -108,15 +108,15 @@ function IndexPopup() {
             <div style={{ ...rowStyle, gap: 8 }}>
               <img
                 src={chrome.runtime.getURL("assets/wallpaper.svg")}
-                alt="theme select"
+                alt="theme settings"
                 draggable="false"
                 style={{ height: 16 }}
               />
-              <span style={{ lineHeight: 1 }}>{t("selectTheme")}</span>
+              <span style={{ lineHeight: 1 }}>{t("themeSettings")}</span>
             </div>
             <ToggleSwitch
-              checked={!fabHidden}
-              onChange={(checked) => setFabHidden(!checked)}
+              checked={!themeHidden}
+              onChange={(checked) => setThemeHidden(!checked)}
             />
           </label>
 

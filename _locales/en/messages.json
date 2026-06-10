@@ -17,8 +17,8 @@
   "models": {
     "message": "Models"
   },
-  "selectTheme": {
-    "message": "Select Theme"
+  "themeSettings": {
+    "message": "Theme Settings"
   },
   "addTheme": {
     "message": "Add Theme"

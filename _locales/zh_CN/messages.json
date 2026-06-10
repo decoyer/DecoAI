@@ -17,8 +17,8 @@
   "models": {
     "message": "模型"
   },
-  "selectTheme": {
-    "message": "选择主题"
+  "themeSettings": {
+    "message": "主题设置"
   },
   "addTheme": {
     "message": "添加主题"

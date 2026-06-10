@@ -34,7 +34,9 @@ type ThemeImportData = {
 export const CUSTOM_THEMES_STORAGE_KEY = "custom-themes"
 export const SELECTED_CUSTOM_THEME_ID_STORAGE_KEY = "selected-custom-theme-id"
 export const FAB_HIDDEN_STORAGE_KEY = "fab-hidden"
+export const THEME_HIDDEN_STORAGE_KEY = "theme-hidden"
 export const MODEL_ENABLED_STORAGE_KEY = "model-enabled-map"
+export const CUSTOM_THEME_LAYOUT_STORAGE_KEY = "custom-theme-layout-map"
 export const THEME_LOADING_EVENT = "kasutamu:theme-loading"
 export const FAB_OPEN_EVENT = "kasutamu:fab-open"
 export const THEME_FILE_APP_ID = "kasutamu"
@@ -172,6 +174,55 @@ export const sanitizeCustomBgOptions = (
   hideHeader: options?.hideHeader === true,
   hideFooter: options?.hideFooter === true
 })
+
+export const renderStyledImageToCanvas = async (
+  imageSource: string,
+  options?: Partial<CustomBgOptions>,
+  maxSize = 256
+) => {
+  const safeSource = sanitizeCustomBgUrl(imageSource)
+  const safeOptions = sanitizeCustomBgOptions(options)
+  const position = sanitizePosition(safeOptions.position)
+  const percentMatch = position.match(
+    /^(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%$/
+  )
+  const positionX = percentMatch ? clampNumber(percentMatch[1], 0, 100, 50) : 50
+  const positionY = percentMatch ? clampNumber(percentMatch[2], 0, 100, 50) : 50
+
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const nextImage = new Image()
+    nextImage.onload = () => resolve(nextImage)
+    nextImage.onerror = () => reject()
+    nextImage.src = safeSource
+  })
+
+  const canvas = document.createElement("canvas")
+  canvas.width = maxSize
+  canvas.height = maxSize
+
+  const context = canvas.getContext("2d")
+  const scale = Math.max(
+    canvas.width / image.naturalWidth,
+    canvas.height / image.naturalHeight
+  )
+  const drawWidth = image.naturalWidth * scale
+  const drawHeight = image.naturalHeight * scale
+  const drawX = (canvas.width - drawWidth) * (positionX / 100)
+  const drawY = (canvas.height - drawHeight) * (positionY / 100)
+
+  context.clearRect(0, 0, canvas.width, canvas.height)
+  context.filter = `invert(${safeOptions.invert}) grayscale(${safeOptions.grayscale}) blur(${safeOptions.blur}px) brightness(${safeOptions.brightness})`
+  context.save()
+  if (safeOptions.scaleX === -1) {
+    context.translate(canvas.width, 0)
+    context.scale(-1, 1)
+  }
+  context.drawImage(image, drawX, drawY, drawWidth, drawHeight)
+  context.restore()
+  context.filter = "none"
+
+  return canvas
+}
 
 export const normalizeCustomTheme = (
   themeData: Partial<CustomTheme>,

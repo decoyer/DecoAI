@@ -14,7 +14,6 @@ import {
   clearAnimatedBgUrl,
   CUSTOM_THEMES_STORAGE_KEY,
   detectCurrentSite,
-  FAB_HIDDEN_STORAGE_KEY,
   FAB_OPEN_EVENT,
   isAnimatedCustomTheme,
   MODEL_ENABLED_STORAGE_KEY,
@@ -23,6 +22,7 @@ import {
   sanitizeCustomBgUrl,
   sanitizePosition,
   SELECTED_CUSTOM_THEME_ID_STORAGE_KEY,
+  THEME_HIDDEN_STORAGE_KEY,
   THEME_LOADING_EVENT,
   type CustomBgOptions,
   type CustomTheme,
@@ -105,7 +105,7 @@ let applyThemeRequestId = 0
 let currentLocation = location.href
 let fabMounted = false
 let fabOpen = false
-let fabPanelRoot: Root | null = null
+let fabThemeRoot: Root | null = null
 let toastMounted = false
 let cachedThemeKey: string | null = null
 let cachedThemeData: ThemeConfig | null = null
@@ -143,13 +143,13 @@ const FAB_ROOT_ID = "kasutamu-fab-root"
 const FAB_ROOT_CLASS = "kasutamu-fab"
 const FAB_OPEN_CLASS = "is-open"
 const FAB_ACTION_CLASS = "kasutamu-fab-action"
-const FAB_MAIN_BTN_CLASS = "kasutamu-fab-main"
+const FAB_THEME_BTN_CLASS = "kasutamu-fab-theme"
 const FAB_TOOLTIP_CLASS = "kasutamu-fab-tooltip"
-const FAB_PANEL_CLASS = "kasutamu-fab-panel"
-const FAB_PANEL_MOUNT_ID = "kasutamu-fab-panel-mount"
+const FAB_THEME_PANEL_CLASS = "kasutamu-fab-theme-panel"
+const FAB_THEME_MOUNT_ID = "kasutamu-fab-theme-mount"
 const TOAST_STYLE_ID = "kasutamu-toastify-style"
 const TOAST_ROOT_ID = "kasutamu-toast-root"
-const FAB_MAIN_BTN_ICON = `<img src="${chrome.runtime.getURL("assets/wallpaper.svg")}" alt="theme select" draggable="false" style={{ height: 24 }} />`
+const FAB_THEME_BTN_ICON = `<img src="${chrome.runtime.getURL("assets/wallpaper.svg")}" alt="theme settings" draggable="false" style={{ height: 24 }} />`
 const CUSTOM_THEME_WATCH_STORAGE_KEYS = [
   CUSTOM_THEMES_STORAGE_KEY,
   SELECTED_CUSTOM_THEME_ID_STORAGE_KEY
@@ -199,7 +199,7 @@ const isPremiumUser = async ({ forceRefresh = false } = {}) => {
   }
 }
 
-const isThemeAllowedForCurrentUrl = (site: SiteType) => {
+const whiteListUrl = (site: SiteType) => {
   const { pathname } = window.location
 
   switch (site) {
@@ -221,7 +221,7 @@ const getThemeStyle = () => {
   if (!style) {
     style = document.createElement("style")
     style.id = THEME_STYLE_ID
-    ;(document.head || document.documentElement).appendChild(style)
+      ; (document.head || document.documentElement).appendChild(style)
   }
   return style
 }
@@ -236,7 +236,7 @@ const getFABStyle = () => {
         position: fixed;
         right: 48px;
         bottom: 78px;
-        z-index: 2147483646;
+        z-index: 1;
         display: flex;
         flex-direction: column;
         align-items: flex-end;
@@ -244,7 +244,7 @@ const getFABStyle = () => {
         font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
       }
 
-      .${FAB_MAIN_BTN_CLASS} {
+      .${FAB_THEME_BTN_CLASS} {
         width: 45px;
         height: 45px;
         display: inline-flex;
@@ -257,17 +257,19 @@ const getFABStyle = () => {
         cursor: pointer;
       }
 
-      html.dark .${FAB_MAIN_BTN_CLASS},
-      body.dark-theme .${FAB_MAIN_BTN_CLASS},
-      html[data-mode="dark"] .${FAB_MAIN_BTN_CLASS} {
+      html.dark .${FAB_THEME_BTN_CLASS},
+      body.dark-theme .${FAB_THEME_BTN_CLASS},
+      html[data-mode="dark"] .${FAB_THEME_BTN_CLASS} {
         background-color: #fff;
       }
 
-      .${FAB_MAIN_BTN_CLASS}:hover {
+      .${FAB_THEME_BTN_CLASS}:hover {
         opacity: 0.7;
       }
 
       .${FAB_ACTION_CLASS} {
+        position: relative;
+        z-index: 1;
         display: flex;
         flex-direction: row-reverse;
         align-items: center;
@@ -287,12 +289,14 @@ const getFABStyle = () => {
         transform: translateX(4px);
       }
 
-      .${FAB_MAIN_BTN_CLASS}:hover + .${FAB_TOOLTIP_CLASS},
-      .${FAB_MAIN_BTN_CLASS}:focus-visible + .${FAB_TOOLTIP_CLASS} {
+      .${FAB_THEME_BTN_CLASS}:hover + .${FAB_TOOLTIP_CLASS},
+      .${FAB_THEME_BTN_CLASS}:focus-visible + .${FAB_TOOLTIP_CLASS} {
         opacity: 1;
       }
 
-      .${FAB_PANEL_CLASS} {
+      .${FAB_THEME_PANEL_CLASS} {
+        position: relative;
+        z-index: 1;
         display: block;
         overflow: hidden;
         background-color: rgba(24, 24, 24, var(--kasutamu-surface-opacity, 0.8));
@@ -304,16 +308,16 @@ const getFABStyle = () => {
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       }
 
-      .${FAB_ROOT_CLASS}.${FAB_OPEN_CLASS} .${FAB_PANEL_CLASS} {
+      .${FAB_ROOT_CLASS}.${FAB_OPEN_CLASS} .${FAB_THEME_PANEL_CLASS} {
         pointer-events: auto;
         opacity: 0.8;
       }
 
-      .${FAB_ROOT_CLASS}.${FAB_OPEN_CLASS} .${FAB_PANEL_CLASS}:hover {
+      .${FAB_ROOT_CLASS}.${FAB_OPEN_CLASS} .${FAB_THEME_PANEL_CLASS}:hover {
         opacity: 1;
       }
     `
-    ;(document.head || document.documentElement).appendChild(style)
+      ; (document.head || document.documentElement).appendChild(style)
   }
   return style
 }
@@ -329,12 +333,12 @@ const mountToastContainer = () => {
     link.id = TOAST_STYLE_ID
     link.rel = "stylesheet"
     link.href = chrome.runtime.getURL("assets/ReactToastify.css")
-    ;(document.head || document.documentElement).appendChild(link)
+      ; (document.head || document.documentElement).appendChild(link)
   }
 
   const root = document.createElement("div")
   root.id = TOAST_ROOT_ID
-  ;(document.body || document.documentElement).appendChild(root)
+    ; (document.body || document.documentElement).appendChild(root)
 
   createRoot(root).render(
     createElement(ToastContainer, {
@@ -447,10 +451,8 @@ const getCustomThemeData = async (): Promise<ThemeConfig> => {
   const { theme: customTheme } = await getSelectedCustomTheme()
   if (!customTheme) return EMPTY_THEME
 
-  const bgUrl = sanitizeCustomBgUrl(customTheme.bgUrl)
-
   return {
-    bgUrl,
+    bgUrl: sanitizeCustomBgUrl(customTheme.bgUrl),
     bgColor: sanitizeColor(customTheme.bgColor),
     accentColor: sanitizeColor(customTheme.accent),
     lightTextColor: sanitizeColor(customTheme.text),
@@ -509,28 +511,46 @@ const setFabAccentColor = (accentColor?: string) => {
 }
 
 const setFabSurfaceOptions = (customBgOptions?: CustomBgOptions) => {
-  const root = document.getElementById(FAB_ROOT_ID)
-  if (!root) return
   const glassBlur = clampNumber(customBgOptions?.glassBlur, 0, 50, 10)
   const opacity = clampNumber(customBgOptions?.opacity, 0, 1, 0.8)
+  const root = document.getElementById(FAB_ROOT_ID)
+  if (!root) return
   root.style.setProperty("--kasutamu-glass-blur", `${glassBlur}px`)
   root.style.setProperty("--kasutamu-surface-opacity", `${opacity}`)
 }
 
-const setFabVisibility = async () => {
+const setRouteScopedUiVisibility = (
+  site: SiteType | null = detectCurrentSite()
+) => {
+  const shouldShow = Boolean(site && whiteListUrl(site))
+  const fabRoot = document.getElementById(FAB_ROOT_ID)
+
+  if (fabRoot) fabRoot.style.display = shouldShow ? "flex" : "none"
+  if (!shouldShow && fabOpen) closeFabDock()
+
+  return shouldShow
+}
+
+const setThemeVisibility = async () => {
   const root = document.getElementById(FAB_ROOT_ID)
   if (!root) return
-  const isHidden = (await storage.get<boolean>(FAB_HIDDEN_STORAGE_KEY)) === true
-  root.style.display = isHidden ? "none" : "flex"
+  if (!setRouteScopedUiVisibility()) return
+  const themeButton = root.querySelector<HTMLElement>(`.${FAB_THEME_BTN_CLASS}`)
+  const themeAction = themeButton?.closest<HTMLElement>(`.${FAB_ACTION_CLASS}`)
+  const isHidden =
+    (await storage.get<boolean>(THEME_HIDDEN_STORAGE_KEY)) === true
+  if (themeAction) themeAction.style.display = isHidden ? "none" : "flex"
+  if (isHidden && fabOpen) closeFabDock()
 }
 
 const onOutsideFabClick = (event: MouseEvent) => {
   const root = document.getElementById(FAB_ROOT_ID)
   if (!root) return
   const target = event.target as Node
-  const panel = root.querySelector(`.${FAB_PANEL_CLASS}`)
-  const mainButton = root.querySelector(`.${FAB_MAIN_BTN_CLASS}`)
-  if (panel?.contains(target) || mainButton?.contains(target)) return
+  const panel = root.querySelector(`.${FAB_THEME_PANEL_CLASS}`)
+  const action =
+    target instanceof Element ? target.closest(`.${FAB_ACTION_CLASS}`) : null
+  if (panel?.contains(target) || action) return
   closeFabDock()
 }
 
@@ -548,37 +568,61 @@ const mountFab = async () => {
   root.className = FAB_ROOT_CLASS
 
   const panel = document.createElement("aside")
-  panel.className = FAB_PANEL_CLASS
+  panel.className = FAB_THEME_PANEL_CLASS
   const panelHost = document.createElement("div")
-  panelHost.id = FAB_PANEL_MOUNT_ID
+  panelHost.id = FAB_THEME_MOUNT_ID
   panelHost.style.width = "100%"
   panelHost.style.height = "100%"
   panel.appendChild(panelHost)
 
-  const mainButton = document.createElement("button")
-  mainButton.type = "button"
-  mainButton.className = FAB_MAIN_BTN_CLASS
-  mainButton.setAttribute("aria-label", "Select Theme Button")
-  mainButton.innerHTML = FAB_MAIN_BTN_ICON
-  mainButton.addEventListener("click", (event) => {
-    event.stopPropagation()
-    fabOpen = !fabOpen
-    root.classList.toggle(FAB_OPEN_CLASS, fabOpen)
-    if (fabOpen) window.dispatchEvent(new Event(FAB_OPEN_EVENT))
+  const createFabAction = ({
+    buttonClass,
+    ariaLabel,
+    icon,
+    tooltipText
+  }: {
+    buttonClass: string
+    ariaLabel: string
+    icon: string
+    tooltipText: string
+  }) => {
+    const button = document.createElement("button")
+    button.type = "button"
+    button.className = buttonClass
+    button.setAttribute("aria-label", ariaLabel)
+    button.innerHTML = icon
+    button.addEventListener("click", (event) => {
+      event.stopPropagation()
+      if (fabOpen) {
+        closeFabDock()
+      } else {
+        fabOpen = true
+        root.classList.add(FAB_OPEN_CLASS)
+        window.dispatchEvent(new CustomEvent(FAB_OPEN_EVENT))
+      }
+    })
+
+    const tooltip = document.createElement("span")
+    tooltip.className = FAB_TOOLTIP_CLASS
+    tooltip.textContent = tooltipText
+
+    const action = document.createElement("div")
+    action.className = FAB_ACTION_CLASS
+    action.appendChild(button)
+    action.appendChild(tooltip)
+    return action
+  }
+
+  const themeAction = createFabAction({
+    buttonClass: FAB_THEME_BTN_CLASS,
+    ariaLabel: "Theme Settings Button",
+    icon: FAB_THEME_BTN_ICON,
+    tooltipText: `${t("themeSettings")}`
   })
 
-  const tooltip = document.createElement("span")
-  tooltip.className = FAB_TOOLTIP_CLASS
-  tooltip.textContent = `${t("selectTheme")}`
-
-  const action = document.createElement("div")
-  action.className = FAB_ACTION_CLASS
-  action.appendChild(mainButton)
-  action.appendChild(tooltip)
-
   root.appendChild(panel)
-  root.appendChild(action)
-  ;(document.body || document.documentElement).appendChild(root)
+  root.appendChild(themeAction)
+    ; (document.body || document.documentElement).appendChild(root)
   document.addEventListener("click", onOutsideFabClick, { capture: true })
   const shadowRoot = panelHost.attachShadow({ mode: "open" })
   const shadowMount = document.createElement("div")
@@ -586,11 +630,11 @@ const mountFab = async () => {
   shadowMount.style.height = "100%"
   shadowRoot.appendChild(shadowMount)
 
-  fabPanelRoot = createRoot(shadowMount)
-  fabPanelRoot.render(createElement(FabPanelApp))
+  fabThemeRoot = createRoot(shadowMount)
+  fabThemeRoot.render(createElement(FabPanelApp))
 
   fabMounted = true
-  await setFabVisibility()
+  await setThemeVisibility()
 }
 
 const mapSelectors = (
@@ -684,9 +728,8 @@ const generateCSS = (
     ${hoverSelectors} {
       opacity: 1 !important;
     }
-    ${
-      site === "chatgpt"
-        ? `
+    ${site === "chatgpt"
+      ? `
       .agent-turn {
         margin-top: 5px !important;
         margin-bottom: 5px !important;
@@ -694,11 +737,10 @@ const generateCSS = (
         border-radius: 22px !important;
       }
     `
-        : ""
+      : ""
     }
-    ${
-      site === "gemini"
-        ? `
+    ${site === "gemini"
+      ? `
       .show-lm-background::before {
         background: none !important;
       }
@@ -707,27 +749,25 @@ const generateCSS = (
         border-radius: 40px !important;
       }
     `
-        : ""
+      : ""
     }
-    ${
-      site === "claude"
-        ? `
+    ${site === "claude"
+      ? `
       .font-claude-response {
         padding: 10px 16px !important;
         border-radius: 12px !important;
       }
     `
-        : ""
+      : ""
     }
-    ${
-      site === "grok"
-        ? `
+    ${site === "grok"
+      ? `
       [data-testid="assistant-message"] {
         padding: 8px 16px !important;
         border-radius: 24px !important;
       }
     `
-        : ""
+      : ""
     }
     ${safeAccentColor ? `::-webkit-scrollbar { width: auto !important; }::-webkit-scrollbar-thumb { background-color: ${safeAccentColor}4D !important; border-radius: 22px !important; }` : ""}
   `
@@ -749,19 +789,22 @@ const generateCSS = (
 }
 
 const applyTheme = async (requestId: number) => {
-  await mountFab()
   if (requestId !== applyThemeRequestId) return
 
   const currentSite = detectCurrentSite()
   if (!currentSite) return
 
   const style = getThemeStyle()
-  if (!isThemeAllowedForCurrentUrl(currentSite)) {
+  if (!whiteListUrl(currentSite)) {
     style.textContent = ""
     setFabAccentColor("")
     setFabSurfaceOptions()
+    setRouteScopedUiVisibility(currentSite)
     return
   }
+
+  await mountFab()
+  setRouteScopedUiVisibility(currentSite)
 
   const [currentTheme, modelEnabled] = await Promise.all([
     storage.get<string>("selected-theme"),
@@ -774,6 +817,7 @@ const applyTheme = async (requestId: number) => {
     style.textContent = ""
     setFabAccentColor("")
     setFabSurfaceOptions()
+    setRouteScopedUiVisibility(currentSite)
     return
   }
 
@@ -852,7 +896,7 @@ storage.watch({
     scheduleApplyTheme()
   },
   "model-enabled-map": () => scheduleApplyTheme(),
-  "fab-hidden": () => setFabVisibility()
+  "theme-hidden": () => setThemeVisibility()
 })
 
 chrome.storage.onChanged.addListener((changes, areaName) => {

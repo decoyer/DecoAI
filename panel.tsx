@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type DragEvent,
   type ReactNode
 } from "react"
 import { toast } from "react-toastify"
@@ -33,6 +34,7 @@ import {
   isAnimatedImage,
   MAX_FILE_BYTES,
   parseImportedThemes,
+  renderStyledImageToCanvas,
   sanitizeCustomBgUrl,
   THEME_LOADING_EVENT,
   type CustomBgOptions,
@@ -54,9 +56,6 @@ const THEME_LIST = [
   { key: "default", color: "#666", emoji: "⚙️" }
 ]
 
-type ViewType = "themes" | "custom"
-type ThemeTabType = "preset" | "custom"
-type CustomEditTabType = "general" | "background" | "layout"
 const SITE_DARK_SELECTORS: Record<SiteType, string> = {
   chatgpt: "html.dark",
   gemini: "body.dark-theme",
@@ -64,7 +63,9 @@ const SITE_DARK_SELECTORS: Record<SiteType, string> = {
   grok: "html.dark"
 }
 
-const DEBOUNCE_MS = 100
+type ViewType = "themes" | "custom"
+type ThemeTabType = "preset" | "custom"
+type CustomEditTabType = "general" | "background" | "layout"
 
 const wrapperStyle = { position: "relative", width: 250, height: 500 } as const
 const rootStyle = {
@@ -199,6 +200,7 @@ const wait = (ms: number) =>
   })
 
 export function FabPanelApp() {
+  const panelRootRef = useRef<HTMLDivElement>(null)
   const [theme, setTheme] = useStorage("selected-theme", "default")
   const [view, setView] = useState<ViewType>("themes")
   const [themeTab, setThemeTab] = useState<ThemeTabType>("preset")
@@ -226,6 +228,7 @@ export function FabPanelApp() {
   const [localCustomBgColor, setLocalCustomBgColor] = useState("")
   const [isThemeLoading, setIsThemeLoading] = useState(false)
   const [draggingCustomThemeId, setDraggingCustomThemeId] = useState("")
+  const suppressCustomThemeClickIdRef = useRef("")
   const canResetText = Boolean((localText || "").trim())
   const canResetAccent = Boolean((localAccent || "").trim())
   const selectedCustomTheme = customThemes.find(
@@ -294,7 +297,7 @@ export function FabPanelApp() {
     value: string | number | boolean
   ) => setLocalCustomBgOptions((prev) => ({ ...prev, [key]: value }))
 
-  const normalizeCustomThemesForFreeUser = () => {
+  const normalizeCustomThemes = () => {
     if (!customThemes.length) return
 
     const retainedSource = selectedCustomTheme || customThemes[0]
@@ -320,7 +323,7 @@ export function FabPanelApp() {
 
   useEffect(() => {
     if (!isPremiumLoaded || isPremiumUser || !customThemes.length) return
-    normalizeCustomThemesForFreeUser()
+    normalizeCustomThemes()
   }, [
     customBg,
     customThemes,
@@ -350,7 +353,7 @@ export function FabPanelApp() {
     })
   }
 
-  useDebouncedEffect(upsertEditingTheme, DEBOUNCE_MS, [
+  useDebouncedEffect(upsertEditingTheme, 1, [
     editingCustomThemeId,
     localCustomThemeName,
     localText,
@@ -427,20 +430,14 @@ export function FabPanelApp() {
   }
 
   const refreshPremiumStatus = async () => {
-    try {
-      const user = await getSignedInUser()
-      const tokenResult = await user.getIdTokenResult(true)
-      const premium = tokenResult.claims.premium === true
-      setIsPremiumUser(premium)
-      if (!premium) normalizeCustomThemesForFreeUser()
-      return premium
-    } catch {
-      setIsPremiumUser(false)
-      normalizeCustomThemesForFreeUser()
-      return false
-    } finally {
-      setIsPremiumLoaded(true)
-    }
+    const user = await getSignedInUser()
+    const tokenResult = await user.getIdTokenResult(true)
+    const premium = tokenResult.claims.premium === true
+
+    setIsPremiumUser(premium)
+    setIsPremiumLoaded(true)
+
+    return premium
   }
 
   const onProClick = async () => {
@@ -570,24 +567,33 @@ export function FabPanelApp() {
       return
     }
 
+    if (!customBg) return
+
     setIsThemeLoading(true)
-    await wait(2000)
+    try {
+      await wait(2000)
+      const canvas = await renderStyledImageToCanvas(customBg, localCustomBgOptions)
+      const palette = await Vibrant.from(canvas.toDataURL()).getPalette()
+      const isDarkMode = isCurrentPageDarkMode()
+      const nextAccent = palette.Vibrant?.hex || ""
+      const nextText = isDarkMode
+        ? palette.LightVibrant?.hex || ""
+        : palette.DarkVibrant?.hex || ""
 
-    const palette = await Vibrant.from(customBg).getPalette()
-    const isDarkMode = isCurrentPageDarkMode()
-    const nextAccent = palette.Vibrant?.hex || ""
-    const nextText = isDarkMode
-      ? palette.LightVibrant?.hex || ""
-      : palette.DarkVibrant?.hex || ""
+      if (nextAccent) setLocalAccent(nextAccent)
+      if (nextText) setLocalText(nextText)
 
-    if (nextAccent) setLocalAccent(nextAccent)
-    if (nextText) setLocalText(nextText)
-
-    setIsThemeLoading(false)
-    toast.success(t("success_autoFitColors"))
+      toast.success(t("success_autoFitColors"))
+    } finally {
+      setIsThemeLoading(false)
+    }
   }
 
   const onCustomCardClick = (customThemeItem: CustomTheme) => {
+    if (suppressCustomThemeClickIdRef.current === customThemeItem.id) {
+      suppressCustomThemeClickIdRef.current = ""
+      return
+    }
     const isSelected =
       theme === "custom" && selectedCustomThemeId === customThemeItem.id
     if (isSelected) {
@@ -602,7 +608,7 @@ export function FabPanelApp() {
   }
 
   const onCustomCardDragStart = (
-    event: React.DragEvent<HTMLElement>,
+    event: DragEvent<HTMLButtonElement>,
     customThemeItem: CustomTheme
   ) => {
     setDraggingCustomThemeId(customThemeItem.id)
@@ -611,7 +617,7 @@ export function FabPanelApp() {
   }
 
   const onCustomCardDragOver = (
-    event: React.DragEvent<HTMLElement>,
+    event: DragEvent<HTMLDivElement>,
     customThemeItem: CustomTheme
   ) => {
     if (!draggingCustomThemeId || draggingCustomThemeId === customThemeItem.id)
@@ -621,7 +627,7 @@ export function FabPanelApp() {
   }
 
   const onCustomCardDrop = (
-    event: React.DragEvent<HTMLElement>,
+    event: DragEvent<HTMLDivElement>,
     customThemeItem: CustomTheme
   ) => {
     event.preventDefault()
@@ -632,6 +638,7 @@ export function FabPanelApp() {
     const targetId = customThemeItem.id
     if (!sourceId || sourceId === targetId) return
 
+    suppressCustomThemeClickIdRef.current = sourceId
     setCustomThemes((prev) => {
       const sourceIndex = prev.findIndex((item) => item.id === sourceId)
       const targetIndex = prev.findIndex((item) => item.id === targetId)
@@ -713,10 +720,6 @@ export function FabPanelApp() {
       nextThemes.splice(sourceIndex + 1, 0, copiedTheme)
       return nextThemes
     })
-    setEditingCustomThemeId("")
-    setSelectedCustomThemeId(copiedTheme.id)
-    setTheme("custom")
-    setView("themes")
 
     toast.success(t("success_themeDuplicate"))
   }
@@ -853,12 +856,12 @@ export function FabPanelApp() {
         }
       `}</style>
       <div style={wrapperStyle}>
-        <div style={rootStyle}>
+        <div ref={panelRootRef} style={rootStyle}>
           <div style={contentStyle}>
             {view === "themes" && (
               <>
                 <h3 style={{ margin: 0, textAlign: "center" }}>
-                  {t("selectTheme")}
+                  {t("themeSettings")}
                 </h3>
                 <div style={themeSectionStyle}>
                   <div
@@ -989,7 +992,8 @@ export function FabPanelApp() {
                                 <img
                                   src={chrome.runtime.getURL("assets/add.svg")}
                                   alt="duplicate icon"
-                                  draggable="false"></img>
+                                  draggable="false"
+                                />
                               </button>
                               <button
                                 type="button"
@@ -1004,7 +1008,8 @@ export function FabPanelApp() {
                                     "assets/cancel.svg"
                                   )}
                                   alt="cancel icon"
-                                  draggable="false"></img>
+                                  draggable="false"
+                                />
                               </button>
                             </div>
                           ))}
@@ -1309,14 +1314,15 @@ export function FabPanelApp() {
                               <div
                                 style={{
                                   display: "flex",
-                                  gap: 8,
+                                  gap: 4,
                                   alignItems: "center"
                                 }}>
                                 <img
                                   src={chrome.runtime.getURL("assets/icon.png")}
                                   alt="app icon"
                                   draggable="false"
-                                  style={{ height: 16 }}></img>
+                                  style={{ height: 12 }}
+                                />
                                 <span style={{ padding: "4px 0px" }}>
                                   {t("autoFitColors")}
                                 </span>
@@ -1438,21 +1444,23 @@ export function FabPanelApp() {
                 />
               </div>
             )}
-            {view !== "custom" && isPremiumLoaded && !isPremiumUser && (
-              <FooterButton
-                className="pro-button"
-                onClick={onProClick}
-                style={{
-                  ...proButtonStyle,
-                  display: "flex",
-                  justifyContent: "center"
-                }}
-                icon="assets/gem_stone.gif"
-                iconAlt="pro icon"
-                iconGap={8}
-                label={t("upgradePro")}
-              />
-            )}
+            {view !== "custom" &&
+              isPremiumLoaded &&
+              !isPremiumUser && (
+                <FooterButton
+                  className="pro-button"
+                  onClick={onProClick}
+                  style={{
+                    ...proButtonStyle,
+                    display: "flex",
+                    justifyContent: "center"
+                  }}
+                  icon="assets/gem_stone.gif"
+                  iconAlt="pro icon"
+                  iconGap={8}
+                  label={t("upgradePro")}
+                />
+              )}
           </div>
         </div>
         {isThemeLoading && (

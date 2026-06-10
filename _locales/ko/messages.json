@@ -17,8 +17,8 @@
   "models": {
     "message": "모델"
   },
-  "selectTheme": {
-    "message": "테마 선택"
+  "themeSettings": {
+    "message": "테마 설정"
   },
   "addTheme": {
     "message": "테마 추가"
