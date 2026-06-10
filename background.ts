@@ -26,6 +26,22 @@ const isSupportedImageResponse = (response: Response) => {
   )
 }
 
+const sendAuthToken = (
+  sendResponse: (response?: unknown) => void,
+  interactive: boolean
+) => {
+  chrome.identity.getAuthToken({ interactive }, (token) => {
+    if (chrome.runtime.lastError || !token) {
+      sendResponse({
+        success: false,
+        error: chrome.runtime.lastError?.message || "Failed to get token"
+      })
+      return
+    }
+    sendResponse({ success: true, token })
+  })
+}
+
 chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
   if (message.type === "GET_GOOGLE_ACCESS_TOKEN") {
     const identityApi = chrome.identity
@@ -34,7 +50,7 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
       return false
     }
 
-    ;(async () => {
+    ; (async () => {
       identityApi.getAuthToken({ interactive: false }, (token) => {
         if (chrome.runtime.lastError) {
           sendResponse({
@@ -46,31 +62,12 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
 
         if (token) {
           identityApi.removeCachedAuthToken({ token }, () => {
-            identityApi.getAuthToken({ interactive: true }, (newToken) => {
-              if (chrome.runtime.lastError || !newToken) {
-                sendResponse({
-                  success: false,
-                  error:
-                    chrome.runtime.lastError?.message || "Failed to get token"
-                })
-                return
-              }
-              sendResponse({ success: true, token: newToken })
-            })
+            sendAuthToken(sendResponse, true)
           })
           return
         }
 
-        identityApi.getAuthToken({ interactive: true }, (newToken) => {
-          if (chrome.runtime.lastError || !newToken) {
-            sendResponse({
-              success: false,
-              error: chrome.runtime.lastError?.message || "Failed to get token"
-            })
-            return
-          }
-          sendResponse({ success: true, token: newToken })
-        })
+        sendAuthToken(sendResponse, true)
       })
     })()
 
@@ -78,7 +75,7 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
   }
 
   if (message.type === "FETCH_IMAGE_AS_DATA_URL") {
-    ;(async () => {
+    ; (async () => {
       if (!isAllowedImageSource(message.url)) {
         sendResponse({ success: false })
         return
@@ -138,7 +135,7 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
   }
 
   if (message.type === "OPEN_CHECKOUT") {
-    ;(async () => {
+    ; (async () => {
       try {
         if (
           typeof message.idToken !== "string" ||

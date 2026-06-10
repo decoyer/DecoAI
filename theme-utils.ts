@@ -33,12 +33,14 @@ type ThemeImportData = {
 
 export const CUSTOM_THEMES_STORAGE_KEY = "custom-themes"
 export const SELECTED_CUSTOM_THEME_ID_STORAGE_KEY = "selected-custom-theme-id"
+export const SELECTED_THEME_STORAGE_KEY = "selected-theme"
 export const FAB_HIDDEN_STORAGE_KEY = "fab-hidden"
 export const THEME_HIDDEN_STORAGE_KEY = "theme-hidden"
 export const MODEL_ENABLED_STORAGE_KEY = "model-enabled-map"
 export const CUSTOM_THEME_LAYOUT_STORAGE_KEY = "custom-theme-layout-map"
 export const THEME_LOADING_EVENT = "kasutamu:theme-loading"
 export const FAB_OPEN_EVENT = "kasutamu:fab-open"
+export const CUSTOM_THEME_PREVIEW_EVENT = "kasutamu:custom-theme-preview"
 export const THEME_FILE_APP_ID = "kasutamu"
 export const THEME_FILE_VERSION = 1
 export const IMAGE_HEADER_BYTES = 64 * 1024
@@ -175,7 +177,7 @@ export const sanitizeCustomBgOptions = (
   hideFooter: options?.hideFooter === true
 })
 
-export const renderStyledImageToCanvas = async (
+export const renderImageToCanvas = async (
   imageSource: string,
   options?: Partial<CustomBgOptions>,
   maxSize = 256
@@ -183,9 +185,7 @@ export const renderStyledImageToCanvas = async (
   const safeSource = sanitizeCustomBgUrl(imageSource)
   const safeOptions = sanitizeCustomBgOptions(options)
   const position = sanitizePosition(safeOptions.position)
-  const percentMatch = position.match(
-    /^(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%$/
-  )
+  const percentMatch = position.match(/^(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%$/)
   const positionX = percentMatch ? clampNumber(percentMatch[1], 0, 100, 50) : 50
   const positionY = percentMatch ? clampNumber(percentMatch[2], 0, 100, 50) : 50
 

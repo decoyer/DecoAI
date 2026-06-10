@@ -95,7 +95,7 @@ function IndexPopup() {
 
         <div style={contentStyle}>
           <h2 style={{ textAlign: "center" }}>{t("setting")}</h2>
-          <div style={{ ...rowStyle, justifyContent: "flex-start", gap: 8, paddingTop: 12 }}>
+          <div style={sectionHeaderStyle}>
             <img
               src={chrome.runtime.getURL("assets/visibility.svg")}
               alt="visibility settings"
@@ -120,7 +120,7 @@ function IndexPopup() {
             />
           </label>
 
-          <div style={{ ...rowStyle, justifyContent: "flex-start", gap: 8, paddingTop: 12 }}>
+          <div style={sectionHeaderStyle}>
             <img
               src={chrome.runtime.getURL("assets/smart_toy.svg")}
               alt="model settings"
@@ -198,6 +198,13 @@ const rowStyle = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center"
+} as const
+
+const sectionHeaderStyle = {
+  ...rowStyle,
+  justifyContent: "flex-start",
+  gap: 8,
+  paddingTop: 12
 } as const
 
 export default IndexPopup

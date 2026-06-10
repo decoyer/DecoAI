@@ -1,4 +1,21 @@
 import {
+  closestCenter,
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+  type Modifier
+} from "@dnd-kit/core"
+import {
+  arrayMove,
+  rectSortingStrategy,
+  SortableContext,
+  useSortable
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
+import {
   getAuth,
   GoogleAuthProvider,
   onAuthStateChanged,
@@ -8,10 +25,10 @@ import {
 import { Vibrant } from "node-vibrant/browser"
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
-  type DragEvent,
   type ReactNode
 } from "react"
 import { toast } from "react-toastify"
@@ -24,6 +41,8 @@ import {
   clearAnimatedBgUrl,
   createCustomTheme,
   createThemeExportBlob,
+  CUSTOM_THEME_PREVIEW_EVENT,
+  CUSTOM_THEMES_STORAGE_KEY,
   DEFAULT_CUSTOM_BG_OPTIONS,
   detectCurrentSite,
   FAB_OPEN_EVENT,
@@ -34,8 +53,10 @@ import {
   isAnimatedImage,
   MAX_FILE_BYTES,
   parseImportedThemes,
-  renderStyledImageToCanvas,
+  renderImageToCanvas,
   sanitizeCustomBgUrl,
+  SELECTED_CUSTOM_THEME_ID_STORAGE_KEY,
+  SELECTED_THEME_STORAGE_KEY,
   THEME_LOADING_EVENT,
   type CustomBgOptions,
   type CustomTheme,
@@ -157,6 +178,37 @@ const iconLabelStyle = {
   gap: 4,
   alignItems: "center"
 } as const
+const centeredHeadingStyle = { margin: 0, textAlign: "center" } as const
+const tabGridStyle = {
+  display: "grid",
+  gap: 8,
+  borderBottom: "2px solid #66cdaa"
+} as const
+const twoColumnGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, 1fr)",
+  gap: 8
+} as const
+const fieldLabelStyle = { padding: "4px 0px" } as const
+const inlineControlStyle = {
+  display: "flex",
+  gap: 4,
+  alignItems: "center"
+} as const
+const columnControlStyle = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 8
+} as const
+const textInputStyle = {
+  width: 125,
+  border: "none",
+  borderRadius: 8,
+  padding: "8px 4px",
+  textAlign: "center",
+  backgroundColor: "#4b5563",
+  color: "#fff"
+} as const
 const footerButtonStyle = {
   ...controlButtonStyle,
   display: "flex",
@@ -199,9 +251,124 @@ const wait = (ms: number) =>
     window.setTimeout(resolve, ms)
   })
 
+const restrictToParentElement: Modifier = ({
+  transform,
+  containerNodeRect,
+  draggingNodeRect
+}) => {
+  if (!containerNodeRect || !draggingNodeRect) return transform
+
+  const minX = containerNodeRect.left - draggingNodeRect.left
+  const maxX = containerNodeRect.right - draggingNodeRect.right
+  const minY = containerNodeRect.top - draggingNodeRect.top
+  const maxY = containerNodeRect.bottom - draggingNodeRect.bottom
+
+  return {
+    ...transform,
+    x: Math.min(Math.max(transform.x, minX), maxX),
+    y: Math.min(Math.max(transform.y, minY), maxY)
+  }
+}
+
+function CustomThemeSortableCard({
+  item,
+  theme,
+  selectedCustomThemeId,
+  draggingCustomThemeId,
+  onCustomCardClick,
+  onCustomCardDuplicateClick,
+  onCustomCardDeleteClick
+}: {
+  item: CustomTheme
+  theme: string
+  selectedCustomThemeId: string
+  draggingCustomThemeId: string
+  onCustomCardClick: (customThemeItem: CustomTheme) => void
+  onCustomCardDuplicateClick: (
+    event: React.MouseEvent<HTMLButtonElement>,
+    customThemeItem: CustomTheme
+  ) => void
+  onCustomCardDeleteClick: (
+    event: React.MouseEvent<HTMLButtonElement>,
+    customThemeItem: CustomTheme
+  ) => void
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: item.id })
+
+  return (
+    <div
+      ref={setNodeRef}
+      className="custom-theme-card-wrap"
+      style={{
+        position: "relative",
+        transform: transform ? CSS.Transform.toString(transform) : undefined,
+        transition,
+        zIndex: isDragging ? 2 : "auto"
+      }}>
+      <button
+        type="button"
+        className={`custom-theme-card${draggingCustomThemeId === item.id ? " is-dragging" : ""}`}
+        onClick={() => onCustomCardClick(item)}
+        {...attributes}
+        {...listeners}
+        style={{
+          touchAction: "none",
+          boxShadow:
+            theme === "custom" && selectedCustomThemeId === item.id
+              ? "inset 2px 2px 5px rgba(0, 0, 0, 0.2), 0 0 0 3px #66cdaa"
+              : "none"
+        }}>
+        <div
+          className="custom-theme-card__bg"
+          style={{
+            backgroundImage: item.bgUrl ? `url(${item.bgUrl})` : "none",
+            backgroundColor: !item.bgUrl ? item.bgColor : "transparent"
+          }}
+        />
+        <div className="custom-theme-card__title">{item.name}</div>
+      </button>
+      {!isDragging && (
+        <>
+          <button
+            type="button"
+            className="custom-theme-card__action custom-theme-card__duplicate"
+            aria-label="Duplicate"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => onCustomCardDuplicateClick(event, item)}>
+            <img
+              src={chrome.runtime.getURL("assets/add.svg")}
+              alt="duplicate icon"
+              draggable="false"
+            />
+          </button>
+          <button
+            type="button"
+            className="custom-theme-card__action custom-theme-card__delete"
+            aria-label={t("delete")}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => onCustomCardDeleteClick(event, item)}>
+            <img
+              src={chrome.runtime.getURL("assets/cancel.svg")}
+              alt="cancel icon"
+              draggable="false"
+            />
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
 export function FabPanelApp() {
   const panelRootRef = useRef<HTMLDivElement>(null)
-  const [theme, setTheme] = useStorage("selected-theme", "default")
+  const [theme, setTheme] = useStorage(SELECTED_THEME_STORAGE_KEY, "default")
   const [view, setView] = useState<ViewType>("themes")
   const [themeTab, setThemeTab] = useState<ThemeTabType>("preset")
   const [customEditTab, setCustomEditTab] =
@@ -210,11 +377,14 @@ export function FabPanelApp() {
   const importFileRef = useRef<HTMLInputElement>(null)
   const [customBg, setCustomBg] = useState("")
   const [customThemes, setCustomThemes] = useStorage<CustomTheme[]>(
-    { key: "custom-themes", instance: localStorageInstance },
+    { key: CUSTOM_THEMES_STORAGE_KEY, instance: localStorageInstance },
     []
   )
   const [selectedCustomThemeId, setSelectedCustomThemeId] = useStorage(
-    { key: "selected-custom-theme-id", instance: localStorageInstance },
+    {
+      key: SELECTED_CUSTOM_THEME_ID_STORAGE_KEY,
+      instance: localStorageInstance
+    },
     ""
   )
   const [editingCustomThemeId, setEditingCustomThemeId] = useState("")
@@ -229,10 +399,20 @@ export function FabPanelApp() {
   const [isThemeLoading, setIsThemeLoading] = useState(false)
   const [draggingCustomThemeId, setDraggingCustomThemeId] = useState("")
   const suppressCustomThemeClickIdRef = useRef("")
+  const previousViewRef = useRef<ViewType>(view)
   const canResetText = Boolean((localText || "").trim())
   const canResetAccent = Boolean((localAccent || "").trim())
   const selectedCustomTheme = customThemes.find(
     (item) => item.id === selectedCustomThemeId
+  )
+  const customThemeIds = useMemo(
+    () => customThemes.map((item) => item.id),
+    [customThemes]
+  )
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 }
+    })
   )
 
   useEffect(() => {
@@ -248,6 +428,13 @@ export function FabPanelApp() {
   useEffect(() => {
     if (theme === "custom") setThemeTab("custom")
   }, [theme])
+
+  useEffect(() => {
+    if (view === "custom" && previousViewRef.current !== "custom") {
+      setCustomEditTab("general")
+    }
+    previousViewRef.current = view
+  }, [view])
 
   useEffect(() => {
     const auth = getAuth(app)
@@ -269,9 +456,7 @@ export function FabPanelApp() {
   useEffect(() => {
     const onFabOpen = () => {
       void syncPremiumStatus()
-      setEditingCustomThemeId("")
       setThemeTab(theme === "custom" ? "custom" : "preset")
-      setView("themes")
     }
     window.addEventListener(FAB_OPEN_EVENT, onFabOpen)
     return () => window.removeEventListener(FAB_OPEN_EVENT, onFabOpen)
@@ -280,6 +465,30 @@ export function FabPanelApp() {
   const editingTheme = customThemes.find(
     (item) => item.id === editingCustomThemeId
   )
+
+  const getEditingThemeDraft = () => {
+    if (!editingTheme) return null
+
+    return {
+      ...editingTheme,
+      name: localCustomThemeName,
+      text: localText,
+      accent: localAccent,
+      bgUrl: customBg,
+      bgColor: localCustomBgColor,
+      bgOptions: localCustomBgOptions
+    }
+  }
+
+  const publishEditingThemePreview = (themeData: CustomTheme | null) => {
+    window.dispatchEvent(
+      new CustomEvent(CUSTOM_THEME_PREVIEW_EVENT, {
+        detail: themeData
+          ? { themeId: themeData.id, theme: themeData }
+          : null
+      })
+    )
+  }
 
   useEffect(() => {
     if (!editingTheme) return
@@ -334,27 +543,12 @@ export function FabPanelApp() {
     selectedCustomThemeId
   ])
 
-  const upsertEditingTheme = () => {
-    if (!editingCustomThemeId) return
-    setCustomThemes((prev) => {
-      return prev.map((item) =>
-        item.id === editingCustomThemeId
-          ? {
-            ...item,
-            name: localCustomThemeName,
-            text: localText,
-            accent: localAccent,
-            bgUrl: customBg,
-            bgColor: localCustomBgColor,
-            bgOptions: localCustomBgOptions
-          }
-          : item
-      )
-    })
-  }
-
-  useDebouncedEffect(upsertEditingTheme, 1, [
+  useEffect(() => {
+    if (!editingCustomThemeId || !editingTheme) return
+    publishEditingThemePreview(getEditingThemeDraft())
+  }, [
     editingCustomThemeId,
+    editingTheme,
     localCustomThemeName,
     localText,
     localAccent,
@@ -547,8 +741,12 @@ export function FabPanelApp() {
     setView("themes")
   }
   const onSaveClick = () => {
-    upsertEditingTheme()
-    setEditingCustomThemeId("")
+    const nextTheme = getEditingThemeDraft()
+    if (nextTheme) {
+      setCustomThemes((prev) =>
+        prev.map((item) => (item.id === nextTheme.id ? nextTheme : item))
+      )
+    }
     setView("themes")
     toast.success(t("success_themeSave"))
   }
@@ -572,7 +770,7 @@ export function FabPanelApp() {
     setIsThemeLoading(true)
     try {
       await wait(2000)
-      const canvas = await renderStyledImageToCanvas(customBg, localCustomBgOptions)
+      const canvas = await renderImageToCanvas(customBg, localCustomBgOptions)
       const palette = await Vibrant.from(canvas.toDataURL()).getPalette()
       const isDarkMode = isCurrentPageDarkMode()
       const nextAccent = palette.Vibrant?.hex || ""
@@ -598,6 +796,7 @@ export function FabPanelApp() {
       theme === "custom" && selectedCustomThemeId === customThemeItem.id
     if (isSelected) {
       setEditingCustomThemeId(customThemeItem.id)
+      setCustomEditTab("general")
       setView("custom")
       return
     }
@@ -607,51 +806,35 @@ export function FabPanelApp() {
     setView("themes")
   }
 
-  const onCustomCardDragStart = (
-    event: DragEvent<HTMLButtonElement>,
-    customThemeItem: CustomTheme
-  ) => {
-    setDraggingCustomThemeId(customThemeItem.id)
-    event.dataTransfer.effectAllowed = "move"
-    event.dataTransfer.setData("text/plain", customThemeItem.id)
+  const onCustomCardDragStart = (event: DragStartEvent) => {
+    setDraggingCustomThemeId(String(event.active.id))
   }
 
-  const onCustomCardDragOver = (
-    event: DragEvent<HTMLDivElement>,
-    customThemeItem: CustomTheme
-  ) => {
-    if (!draggingCustomThemeId || draggingCustomThemeId === customThemeItem.id)
-      return
-    event.preventDefault()
-    event.dataTransfer.dropEffect = "move"
+  const onCustomCardDragEnd = (event: DragEndEvent) => {
+    const activeId = String(event.active.id)
+    const overId = event.over ? String(event.over.id) : ""
+
+    if (activeId) {
+      suppressCustomThemeClickIdRef.current = activeId
+      window.setTimeout(() => {
+        if (suppressCustomThemeClickIdRef.current === activeId) {
+          suppressCustomThemeClickIdRef.current = ""
+        }
+      }, 0)
+    }
+    if (activeId && overId && activeId !== overId) {
+      setCustomThemes((prev) => {
+        const oldIndex = prev.findIndex((item) => item.id === activeId)
+        const newIndex = prev.findIndex((item) => item.id === overId)
+        if (oldIndex < 0 || newIndex < 0) return prev
+        return arrayMove(prev, oldIndex, newIndex)
+      })
+    }
+
+    setDraggingCustomThemeId("")
   }
 
-  const onCustomCardDrop = (
-    event: DragEvent<HTMLDivElement>,
-    customThemeItem: CustomTheme
-  ) => {
-    event.preventDefault()
-    event.stopPropagation()
-
-    const sourceId =
-      event.dataTransfer.getData("text/plain") || draggingCustomThemeId
-    const targetId = customThemeItem.id
-    if (!sourceId || sourceId === targetId) return
-
-    suppressCustomThemeClickIdRef.current = sourceId
-    setCustomThemes((prev) => {
-      const sourceIndex = prev.findIndex((item) => item.id === sourceId)
-      const targetIndex = prev.findIndex((item) => item.id === targetId)
-      if (sourceIndex < 0 || targetIndex < 0) return prev
-
-      const nextThemes = [...prev]
-      const [movedTheme] = nextThemes.splice(sourceIndex, 1)
-      nextThemes.splice(targetIndex, 0, movedTheme)
-      return nextThemes
-    })
-  }
-
-  const onCustomCardDragEnd = () => {
+  const onCustomCardDragCancel = () => {
     setDraggingCustomThemeId("")
   }
 
@@ -676,7 +859,10 @@ export function FabPanelApp() {
       setSelectedCustomThemeId("")
       setTheme("default")
     }
-    if (editingCustomThemeId === customThemeId) setEditingCustomThemeId("")
+    if (editingCustomThemeId === customThemeId) {
+      setEditingCustomThemeId("")
+      publishEditingThemePreview(null)
+    }
     setView("themes")
     toast.success(t("success_themeDelete"))
   }
@@ -748,11 +934,14 @@ export function FabPanelApp() {
         }
         .preset-theme-card__label {
           position: absolute;
+          display: flex;
+          justify-content: center;
+          align-items: center;
           left: 0;
           right: 0;
           bottom: 0;
+          height: 24px;
           z-index: 2;
-          padding: 4px;
           color: #fff;
           background-color: #0000008D;
           text-align: center;
@@ -796,10 +985,13 @@ export function FabPanelApp() {
         }
         .custom-theme-card__title {
           position: absolute;
+          display: flex;
+          justify-content: center;
+          align-items: center;
           left: 0;
           right: 0;
           bottom: 0;
-          padding: 4px;
+          height: 24px;
           background-color: #0000008D;
           color: #fff;
           text-align: center;
@@ -860,185 +1052,74 @@ export function FabPanelApp() {
           <div style={contentStyle}>
             {view === "themes" && (
               <>
-                <h3 style={{ margin: 0, textAlign: "center" }}>
-                  {t("themeSettings")}
-                </h3>
+                <h3 style={centeredHeadingStyle}>{t("themeSettings")}</h3>
                 <div style={themeSectionStyle}>
                   <div
                     style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      gap: 8,
-                      borderBottom: "2px solid #66cdaa"
+                      ...tabGridStyle,
+                      gridTemplateColumns: "1fr 1fr"
                     }}>
-                    <button
-                      type="button"
-                      onClick={() => setThemeTab("preset")}
-                      style={{
-                        ...controlButtonStyle,
-                        padding: "8px",
-                        borderRadius: "12px 12px 0 0",
-                        backgroundColor:
-                          themeTab === "preset" ? "#66cdaa" : "#4b5563"
-                      }}>
-                      {t("preset")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setThemeTab("custom")}
-                      style={{
-                        ...controlButtonStyle,
-                        padding: "8px",
-                        borderRadius: "12px 12px 0 0",
-                        backgroundColor:
-                          themeTab === "custom" ? "#66cdaa" : "#4b5563"
-                      }}>
-                      {t("custom")}
-                    </button>
+                    {(["preset", "custom"] as const).map((tab) => (
+                      <TabButton
+                        key={tab}
+                        active={themeTab === tab}
+                        label={t(tab)}
+                        onClick={() => setThemeTab(tab)}
+                      />
+                    ))}
                   </div>
                   <div className="content-scroll" style={themeGridScrollStyle}>
                     {themeTab === "preset" && (
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "repeat(2, 1fr)",
-                          gap: 8
-                        }}>
+                      <div style={twoColumnGridStyle}>
                         {THEME_LIST.map((item) => (
-                          <button
-                            className="preset-theme-card"
+                          <ThemeCard
                             key={item.key}
+                            active={theme === item.key}
+                            color={item.color}
+                            emoji={item.emoji}
+                            label={t(item.key)}
                             onClick={() => onThemeClick(item.key)}
-                            style={{
-                              ...btnStyle(item.color, theme === item.key),
-                              backgroundColor: "transparent"
-                            }}>
-                            <div
-                              className="preset-theme-card__bg"
-                              style={{
-                                background: `linear-gradient(135deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.04) 48%, rgba(0,0,0,0.12) 100%), ${item.color}`
-                              }}
-                            />
-                            <span
-                              className="preset-theme-card__emoji"
-                              aria-hidden="true">
-                              {item.emoji}
-                            </span>
-                            <span className="preset-theme-card__label">
-                              {t(item.key)}
-                            </span>
-                          </button>
+                          />
                         ))}
                       </div>
                     )}
                     {themeTab === "custom" && (
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 8
-                        }}>
-                        <div
-                          style={{
-                            display: "grid",
-                            gridTemplateColumns: "repeat(2, 1fr)",
-                            gap: 8
-                          }}>
-                          {customThemes.map((item) => (
-                            <div
-                              key={item.id}
-                              className="custom-theme-card-wrap"
-                              onDragOver={(e) => onCustomCardDragOver(e, item)}
-                              onDrop={(e) => onCustomCardDrop(e, item)}>
-                              <button
-                                type="button"
-                                draggable
-                                className={`custom-theme-card${draggingCustomThemeId === item.id ? " is-dragging" : ""}`}
-                                onClick={() => onCustomCardClick(item)}
-                                onDragStart={(e) =>
-                                  onCustomCardDragStart(e, item)
+                      <div style={twoColumnGridStyle}>
+                        <DndContext
+                          sensors={sensors}
+                          modifiers={[restrictToParentElement]}
+                          collisionDetection={closestCenter}
+                          onDragStart={onCustomCardDragStart}
+                          onDragEnd={onCustomCardDragEnd}
+                          onDragCancel={onCustomCardDragCancel}>
+                          <SortableContext
+                            items={customThemeIds}
+                            strategy={rectSortingStrategy}>
+                            {customThemes.map((item) => (
+                              <CustomThemeSortableCard
+                                key={item.id}
+                                item={item}
+                                theme={theme}
+                                selectedCustomThemeId={selectedCustomThemeId}
+                                draggingCustomThemeId={draggingCustomThemeId}
+                                onCustomCardClick={onCustomCardClick}
+                                onCustomCardDuplicateClick={
+                                  onCustomCardDuplicateClick
                                 }
-                                onDragEnd={onCustomCardDragEnd}
-                                style={{
-                                  boxShadow:
-                                    theme === "custom" &&
-                                      selectedCustomThemeId === item.id
-                                      ? "inset 2px 2px 5px rgba(0, 0, 0, 0.2), 0 0 0 3px #66cdaa"
-                                      : "none"
-                                }}>
-                                <div
-                                  className="custom-theme-card__bg"
-                                  style={{
-                                    backgroundImage: item.bgUrl
-                                      ? `url(${item.bgUrl})`
-                                      : "none",
-                                    backgroundColor: !item.bgUrl
-                                      ? item.bgColor
-                                      : "transparent"
-                                  }}
-                                />
-                                <div className="custom-theme-card__title">
-                                  {item.name}
-                                </div>
-                              </button>
-                              <button
-                                type="button"
-                                className="custom-theme-card__action custom-theme-card__duplicate"
-                                aria-label="Duplicate"
-                                draggable={false}
-                                onClick={(e) =>
-                                  onCustomCardDuplicateClick(e, item)
-                                }>
-                                <img
-                                  src={chrome.runtime.getURL("assets/add.svg")}
-                                  alt="duplicate icon"
-                                  draggable="false"
-                                />
-                              </button>
-                              <button
-                                type="button"
-                                className="custom-theme-card__action custom-theme-card__delete"
-                                aria-label={t("delete")}
-                                draggable={false}
-                                onClick={(e) =>
-                                  onCustomCardDeleteClick(e, item)
-                                }>
-                                <img
-                                  src={chrome.runtime.getURL(
-                                    "assets/cancel.svg"
-                                  )}
-                                  alt="cancel icon"
-                                  draggable="false"
-                                />
-                              </button>
-                            </div>
-                          ))}
-                          <button
-                            type="button"
-                            className="preset-theme-card add-theme-card"
+                                onCustomCardDeleteClick={
+                                  onCustomCardDeleteClick
+                                }
+                              />
+                            ))}
+                          </SortableContext>
+                          <ThemeCard
+                            className="add-theme-card"
+                            color="#374151"
+                            emoji="✏️"
+                            label={t("addTheme")}
                             onClick={onCustomPlusClick}
-                            style={{
-                              ...btnStyle("#374151", false),
-                              backgroundColor: "transparent",
-                              cursor: "pointer"
-                            }}>
-                            <div
-                              className="preset-theme-card__bg"
-                              style={{
-                                background:
-                                  "linear-gradient(135deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.04) 48%, rgba(0,0,0,0.12) 100%), #374151"
-                              }}
-                            />
-                            <span
-                              className="preset-theme-card__emoji"
-                              aria-hidden="true">
-                              ✏️
-                            </span>
-                            <span className="preset-theme-card__label">
-                              {t("addTheme")}
-                            </span>
-                          </button>
-                        </div>
+                          />
+                        </DndContext>
                       </div>
                     )}
                   </div>
@@ -1047,99 +1128,56 @@ export function FabPanelApp() {
             )}
             {view === "custom" && (
               <>
-                <h3 style={{ margin: 0, textAlign: "center" }}>
-                  {t("editTheme")}
-                </h3>
+                <h3 style={centeredHeadingStyle}>{t("editTheme")}</h3>
                 <div
                   style={{
+                    ...tabGridStyle,
                     marginTop: 20,
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr 1fr",
-                    gap: 8,
-                    borderBottom: "2px solid #66cdaa"
+                    gridTemplateColumns: "1fr 1fr 1fr"
                   }}>
-                  <button
-                    type="button"
-                    onClick={() => setCustomEditTab("general")}
-                    style={{
-                      ...controlButtonStyle,
-                      padding: "8px",
-                      borderRadius: "12px 12px 0 0",
-                      backgroundColor:
-                        customEditTab === "general" ? "#66cdaa" : "#4b5563"
-                    }}>
-                    {t("general")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCustomEditTab("background")}
-                    style={{
-                      ...controlButtonStyle,
-                      padding: "8px",
-                      borderRadius: "12px 12px 0 0",
-                      backgroundColor:
-                        customEditTab === "background" ? "#66cdaa" : "#4b5563"
-                    }}>
-                    {t("background")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCustomEditTab("layout")}
-                    style={{
-                      ...controlButtonStyle,
-                      padding: "8px",
-                      borderRadius: "12px 12px 0 0",
-                      backgroundColor:
-                        customEditTab === "layout" ? "#66cdaa" : "#4b5563"
-                    }}>
-                    {t("layout")}
-                  </button>
+                  {(["general", "background", "layout"] as const).map((tab) => (
+                    <TabButton
+                      key={tab}
+                      active={customEditTab === tab}
+                      label={t(tab)}
+                      onClick={() => setCustomEditTab(tab)}
+                    />
+                  ))}
                 </div>
                 <div className="content-scroll" style={editSectionScrollStyle}>
                   {customEditTab === "general" && (
                     <>
-                      <div style={cardStyle}>
-                        <label style={rowStyle}>
-                          <span style={{ padding: "4px 0px" }}>
-                            {t("name")}
-                          </span>
+                      <Card>
+                        <div style={rowStyle}>
+                          <span style={fieldLabelStyle}>{t("name")}</span>
                           <input
                             type="text"
                             value={localCustomThemeName}
-                            maxLength={10}
-                            onChange={(e) =>
-                              setLocalCustomThemeName(e.target.value)
-                            }
+                            spellCheck={false}
+                            autoComplete="off"
+                            onChange={(e) => {
+                              setLocalCustomThemeName(e.target.value.slice(0, 10))
+                            }}
+                            onKeyDown={(e) => e.stopPropagation()}
+                            onKeyUp={(e) => e.stopPropagation()}
                             style={{
-                              width: 125,
-                              border: "none",
-                              borderRadius: 8,
-                              padding: "8px 4px",
-                              textAlign: "center",
-                              backgroundColor: "#4b5563",
-                              color: "#fff"
+                              ...textInputStyle,
+                              userSelect: "text",
+                              WebkitUserSelect: "text"
                             }}
                           />
-                        </label>
-                      </div>
-                      <div style={cardStyle}>
-                        <CheckboxControl
-                          label={t("hideHeader")}
-                          checked={localCustomBgOptions.hideHeader}
-                          onChange={(c) =>
-                            updateCustomBgOption("hideHeader", c)
-                          }
-                        />
-                      </div>
-                      <div style={cardStyle}>
-                        <CheckboxControl
-                          label={t("hideFooter")}
-                          checked={localCustomBgOptions.hideFooter}
-                          onChange={(c) =>
-                            updateCustomBgOption("hideFooter", c)
-                          }
-                        />
-                      </div>
+                        </div>
+                      </Card>
+                      <CheckboxCard
+                        label={t("hideHeader")}
+                        checked={localCustomBgOptions.hideHeader}
+                        onChange={(c) => updateCustomBgOption("hideHeader", c)}
+                      />
+                      <CheckboxCard
+                        label={t("hideFooter")}
+                        checked={localCustomBgOptions.hideFooter}
+                        onChange={(c) => updateCustomBgOption("hideFooter", c)}
+                      />
                     </>
                   )}
                   {customEditTab === "background" && (
@@ -1151,9 +1189,9 @@ export function FabPanelApp() {
                         onReset={resetCustomBgColor}
                         canReset={Boolean(localCustomBgColor)}
                       />
-                      <div style={cardStyle}>
+                      <Card>
                         <label style={rowStyle}>
-                          <span style={{ padding: "4px 0px" }}>
+                          <span style={fieldLabelStyle}>
                             {t("backgroundImage")}
                           </span>
                           <div style={{ display: "flex", gap: 4 }}>
@@ -1184,16 +1222,11 @@ export function FabPanelApp() {
                             </button>
                           </div>
                         </label>
-                      </div>
+                      </Card>
                       {customBg && (
                         <>
-                          <div style={cardStyle}>
-                            <div
-                              style={{
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: 8
-                              }}>
+                          <Card>
+                            <div style={columnControlStyle}>
                               <RangeControl
                                 label={t("imagePositionX")}
                                 min={0}
@@ -1245,62 +1278,52 @@ export function FabPanelApp() {
                                 }
                               />
                             </div>
-                          </div>
-                          <div style={cardStyle}>
-                            <CheckboxControl
-                              label={t("scaleX")}
-                              checked={localCustomBgOptions.scaleX === -1}
-                              onChange={(c) =>
-                                updateCustomBgOption("scaleX", c ? -1 : 1)
-                              }
-                            />
-                          </div>
-                          <div style={cardStyle}>
-                            <RangeControl
-                              label={t("brightness")}
-                              min={0}
-                              max={5}
-                              step={0.1}
-                              value={localCustomBgOptions.brightness}
-                              onChange={(v) =>
-                                updateCustomBgOption("brightness", Number(v))
-                              }
-                              onReset={() =>
-                                updateCustomBgOption("brightness", 1)
-                              }
-                            />
-                          </div>
-                          <div style={cardStyle}>
-                            <RangeControl
-                              label={t("blur")}
-                              min={0}
-                              max={50}
-                              step={1}
-                              value={localCustomBgOptions.blur}
-                              onChange={(v) =>
-                                updateCustomBgOption("blur", Number(v))
-                              }
-                              onReset={() => updateCustomBgOption("blur", 0)}
-                            />
-                          </div>
-                          <div style={cardStyle}>
-                            <CheckboxControl
-                              label={t("invert")}
-                              checked={localCustomBgOptions.invert === 1}
-                              onChange={(c) =>
-                                updateCustomBgOption("invert", c ? 1 : 0)
-                              }
-                            />
-                          </div>
-                          <div style={cardStyle}>
-                            <CheckboxControl
-                              label={t("grayscale")}
-                              checked={localCustomBgOptions.grayscale === 1}
-                              onChange={(c) =>
-                                updateCustomBgOption("grayscale", c ? 1 : 0)
-                              }
-                            />
-                          </div>
+                          </Card>
+                          <CheckboxCard
+                            label={t("scaleX")}
+                            checked={localCustomBgOptions.scaleX === -1}
+                            onChange={(c) =>
+                              updateCustomBgOption("scaleX", c ? -1 : 1)
+                            }
+                          />
+                          <RangeCard
+                            label={t("brightness")}
+                            min={0}
+                            max={5}
+                            step={0.1}
+                            value={localCustomBgOptions.brightness}
+                            onChange={(v) =>
+                              updateCustomBgOption("brightness", Number(v))
+                            }
+                            onReset={() =>
+                              updateCustomBgOption("brightness", 1)
+                            }
+                          />
+                          <RangeCard
+                            label={t("blur")}
+                            min={0}
+                            max={50}
+                            step={1}
+                            value={localCustomBgOptions.blur}
+                            onChange={(v) =>
+                              updateCustomBgOption("blur", Number(v))
+                            }
+                            onReset={() => updateCustomBgOption("blur", 0)}
+                          />
+                          <CheckboxCard
+                            label={t("invert")}
+                            checked={localCustomBgOptions.invert === 1}
+                            onChange={(c) =>
+                              updateCustomBgOption("invert", c ? 1 : 0)
+                            }
+                          />
+                          <CheckboxCard
+                            label={t("grayscale")}
+                            checked={localCustomBgOptions.grayscale === 1}
+                            onChange={(c) =>
+                              updateCustomBgOption("grayscale", c ? 1 : 0)
+                            }
+                          />
                         </>
                       )}
                     </>
@@ -1309,21 +1332,16 @@ export function FabPanelApp() {
                     <>
                       {customBg && (
                         <>
-                          <div style={cardStyle}>
+                          <Card>
                             <label style={rowStyle}>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  gap: 4,
-                                  alignItems: "center"
-                                }}>
+                              <div style={inlineControlStyle}>
                                 <img
                                   src={chrome.runtime.getURL("assets/icon.png")}
                                   alt="app icon"
                                   draggable="false"
                                   style={{ height: 12 }}
                                 />
-                                <span style={{ padding: "4px 0px" }}>
+                                <span style={fieldLabelStyle}>
                                   {t("autoFitColors")}
                                 </span>
                               </div>
@@ -1334,7 +1352,7 @@ export function FabPanelApp() {
                                 {t("apply")}
                               </button>
                             </label>
-                          </div>
+                          </Card>
                         </>
                       )}
                       <ColorSettingCard
@@ -1351,32 +1369,28 @@ export function FabPanelApp() {
                         onReset={resetCustomAccent}
                         canReset={canResetAccent}
                       />
-                      <div style={cardStyle}>
-                        <RangeControl
-                          label={t("opacity")}
-                          min={0}
-                          max={1}
-                          step={0.1}
-                          value={localCustomBgOptions.opacity}
-                          onChange={(v) =>
-                            updateCustomBgOption("opacity", Number(v))
-                          }
-                          onReset={() => updateCustomBgOption("opacity", 0.8)}
-                        />
-                      </div>
-                      <div style={cardStyle}>
-                        <RangeControl
-                          label={t("glassBlur")}
-                          min={0}
-                          max={50}
-                          step={1}
-                          value={localCustomBgOptions.glassBlur}
-                          onChange={(v) =>
-                            updateCustomBgOption("glassBlur", Number(v))
-                          }
-                          onReset={() => updateCustomBgOption("glassBlur", 10)}
-                        />
-                      </div>
+                      <RangeCard
+                        label={t("opacity")}
+                        min={0}
+                        max={1}
+                        step={0.1}
+                        value={localCustomBgOptions.opacity}
+                        onChange={(v) =>
+                          updateCustomBgOption("opacity", Number(v))
+                        }
+                        onReset={() => updateCustomBgOption("opacity", 0.8)}
+                      />
+                      <RangeCard
+                        label={t("glassBlur")}
+                        min={0}
+                        max={50}
+                        step={1}
+                        value={localCustomBgOptions.glassBlur}
+                        onChange={(v) =>
+                          updateCustomBgOption("glassBlur", Number(v))
+                        }
+                        onReset={() => updateCustomBgOption("glassBlur", 10)}
+                      />
                     </>
                   )}
                 </div>
@@ -1444,23 +1458,21 @@ export function FabPanelApp() {
                 />
               </div>
             )}
-            {view !== "custom" &&
-              isPremiumLoaded &&
-              !isPremiumUser && (
-                <FooterButton
-                  className="pro-button"
-                  onClick={onProClick}
-                  style={{
-                    ...proButtonStyle,
-                    display: "flex",
-                    justifyContent: "center"
-                  }}
-                  icon="assets/gem_stone.gif"
-                  iconAlt="pro icon"
-                  iconGap={8}
-                  label={t("upgradePro")}
-                />
-              )}
+            {view !== "custom" && isPremiumLoaded && !isPremiumUser && (
+              <FooterButton
+                className="pro-button"
+                onClick={onProClick}
+                style={{
+                  ...proButtonStyle,
+                  display: "flex",
+                  justifyContent: "center"
+                }}
+                icon="assets/gem_stone.gif"
+                iconAlt="pro icon"
+                iconGap={8}
+                label={t("upgradePro")}
+              />
+            )}
           </div>
         </div>
         {isThemeLoading && (
@@ -1485,7 +1497,10 @@ export function FabPanelApp() {
   )
 }
 
-const btnStyle = (color: string, active: boolean) => ({
+const themeCardBg = (color: string) =>
+  `linear-gradient(135deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.04) 48%, rgba(0,0,0,0.12) 100%), ${color}`
+
+const themeCardStyle = (color: string, active: boolean) => ({
   height: 100,
   backgroundColor: color,
   border: "none",
@@ -1497,8 +1512,85 @@ const btnStyle = (color: string, active: boolean) => ({
   transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
 })
 
+function TabButton({
+  active,
+  label,
+  onClick
+}: {
+  active: boolean
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        ...controlButtonStyle,
+        padding: "8px",
+        borderRadius: "12px 12px 0 0",
+        backgroundColor: active ? "#66cdaa" : "#4b5563"
+      }}>
+      {label}
+    </button>
+  )
+}
+
+function ThemeCard({
+  active = false,
+  className,
+  color,
+  emoji,
+  label,
+  onClick
+}: {
+  active?: boolean
+  className?: string
+  color: string
+  emoji: string
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      className={`preset-theme-card${className ? ` ${className}` : ""}`}
+      onClick={onClick}
+      style={{
+        ...themeCardStyle(color, active),
+        backgroundColor: "transparent",
+        cursor: "pointer"
+      }}>
+      <div
+        className="preset-theme-card__bg"
+        style={{ background: themeCardBg(color) }}
+      />
+      <span className="preset-theme-card__emoji" aria-hidden="true">
+        {emoji}
+      </span>
+      <span className="preset-theme-card__label">{label}</span>
+    </button>
+  )
+}
+
 function Card({ children }: { children: ReactNode }) {
   return <div style={cardStyle}>{children}</div>
+}
+
+function RangeCard(props: RangeControlProps) {
+  return (
+    <Card>
+      <RangeControl {...props} />
+    </Card>
+  )
+}
+
+function CheckboxCard(props: CheckboxControlProps) {
+  return (
+    <Card>
+      <CheckboxControl {...props} />
+    </Card>
+  )
 }
 
 function FooterButton({
@@ -1547,8 +1639,8 @@ function ColorSettingCard({
   return (
     <Card>
       <label style={rowStyle}>
-        <span style={{ padding: "4px 0px" }}>{label}</span>
-        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+        <span style={fieldLabelStyle}>{label}</span>
+        <div style={inlineControlStyle}>
           <input
             type="color"
             value={value || "#000000"}
@@ -1581,27 +1673,18 @@ function RangeControl({
   disabled = false,
   onChange,
   onReset
-}: {
-  label: string
-  min: number
-  max: number
-  step: number
-  value: number
-  disabled?: boolean
-  onChange: (value: string) => void
-  onReset?: () => void
-}) {
+}: RangeControlProps) {
   return (
-    <label style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+    <label style={columnControlStyle}>
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center"
         }}>
-        <span style={{ padding: "4px 0px" }}>{label}</span>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <span style={{ padding: "4px 0px" }}>{value}</span>
+        <span style={fieldLabelStyle}>{label}</span>
+        <div style={{ ...inlineControlStyle, gap: 8 }}>
+          <span style={fieldLabelStyle}>{value}</span>
           {onReset && (
             <button
               type="button"
@@ -1630,20 +1713,26 @@ function RangeControl({
   )
 }
 
+type RangeControlProps = {
+  label: string
+  min: number
+  max: number
+  step: number
+  value: number
+  disabled?: boolean
+  onChange: (value: string) => void
+  onReset?: () => void
+}
+
 function CheckboxControl({
   label,
   checked,
   disabled = false,
   onChange
-}: {
-  label: string
-  checked: boolean
-  disabled?: boolean
-  onChange: (checked: boolean) => void
-}) {
+}: CheckboxControlProps) {
   return (
     <label style={rowStyle}>
-      <span style={{ padding: "4px 0px" }}>{label}</span>
+      <span style={fieldLabelStyle}>{label}</span>
       <input
         type="checkbox"
         checked={checked}
@@ -1660,13 +1749,9 @@ function CheckboxControl({
   )
 }
 
-function useDebouncedEffect(
-  effect: () => void,
-  delay: number,
-  deps: unknown[]
-) {
-  useEffect(() => {
-    const timer = setTimeout(effect, delay)
-    return () => clearTimeout(timer)
-  }, deps)
+type CheckboxControlProps = {
+  label: string
+  checked: boolean
+  disabled?: boolean
+  onChange: (checked: boolean) => void
 }

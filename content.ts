@@ -12,6 +12,7 @@ import { FabPanelApp } from "./panel"
 import {
   clampNumber,
   clearAnimatedBgUrl,
+  CUSTOM_THEME_PREVIEW_EVENT,
   CUSTOM_THEMES_STORAGE_KEY,
   detectCurrentSite,
   FAB_OPEN_EVENT,
@@ -22,6 +23,7 @@ import {
   sanitizeCustomBgUrl,
   sanitizePosition,
   SELECTED_CUSTOM_THEME_ID_STORAGE_KEY,
+  SELECTED_THEME_STORAGE_KEY,
   THEME_HIDDEN_STORAGE_KEY,
   THEME_LOADING_EVENT,
   type CustomBgOptions,
@@ -109,6 +111,7 @@ let fabThemeRoot: Root | null = null
 let toastMounted = false
 let cachedThemeKey: string | null = null
 let cachedThemeData: ThemeConfig | null = null
+let customThemePreview: { themeId: string; theme: CustomTheme } | null = null
 
 const EMPTY_THEME: ThemeConfig = {
   bgUrl: "",
@@ -156,6 +159,20 @@ const CUSTOM_THEME_WATCH_STORAGE_KEYS = [
 ]
 const PREMIUM_CACHE_MS = 5 * 60 * 1000
 let premiumCache: { checkedAt: number; value: boolean } | null = null
+
+const appendToPage = (element: HTMLElement) => {
+  ; (document.head || document.documentElement).appendChild(element)
+}
+
+const getOrCreateStyle = (id: string) => {
+  let style = document.getElementById(id) as HTMLStyleElement | null
+  if (!style) {
+    style = document.createElement("style")
+    style.id = id
+    appendToPage(style)
+  }
+  return style
+}
 
 const emitThemeLoading = (loading: boolean) => {
   window.dispatchEvent(
@@ -216,27 +233,17 @@ const whiteListUrl = (site: SiteType) => {
   }
 }
 
-const getThemeStyle = () => {
-  let style = document.getElementById(THEME_STYLE_ID) as HTMLStyleElement | null
-  if (!style) {
-    style = document.createElement("style")
-    style.id = THEME_STYLE_ID
-      ; (document.head || document.documentElement).appendChild(style)
-  }
-  return style
-}
+const getThemeStyle = () => getOrCreateStyle(THEME_STYLE_ID)
 
 const getFABStyle = () => {
-  let style = document.getElementById(FAB_STYLE_ID) as HTMLStyleElement | null
-  if (!style) {
-    style = document.createElement("style")
-    style.id = FAB_STYLE_ID
+  const style = getOrCreateStyle(FAB_STYLE_ID)
+  if (!style.textContent) {
     style.textContent = `
       .${FAB_ROOT_CLASS} {
         position: fixed;
         right: 48px;
         bottom: 78px;
-        z-index: 1;
+        z-index: 2;
         display: flex;
         flex-direction: column;
         align-items: flex-end;
@@ -269,7 +276,7 @@ const getFABStyle = () => {
 
       .${FAB_ACTION_CLASS} {
         position: relative;
-        z-index: 1;
+        z-index: 2;
         display: flex;
         flex-direction: row-reverse;
         align-items: center;
@@ -296,7 +303,7 @@ const getFABStyle = () => {
 
       .${FAB_THEME_PANEL_CLASS} {
         position: relative;
-        z-index: 1;
+        z-index: 2;
         display: block;
         overflow: hidden;
         background-color: rgba(24, 24, 24, var(--kasutamu-surface-opacity, 0.8));
@@ -317,7 +324,6 @@ const getFABStyle = () => {
         opacity: 1;
       }
     `
-      ; (document.head || document.documentElement).appendChild(style)
   }
   return style
 }
@@ -333,7 +339,7 @@ const mountToastContainer = () => {
     link.id = TOAST_STYLE_ID
     link.rel = "stylesheet"
     link.href = chrome.runtime.getURL("assets/ReactToastify.css")
-      ; (document.head || document.documentElement).appendChild(link)
+    appendToPage(link)
   }
 
   const root = document.createElement("div")
@@ -424,6 +430,13 @@ const getSelectedCustomTheme = async (): Promise<{
 
   if (!Array.isArray(customThemes) || !selectedCustomThemeId) {
     return { isPremium: false, theme: null }
+  }
+
+  if (
+    customThemePreview &&
+    customThemePreview.themeId === selectedCustomThemeId
+  ) {
+    return { isPremium: false, theme: customThemePreview.theme }
   }
 
   let selectedTheme =
@@ -807,7 +820,7 @@ const applyTheme = async (requestId: number) => {
   setRouteScopedUiVisibility(currentSite)
 
   const [currentTheme, modelEnabled] = await Promise.all([
-    storage.get<string>("selected-theme"),
+    storage.get<string>(SELECTED_THEME_STORAGE_KEY),
     storage.get<ModelEnabledMap>(MODEL_ENABLED_STORAGE_KEY)
   ])
 
@@ -891,12 +904,12 @@ const watchLocationChange = () => {
 }
 
 storage.watch({
-  "selected-theme": () => {
+  [SELECTED_THEME_STORAGE_KEY]: () => {
     invalidateThemeCache()
     scheduleApplyTheme()
   },
-  "model-enabled-map": () => scheduleApplyTheme(),
-  "theme-hidden": () => setThemeVisibility()
+  [MODEL_ENABLED_STORAGE_KEY]: () => scheduleApplyTheme(),
+  [THEME_HIDDEN_STORAGE_KEY]: () => setThemeVisibility()
 })
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
@@ -904,6 +917,15 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     invalidateThemeCache()
     scheduleApplyTheme()
   }
+})
+
+window.addEventListener(CUSTOM_THEME_PREVIEW_EVENT, (event) => {
+  const customEvent = event as CustomEvent<{
+    themeId: string
+    theme: CustomTheme
+  } | null>
+  customThemePreview = customEvent.detail
+  scheduleApplyTheme()
 })
 
 watchLocationChange()
