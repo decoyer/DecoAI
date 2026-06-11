@@ -53,6 +53,7 @@ import {
   isAnimatedImage,
   MAX_FILE_BYTES,
   parseImportedThemes,
+  PREMIUM_THEME_BACKUP_STORAGE_KEY,
   renderImageToCanvas,
   sanitizeCustomBgUrl,
   SELECTED_CUSTOM_THEME_ID_STORAGE_KEY,
@@ -87,6 +88,11 @@ const SITE_DARK_SELECTORS: Record<SiteType, string> = {
 type ViewType = "themes" | "custom"
 type ThemeTabType = "preset" | "custom"
 type CustomEditTabType = "general" | "background" | "layout"
+type PremiumStatus = "unknown" | "free" | "premium"
+type PremiumThemeBackup = {
+  customThemes: CustomTheme[]
+  selectedCustomThemeId: string
+}
 
 const wrapperStyle = { position: "relative", width: 250, height: 500 } as const
 const rootStyle = {
@@ -223,7 +229,7 @@ const downloadCustomTheme = (themeData: CustomTheme) => {
   const url = URL.createObjectURL(blob)
   const link = document.createElement("a")
   link.href = url
-  link.download = `${themeData.name}_kasutamu-theme.json`
+  link.download = `decoai-theme-${themeData.name}.json`
   link.click()
   URL.revokeObjectURL(url)
 }
@@ -387,21 +393,32 @@ export function FabPanelApp() {
     },
     ""
   )
+  const [premiumThemeBackup, setPremiumThemeBackup] =
+    useStorage<PremiumThemeBackup | null>(
+      {
+        key: PREMIUM_THEME_BACKUP_STORAGE_KEY,
+        instance: localStorageInstance
+      },
+      null
+    )
   const [editingCustomThemeId, setEditingCustomThemeId] = useState("")
-  const [isPremiumUser, setIsPremiumUser] = useState(false)
-  const [isPremiumLoaded, setIsPremiumLoaded] = useState(false)
+  const [premiumStatus, setPremiumStatus] =
+    useState<PremiumStatus>("unknown")
   const [localCustomBgOptions, setLocalCustomBgOptions] =
     useState<CustomBgOptions>(DEFAULT_CUSTOM_BG_OPTIONS)
   const [localText, setLocalText] = useState("")
   const [localAccent, setLocalAccent] = useState("")
   const [localCustomThemeName, setLocalCustomThemeName] = useState("")
   const [localCustomBgColor, setLocalCustomBgColor] = useState("")
-  const [isThemeLoading, setIsThemeLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
   const [draggingCustomThemeId, setDraggingCustomThemeId] = useState("")
   const suppressCustomThemeClickIdRef = useRef("")
   const previousViewRef = useRef<ViewType>(view)
   const canResetText = Boolean((localText || "").trim())
   const canResetAccent = Boolean((localAccent || "").trim())
+  const isPremiumChecked = premiumStatus !== "unknown"
+  const isPremiumUser = premiumStatus === "premium"
+  const isFreeUser = premiumStatus === "free"
   const selectedCustomTheme = customThemes.find(
     (item) => item.id === selectedCustomThemeId
   )
@@ -447,7 +464,7 @@ export function FabPanelApp() {
   useEffect(() => {
     const onThemeLoading = (event: Event) => {
       const customEvent = event as CustomEvent<{ loading?: boolean }>
-      setIsThemeLoading(customEvent.detail?.loading === true)
+      setIsLoading(customEvent.detail?.loading === true)
     }
     window.addEventListener(THEME_LOADING_EVENT, onThemeLoading)
     return () => window.removeEventListener(THEME_LOADING_EVENT, onThemeLoading)
@@ -506,6 +523,36 @@ export function FabPanelApp() {
     value: string | number | boolean
   ) => setLocalCustomBgOptions((prev) => ({ ...prev, [key]: value }))
 
+  const hasPremiumLockedThemes = (themes: CustomTheme[]) =>
+    themes.length > 1 || themes.some((item) => isAnimatedBgUrl(item.bgUrl))
+
+  const backupPremiumThemes = () => {
+    const nextSelectedThemeId = selectedCustomThemeId || customThemes[0]?.id || ""
+    if (
+      premiumThemeBackup ||
+      !nextSelectedThemeId ||
+      !hasPremiumLockedThemes(customThemes)
+    ) {
+      return
+    }
+
+    void setPremiumThemeBackup({
+      customThemes,
+      selectedCustomThemeId: nextSelectedThemeId
+    })
+  }
+
+  const restorePremiumThemes = () => {
+    if (!premiumThemeBackup?.customThemes.length) return
+
+    setCustomThemes(premiumThemeBackup.customThemes)
+    if (premiumThemeBackup.selectedCustomThemeId) {
+      setSelectedCustomThemeId(premiumThemeBackup.selectedCustomThemeId)
+      if (theme === "custom") setTheme("custom")
+    }
+    void setPremiumThemeBackup(null)
+  }
+
   const normalizeCustomThemes = () => {
     if (!customThemes.length) return
 
@@ -531,15 +578,29 @@ export function FabPanelApp() {
   }
 
   useEffect(() => {
-    if (!isPremiumLoaded || isPremiumUser || !customThemes.length) return
-    normalizeCustomThemes()
+    if (!customThemes.length) return
+
+    if (isPremiumUser) {
+      restorePremiumThemes()
+      return
+    }
+
+    if (hasPremiumLockedThemes(customThemes)) {
+      backupPremiumThemes()
+      normalizeCustomThemes()
+      return
+    }
+
+    if (isFreeUser && premiumThemeBackup) {
+      void setPremiumThemeBackup(null)
+    }
   }, [
     customBg,
     customThemes,
     editingCustomThemeId,
-    isPremiumLoaded,
+    isFreeUser,
     isPremiumUser,
-    selectedCustomTheme,
+    premiumThemeBackup,
     selectedCustomThemeId
   ])
 
@@ -611,15 +672,15 @@ export function FabPanelApp() {
       const auth = getAuth(app)
       const user = userArg ?? auth.currentUser
       if (!user) {
-        setIsPremiumUser(false)
+        setPremiumStatus("unknown")
         return
       }
       const tokenResult = await user.getIdTokenResult(true)
-      setIsPremiumUser(tokenResult.claims.premium === true)
+      setPremiumStatus(
+        tokenResult.claims.premium === true ? "premium" : "free"
+      )
     } catch {
-      setIsPremiumUser(false)
-    } finally {
-      setIsPremiumLoaded(true)
+      setPremiumStatus("unknown")
     }
   }
 
@@ -628,19 +689,36 @@ export function FabPanelApp() {
     const tokenResult = await user.getIdTokenResult(true)
     const premium = tokenResult.claims.premium === true
 
-    setIsPremiumUser(premium)
-    setIsPremiumLoaded(true)
+    setPremiumStatus(premium ? "premium" : "free")
 
     return premium
   }
 
+  const requirePremiumAccess = async (
+    messageKey: "pro_themePreset" | "pro_animatedImage" | "pro_autoFitColors"
+  ) => {
+    setIsLoading(true)
+    try {
+      const premium = await refreshPremiumStatus()
+      if (!premium) toast.error(t(messageKey))
+      return premium
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const onProClick = async () => {
+    setIsLoading(true)
     try {
       const user = await getSignedInUser()
+      const isPremium = await refreshPremiumStatus()
+      if (isPremium) return
       const idToken = await user.getIdToken()
       await openCheckout(idToken)
     } catch (e) {
       toast.error(t("error_checkoutFail"))
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -652,8 +730,10 @@ export function FabPanelApp() {
   }
 
   const onImportClick = async () => {
-    if (customThemes.length > 0 && !(await refreshPremiumStatus())) {
-      toast.error(t("pro_themePreset"))
+    if (
+      customThemes.length > 0 &&
+      !(await requirePremiumAccess("pro_themePreset"))
+    ) {
       return
     }
     importFileRef.current?.click()
@@ -681,12 +761,16 @@ export function FabPanelApp() {
       clearFileInput(importFileRef.current)
       return
     }
-    const premium = await refreshPremiumStatus()
-    if (!premium && hasAnimatedBackground(imported)) {
-      toast.error(t("pro_animatedImage"))
+    const hasAnimatedImportedTheme = hasAnimatedBackground(imported)
+    if (
+      hasAnimatedImportedTheme &&
+      !(await requirePremiumAccess("pro_animatedImage"))
+    ) {
       clearFileInput(importFileRef.current)
       return
     }
+
+    const premium = await refreshPremiumStatus()
 
     if (premium) {
       setCustomThemes((prev) => [...prev, ...imported])
@@ -713,8 +797,7 @@ export function FabPanelApp() {
       return
     }
     const animated = await isAnimatedImage(file)
-    if (animated && !(await refreshPremiumStatus())) {
-      toast.error(t("pro_animatedImage"))
+    if (animated && !(await requirePremiumAccess("pro_animatedImage"))) {
       clearFileInput(bgUploadRef.current)
       return
     }
@@ -760,14 +843,13 @@ export function FabPanelApp() {
     setLocalCustomBgColor("")
   }
   const onAutoFitColorsClick = async () => {
-    if (!(await refreshPremiumStatus())) {
-      toast.error(t("pro_autoFitColors"))
+    if (!(await requirePremiumAccess("pro_autoFitColors"))) {
       return
     }
 
     if (!customBg) return
 
-    setIsThemeLoading(true)
+    setIsLoading(true)
     try {
       await wait(2000)
       const canvas = await renderImageToCanvas(customBg, localCustomBgOptions)
@@ -783,7 +865,7 @@ export function FabPanelApp() {
 
       toast.success(t("success_autoFitColors"))
     } finally {
-      setIsThemeLoading(false)
+      setIsLoading(false)
     }
   }
 
@@ -839,8 +921,10 @@ export function FabPanelApp() {
   }
 
   const onCustomPlusClick = async () => {
-    if (customThemes.length > 0 && !(await refreshPremiumStatus())) {
-      toast.error(t("pro_themePreset"))
+    if (
+      customThemes.length > 0 &&
+      !(await requirePremiumAccess("pro_themePreset"))
+    ) {
       return
     }
     const created = createCustomTheme(
@@ -887,8 +971,10 @@ export function FabPanelApp() {
     event.preventDefault()
     event.stopPropagation()
 
-    if (customThemes.length > 0 && !(await refreshPremiumStatus())) {
-      toast.error(t("pro_themePreset"))
+    if (
+      customThemes.length > 0 &&
+      !(await requirePremiumAccess("pro_themePreset"))
+    ) {
       return
     }
 
@@ -1149,7 +1235,7 @@ export function FabPanelApp() {
                     <>
                       <Card>
                         <div style={rowStyle}>
-                          <span style={fieldLabelStyle}>{t("name")}</span>
+                          <span style={fieldLabelStyle}>{t("title")}</span>
                           <input
                             type="text"
                             value={localCustomThemeName}
@@ -1458,7 +1544,7 @@ export function FabPanelApp() {
                 />
               </div>
             )}
-            {view !== "custom" && isPremiumLoaded && !isPremiumUser && (
+            {view !== "custom" && !isPremiumUser && (
               <FooterButton
                 className="pro-button"
                 onClick={onProClick}
@@ -1475,7 +1561,7 @@ export function FabPanelApp() {
             )}
           </div>
         </div>
-        {isThemeLoading && (
+        {isLoading && (
           <div
             style={{
               position: "absolute",

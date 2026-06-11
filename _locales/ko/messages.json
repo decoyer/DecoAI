@@ -1,9 +1,9 @@
 {
-  "appName": {
-    "message": "kasutamu"
-  },
   "setting": {
     "message": "설정"
+  },
+  "account": {
+    "message": "계정"
   },
   "general": {
     "message": "일반"
@@ -50,8 +50,23 @@
   "delete": {
     "message": "삭제"
   },
+  "profile": {
+    "message": "프로필"
+  },
+  "email": {
+    "message": "이메일"
+  },
   "name": {
     "message": "이름"
+  },
+  "subscription": {
+    "message": "구독"
+  },
+  "plan": {
+    "message": "플랜"
+  },
+  "status": {
+    "message": "상태"
   },
   "text": {
     "message": "글자색"
@@ -103,6 +118,9 @@
   },
   "layout": {
     "message": "레이아웃"
+  },
+  "title": {
+    "message": "제목"
   },
   "hideHeader": {
     "message": "헤더 숨기기"

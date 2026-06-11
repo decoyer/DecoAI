@@ -1,5 +1,14 @@
 import { useStorage } from "@plasmohq/storage/hook"
+import {
+  getAuth,
+  GoogleAuthProvider,
+  onAuthStateChanged,
+  signInWithCredential,
+  type User
+} from "firebase/auth"
+import { useEffect, useState } from "react"
 
+import { app } from "./firebase"
 import {
   DEFAULT_MODEL_ENABLED,
   MODEL_ENABLED_STORAGE_KEY,
@@ -17,6 +26,50 @@ const MODEL_LIST = [
   { key: "grok", icon: "assets/grok.ico", label: "Grok" }
 ] as const
 
+type PremiumStatus = "unknown" | "free" | "premium"
+type PopupTab = "settings" | "account"
+
+const getGoogleAccessToken = () =>
+  new Promise<string>((resolve, reject) => {
+    chrome.runtime.sendMessage(
+      { type: "GET_GOOGLE_ACCESS_TOKEN" },
+      (response?: { success?: boolean; token?: string; error?: string }) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message))
+          return
+        }
+        if (!response?.success || !response.token) {
+          reject(
+            new Error(response?.error || "Failed to get Google access token")
+          )
+          return
+        }
+        resolve(response.token)
+      }
+    )
+  })
+
+const signInCurrentUser = async () => {
+  const auth = getAuth(app)
+  if (auth.currentUser) return auth.currentUser
+
+  const accessToken = await getGoogleAccessToken()
+  const credential = GoogleAuthProvider.credential(null, accessToken)
+  const result = await signInWithCredential(auth, credential)
+  return result.user
+}
+
+const getPremiumStatusLabel = (status: PremiumStatus) => {
+  switch (status) {
+    case "premium":
+      return "Pro"
+    case "free":
+      return "Free"
+    default:
+      return "-"
+  }
+}
+
 function IndexPopup() {
   const [themeHidden, setThemeHidden] = useStorage<boolean>(
     THEME_HIDDEN_STORAGE_KEY,
@@ -26,9 +79,87 @@ function IndexPopup() {
     MODEL_ENABLED_STORAGE_KEY,
     DEFAULT_MODEL_ENABLED
   )
+  const [authLoading, setAuthLoading] = useState(true)
+  const [signingIn, setSigningIn] = useState(false)
+  const [currentUser, setCurrentUser] = useState<User | null>(null)
+  const [premiumStatus, setPremiumStatus] = useState<PremiumStatus>("unknown")
+  const [activeTab, setActiveTab] = useState<PopupTab>("settings")
   const version = chrome.runtime.getManifest().version
   const setModelChecked = (key: ModelKey, checked: boolean) =>
     setModelEnabled({ ...modelEnabled, [key]: checked })
+
+  useEffect(() => {
+    void refreshAccountState()
+  }, [])
+
+  useEffect(() => {
+    const auth = getAuth(app)
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user)
+      setAuthLoading(false)
+
+      if (!user) {
+        setPremiumStatus("unknown")
+        return
+      }
+
+      void user
+        .getIdTokenResult(true)
+        .then((tokenResult) => {
+          setPremiumStatus(
+            tokenResult.claims.premium === true ? "premium" : "free"
+          )
+        })
+        .catch(() => {
+          setPremiumStatus("unknown")
+        })
+    })
+
+    return unsubscribe
+  }, [])
+
+  const refreshAccountState = async () => {
+    const auth = getAuth(app)
+    const user = auth.currentUser
+    if (!user) {
+      setCurrentUser(null)
+      setPremiumStatus("unknown")
+      return
+    }
+
+    setAuthLoading(true)
+    try {
+      await user.reload()
+      const refreshedUser = auth.currentUser
+      setCurrentUser(refreshedUser)
+
+      if (!refreshedUser) {
+        setPremiumStatus("unknown")
+        return
+      }
+
+      const tokenResult = await refreshedUser.getIdTokenResult(true)
+      setPremiumStatus(tokenResult.claims.premium === true ? "premium" : "free")
+    } catch {
+      setPremiumStatus("unknown")
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const onSignInClick = async () => {
+    setSigningIn(true)
+    const user = await signInCurrentUser()
+    setCurrentUser(user)
+    const tokenResult = await user.getIdTokenResult(true)
+    setPremiumStatus(tokenResult.claims.premium === true ? "premium" : "free")
+    setSigningIn(false)
+    setAuthLoading(false)
+  }
+
+  const onSubscriptionClick = () => {
+    window.open("https://polar.sh/kstm/portal")
+  }
 
   return (
     <>
@@ -83,72 +214,201 @@ function IndexPopup() {
               draggable="false"
               style={{ height: 24 }}
             />
-            <img
+            {/* <img
               src={chrome.runtime.getURL("assets/logo.png")}
               alt="app logo"
               draggable="false"
               style={{ height: 24 }}
-            />
+            /> */}
+            <h3>DecoAI</h3>
             <span style={{ lineHeight: 1 }}>v{version}</span>
           </div>
         </div>
 
         <div style={contentStyle}>
-          <h2 style={{ textAlign: "center" }}>{t("setting")}</h2>
-          <div style={sectionHeaderStyle}>
-            <img
-              src={chrome.runtime.getURL("assets/visibility.svg")}
-              alt="visibility settings"
-              draggable="false"
-              style={{ height: 24 }}
+          <div style={tabGridStyle}>
+            <TabButton
+              active={activeTab === "settings"}
+              label={t("setting")}
+              onClick={() => setActiveTab("settings")}
             />
-            <h3 style={{ margin: 0 }}>{t("visibility")}</h3>
+            <TabButton
+              active={activeTab === "account"}
+              label={t("account")}
+              onClick={() => setActiveTab("account")}
+            />
           </div>
-          <label style={{ ...rowStyle, padding: "0px 8px" }}>
-            <div style={{ ...rowStyle, gap: 8 }}>
-              <img
-                src={chrome.runtime.getURL("assets/wallpaper.svg")}
-                alt="theme settings"
-                draggable="false"
-                style={{ height: 16 }}
-              />
-              <span style={{ lineHeight: 1 }}>{t("themeSettings")}</span>
-            </div>
-            <ToggleSwitch
-              checked={!themeHidden}
-              onChange={(checked) => setThemeHidden(!checked)}
-            />
-          </label>
 
-          <div style={sectionHeaderStyle}>
-            <img
-              src={chrome.runtime.getURL("assets/smart_toy.svg")}
-              alt="model settings"
-              draggable="false"
-              style={{ height: 24 }}
-            />
-            <h3 style={{ margin: 0 }}>{t("models")}</h3>
-          </div>
-          {MODEL_LIST.map((site) => (
-            <label key={site.key} style={{ ...rowStyle, padding: "0px 8px" }}>
-              <div style={{ ...rowStyle, gap: 8 }}>
+          {activeTab !== "account" ? (
+            <>
+              <div style={sectionHeaderStyle}>
                 <img
-                  src={chrome.runtime.getURL(site.icon)}
-                  alt="site icon"
+                  src={chrome.runtime.getURL("assets/visibility.svg")}
+                  alt="visibility settings"
+                  draggable="false"
+                  style={{ height: 24 }}
+                />
+                <h3>{t("visibility")}</h3>
+              </div>
+
+              <label style={rowStyle}>
+                <div style={itemLabelStyle}>
+                  <img
+                    src={chrome.runtime.getURL("assets/wallpaper.svg")}
+                    alt="theme settings"
+                    draggable="false"
+                    style={{ height: 16 }}
+                  />
+                  <span style={{ lineHeight: 1 }}>{t("themeSettings")}</span>
+                </div>
+                <ToggleSwitch
+                  checked={!themeHidden}
+                  onChange={(checked) => setThemeHidden(!checked)}
+                />
+              </label>
+
+              <div style={{ ...sectionHeaderStyle, marginTop: 16 }}>
+                <img
+                  src={chrome.runtime.getURL("assets/smart_toy.svg")}
+                  alt="model settings"
+                  draggable="false"
+                  style={{ height: 24 }}
+                />
+                <h3>{t("models")}</h3>
+              </div>
+
+              {MODEL_LIST.map((site) => (
+                <label key={site.key} style={rowStyle}>
+                  <div style={itemLabelStyle}>
+                    <img
+                      src={chrome.runtime.getURL(site.icon)}
+                      alt="site icon"
+                      draggable="false"
+                      style={{ height: 16 }}
+                    />
+                    <span style={{ lineHeight: 1 }}>{site.label}</span>
+                  </div>
+                  <ToggleSwitch
+                    checked={Boolean(modelEnabled?.[site.key])}
+                    onChange={(checked) => setModelChecked(site.key, checked)}
+                  />
+                </label>
+              ))}
+            </>
+          ) : (
+            <>
+              <div style={sectionWrapperStyle}>
+                <div style={sectionHeaderStyle}>
+                  <img
+                    src={chrome.runtime.getURL("assets/account.svg")}
+                    alt="profile info"
+                    draggable="false"
+                    style={{ height: 24 }}
+                  />
+                  <h3>{t("profile")}</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={currentUser ? refreshAccountState : onSignInClick}
+                  disabled={authLoading || signingIn}
+                  style={actionButtonStyle}
+                >
+                  <img
+                    src={chrome.runtime.getURL(
+                      currentUser ? "assets/refresh.svg" : "assets/key.svg"
+                    )}
+                    alt={currentUser ? "refresh info" : "google login"}
+                    draggable="false"
+                    style={{ height: 24 }}
+                  />
+                </button>
+              </div>
+
+              <div style={rowStyle}>
+                <div style={itemLabelStyle}>
+                  <span>{t("email")}</span>
+                </div>
+                <span>{authLoading ? "-" : currentUser?.email || "-"}</span>
+              </div>
+
+              <div style={rowStyle}>
+                <div style={itemLabelStyle}>
+                  <span>{t("name")}</span>
+                </div>
+                <span>{authLoading ? "-" : currentUser?.displayName || "-"}</span>
+              </div>
+
+              <div style={{ ...sectionWrapperStyle, marginTop: 16 }}>
+                <div style={sectionHeaderStyle}>
+                  <img
+                    src={chrome.runtime.getURL("assets/diamond.svg")}
+                    alt="subscription info"
+                    draggable="false"
+                    style={{ height: 24 }}
+                  />
+                  <h3>{t("subscription")}</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={onSubscriptionClick}
+                  style={actionButtonStyle}
+                >
+                  <img
+                    src={chrome.runtime.getURL("assets/subscriptions.svg")}
+                    alt={"subscription portal"}
+                    draggable="false"
+                    style={{ height: 24 }}
+                  />
+                </button>
+              </div>
+
+              <div style={rowStyle}>
+                <div style={itemLabelStyle}>
+                  <span>{t("status")}</span>
+                </div>
+                <img
+                  src={chrome.runtime.getURL(
+                    currentUser ? "assets/verified.svg" : "assets/release_alert.svg"
+                  )}
+                  alt={currentUser ? "verified" : "not-verified"}
                   draggable="false"
                   style={{ height: 16 }}
                 />
-                <span style={{ lineHeight: 1 }}>{site.label}</span>
               </div>
-              <ToggleSwitch
-                checked={Boolean(modelEnabled?.[site.key])}
-                onChange={(checked) => setModelChecked(site.key, checked)}
-              />
-            </label>
-          ))}
+
+              <div style={rowStyle}>
+                <div style={itemLabelStyle}>
+                  <span>{t("plan")}</span>
+                </div>
+                <span>{getPremiumStatusLabel(premiumStatus)}</span>
+              </div>
+            </>
+          )}
         </div>
-      </div>
+      </div >
     </>
+  )
+}
+
+function TabButton({
+  active,
+  label,
+  onClick
+}: {
+  active: boolean
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        ...tabButtonStyle,
+        ...(active ? activeTabButtonStyle : inactiveTabButtonStyle)
+      }}>
+      {label}
+    </button>
   )
 }
 
@@ -194,17 +454,65 @@ const contentStyle = {
   gap: 8
 } as const
 
-const rowStyle = {
+const tabGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  borderBottom: "2px solid #66cdaa",
+  gap: 8,
+  marginBottom: 10
+} as const
+
+const tabButtonStyle = {
+  border: 0,
+  borderRadius: "12px 12px 0 0",
+  padding: 8,
+  cursor: "pointer"
+} as const
+
+const activeTabButtonStyle = {
+  backgroundColor: "#66cdaa",
+  color: "#fff"
+} as const
+
+const inactiveTabButtonStyle = {
+  backgroundColor: "#4b5563",
+  color: "#fff"
+} as const
+
+const sectionWrapperStyle = {
   display: "flex",
   justifyContent: "space-between",
-  alignItems: "center"
+  alignItems: "center",
+  gap: 8
 } as const
 
 const sectionHeaderStyle = {
-  ...rowStyle,
+  display: "flex",
   justifyContent: "flex-start",
-  gap: 8,
-  paddingTop: 12
+  alignItems: "center",
+  gap: 8
+} as const
+
+const rowStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  padding: "2px 8px",
+  gap: 8
+} as const
+
+const itemLabelStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 8
+} as const
+
+const actionButtonStyle = {
+  height: 24,
+  background: 0,
+  border: 0,
+  cursor: "pointer"
 } as const
 
 export default IndexPopup

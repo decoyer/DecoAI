@@ -18,6 +18,7 @@ import {
   FAB_OPEN_EVENT,
   isAnimatedCustomTheme,
   MODEL_ENABLED_STORAGE_KEY,
+  PREMIUM_THEME_BACKUP_STORAGE_KEY,
   sanitizeColor,
   sanitizeCustomBgOptions,
   sanitizeCustomBgUrl,
@@ -131,7 +132,7 @@ const TERMINAL_THEME: ThemeConfig = {
 
 const THEME_BG_URLS: Partial<Record<ThemeName, string>> = {
   random: "https://bing.biturl.top/?format=image&index=random&mkt=random",
-  nasa: "https://kasutamu.cokr.workers.dev/apod",
+  nasa: "https://decoai.cokr.workers.dev/apod",
   neon: "https://wallpaperaccess.com/full/2068583.jpg",
   pink: "https://wallpapercave.com/wp/wp11886768.jpg",
   vintage: "https://wallpaperaccess.com/full/1461802.jpg",
@@ -141,17 +142,17 @@ const THEME_BG_URLS: Partial<Record<ThemeName, string>> = {
 const t = (key: string) => chrome.i18n.getMessage(key)
 
 const THEME_STYLE_ID = "ai-theme-style"
-const FAB_STYLE_ID = "kasutamu-fab-style"
-const FAB_ROOT_ID = "kasutamu-fab-root"
-const FAB_ROOT_CLASS = "kasutamu-fab"
+const FAB_STYLE_ID = "decoai-fab-style"
+const FAB_ROOT_ID = "decoai-fab-root"
+const FAB_ROOT_CLASS = "decoai-fab"
 const FAB_OPEN_CLASS = "is-open"
-const FAB_ACTION_CLASS = "kasutamu-fab-action"
-const FAB_THEME_BTN_CLASS = "kasutamu-fab-theme"
-const FAB_TOOLTIP_CLASS = "kasutamu-fab-tooltip"
-const FAB_THEME_PANEL_CLASS = "kasutamu-fab-theme-panel"
-const FAB_THEME_MOUNT_ID = "kasutamu-fab-theme-mount"
-const TOAST_STYLE_ID = "kasutamu-toastify-style"
-const TOAST_ROOT_ID = "kasutamu-toast-root"
+const FAB_ACTION_CLASS = "decoai-fab-action"
+const FAB_THEME_BTN_CLASS = "decoai-fab-theme"
+const FAB_TOOLTIP_CLASS = "decoai-fab-tooltip"
+const FAB_THEME_PANEL_CLASS = "decoai-fab-theme-panel"
+const FAB_THEME_MOUNT_ID = "decoai-fab-theme-mount"
+const TOAST_STYLE_ID = "decoai-toastify-style"
+const TOAST_ROOT_ID = "decoai-toast-root"
 const FAB_THEME_BTN_ICON = `<img src="${chrome.runtime.getURL("assets/wallpaper.svg")}" alt="theme settings" draggable="false" style={{ height: 24 }} />`
 const CUSTOM_THEME_WATCH_STORAGE_KEYS = [
   CUSTOM_THEMES_STORAGE_KEY,
@@ -159,6 +160,10 @@ const CUSTOM_THEME_WATCH_STORAGE_KEYS = [
 ]
 const PREMIUM_CACHE_MS = 5 * 60 * 1000
 let premiumCache: { checkedAt: number; value: boolean } | null = null
+type PremiumThemeBackup = {
+  customThemes: CustomTheme[]
+  selectedCustomThemeId: string
+}
 
 const appendToPage = (element: HTMLElement) => {
   ; (document.head || document.documentElement).appendChild(element)
@@ -193,26 +198,31 @@ const waitForAuthUser = () =>
     })
   })
 
-const isPremiumUser = async ({ forceRefresh = false } = {}) => {
+const getPremiumStatus = async ({ forceRefresh = false } = {}) => {
   if (
     !forceRefresh &&
     premiumCache &&
     Date.now() - premiumCache.checkedAt < PREMIUM_CACHE_MS
-  )
-    return premiumCache.value
+  ) {
+    return {
+      isPremium: premiumCache.value,
+      isChecked: true
+    }
+  }
+
   try {
     const user = await waitForAuthUser()
     if (!user) {
-      premiumCache = { checkedAt: Date.now(), value: false }
-      return false
+      return { isPremium: false, isChecked: false }
     }
+
     const tokenResult = await user.getIdTokenResult(true)
-    const value = tokenResult.claims.premium === true
-    premiumCache = { checkedAt: Date.now(), value }
-    return value
+    const isPremium = tokenResult.claims.premium === true
+    premiumCache = { checkedAt: Date.now(), value: isPremium }
+
+    return { isPremium, isChecked: true }
   } catch {
-    premiumCache = { checkedAt: Date.now(), value: false }
-    return false
+    return { isPremium: false, isChecked: false }
   }
 }
 
@@ -306,10 +316,10 @@ const getFABStyle = () => {
         z-index: 2;
         display: block;
         overflow: hidden;
-        background-color: rgba(24, 24, 24, var(--kasutamu-surface-opacity, 0.8));
+        background-color: rgba(24, 24, 24, var(--decoai-surface-opacity, 0.8));
         border-radius: 14px;
-        backdrop-filter: blur(var(--kasutamu-glass-blur, 10px)) saturate(140%);
-        box-shadow: var(--kasutamu-accent-shadow, none);
+        backdrop-filter: blur(var(--decoai-glass-blur, 10px)) saturate(140%);
+        box-shadow: var(--decoai-accent-shadow, none);
         opacity: 0;
         pointer-events: none;
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -383,7 +393,7 @@ const getPaletteData = async (bgUrl: string): Promise<ThemeConfig> => {
   }
 }
 
-const normalizeCustomThemesForFreeUser = async (
+const normalizeCustomThemes = async (
   customThemes: CustomTheme[],
   selectedCustomThemeId: string
 ) => {
@@ -413,17 +423,29 @@ const normalizeCustomThemesForFreeUser = async (
   return retainedTheme
 }
 
+const restorePremiumThemes = async (backup: PremiumThemeBackup) => {
+  await localStorageInstance.set(CUSTOM_THEMES_STORAGE_KEY, backup.customThemes)
+  await localStorageInstance.set(
+    SELECTED_CUSTOM_THEME_ID_STORAGE_KEY,
+    backup.selectedCustomThemeId
+  )
+}
+
 const getSelectedCustomTheme = async (): Promise<{
   isPremium: boolean
   theme: CustomTheme | null
 }> => {
   const customData = await localStorageInstance.getMany([
     CUSTOM_THEMES_STORAGE_KEY,
+    PREMIUM_THEME_BACKUP_STORAGE_KEY,
     SELECTED_CUSTOM_THEME_ID_STORAGE_KEY
   ])
   const customThemes = customData[CUSTOM_THEMES_STORAGE_KEY] as
     | CustomTheme[]
     | undefined
+  const premiumThemeBackup = customData[
+    PREMIUM_THEME_BACKUP_STORAGE_KEY
+  ] as PremiumThemeBackup | null | undefined
   const selectedCustomThemeId = customData[
     SELECTED_CUSTOM_THEME_ID_STORAGE_KEY
   ] as string | undefined
@@ -443,21 +465,57 @@ const getSelectedCustomTheme = async (): Promise<{
     customThemes.find((item) => item.id === selectedCustomThemeId) || null
   const hasAnimatedTheme = customThemes.some(isAnimatedCustomTheme)
   const needsPremium = customThemes.length > 1 || hasAnimatedTheme
-  const isPremium = needsPremium
-    ? await isPremiumUser({ forceRefresh: true })
-    : false
+  const premiumStatus = needsPremium
+    ? await getPremiumStatus({ forceRefresh: true })
+    : { isPremium: false, isChecked: false }
 
-  if (!isPremium && needsPremium) {
-    return {
-      isPremium,
-      theme: await normalizeCustomThemesForFreeUser(
+  if (premiumStatus.isPremium) {
+    if (premiumThemeBackup?.customThemes.length) {
+      await restorePremiumThemes(premiumThemeBackup)
+      await localStorageInstance.set(PREMIUM_THEME_BACKUP_STORAGE_KEY, null)
+
+      const restoredTheme =
+        premiumThemeBackup.customThemes.find(
+          (item) => item.id === premiumThemeBackup.selectedCustomThemeId
+        ) ||
+        premiumThemeBackup.customThemes[0] ||
+        null
+
+      return { isPremium: true, theme: restoredTheme }
+    }
+
+    return { isPremium: true, theme: selectedTheme }
+  }
+
+  if (needsPremium) {
+    const nextSelectedThemeId = selectedCustomThemeId || customThemes[0]?.id || ""
+    if (!premiumThemeBackup) {
+      await localStorageInstance.set(PREMIUM_THEME_BACKUP_STORAGE_KEY, {
         customThemes,
-        selectedCustomThemeId
-      )
+        selectedCustomThemeId: nextSelectedThemeId
+      })
+    }
+
+    const normalizedTheme = await normalizeCustomThemes(
+      customThemes,
+      selectedCustomThemeId
+    )
+
+    if (premiumStatus.isChecked) {
+      await localStorageInstance.set(PREMIUM_THEME_BACKUP_STORAGE_KEY, null)
+    }
+
+    return {
+      isPremium: false,
+      theme: normalizedTheme
     }
   }
 
-  return { isPremium, theme: selectedTheme }
+  if (premiumStatus.isChecked && premiumThemeBackup) {
+    await localStorageInstance.set(PREMIUM_THEME_BACKUP_STORAGE_KEY, null)
+  }
+
+  return { isPremium: premiumStatus.isPremium, theme: selectedTheme }
 }
 
 const getCustomThemeData = async (): Promise<ThemeConfig> => {
@@ -518,7 +576,7 @@ const setFabAccentColor = (accentColor?: string) => {
   const root = document.getElementById(FAB_ROOT_ID)
   if (!root) return
   root.style.setProperty(
-    "--kasutamu-accent-shadow",
+    "--decoai-accent-shadow",
     accentColor ? `inset 0 2px 16px ${accentColor}4D` : "none"
   )
 }
@@ -528,8 +586,8 @@ const setFabSurfaceOptions = (customBgOptions?: CustomBgOptions) => {
   const opacity = clampNumber(customBgOptions?.opacity, 0, 1, 0.8)
   const root = document.getElementById(FAB_ROOT_ID)
   if (!root) return
-  root.style.setProperty("--kasutamu-glass-blur", `${glassBlur}px`)
-  root.style.setProperty("--kasutamu-surface-opacity", `${opacity}`)
+  root.style.setProperty("--decoai-glass-blur", `${glassBlur}px`)
+  root.style.setProperty("--decoai-surface-opacity", `${opacity}`)
 }
 
 const setRouteScopedUiVisibility = (
@@ -883,6 +941,9 @@ const hasCustomThemeStorageChange = (
   changes: Record<string, chrome.storage.StorageChange>
 ) => CUSTOM_THEME_WATCH_STORAGE_KEYS.some((key) => changes[key])
 
+const isCustomThemeSelected = async () =>
+  (await storage.get<string>(SELECTED_THEME_STORAGE_KEY)) === "custom"
+
 const watchLocationChange = () => {
   const originalPushState = history.pushState
   const originalReplaceState = history.replaceState
@@ -913,10 +974,13 @@ storage.watch({
 })
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === "local" && hasCustomThemeStorageChange(changes)) {
+  if (areaName !== "local" || !hasCustomThemeStorageChange(changes)) return
+
+  void (async () => {
+    if (!(await isCustomThemeSelected())) return
     invalidateThemeCache()
     scheduleApplyTheme()
-  }
+  })()
 })
 
 window.addEventListener(CUSTOM_THEME_PREVIEW_EVENT, (event) => {
@@ -925,7 +989,10 @@ window.addEventListener(CUSTOM_THEME_PREVIEW_EVENT, (event) => {
     theme: CustomTheme
   } | null>
   customThemePreview = customEvent.detail
-  scheduleApplyTheme()
+  void (async () => {
+    if (!(await isCustomThemeSelected())) return
+    scheduleApplyTheme()
+  })()
 })
 
 watchLocationChange()

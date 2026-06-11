@@ -1,9 +1,9 @@
 {
-  "appName": {
-    "message": "kasutamu"
-  },
   "setting": {
     "message": "Settings"
+  },
+  "account": {
+    "message": "Account"
   },
   "general": {
     "message": "General"
@@ -50,8 +50,23 @@
   "delete": {
     "message": "Delete"
   },
+  "profile": {
+    "message": "Profile"
+  },
+  "email": {
+    "message": "Email"
+  },
   "name": {
     "message": "Name"
+  },
+  "subscription": {
+    "message": "Subscription"
+  },
+  "plan": {
+    "message": "Plan"
+  },
+  "status": {
+    "message": "Status"
   },
   "text": {
     "message": "Text"
@@ -103,6 +118,9 @@
   },
   "layout": {
     "message": "Layout"
+  },
+  "title": {
+    "message": "Title"
   },
   "hideHeader": {
     "message": "Hide Header"

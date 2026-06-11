@@ -1,8 +1,8 @@
 {
-  "name": "kasutamu",
-  "displayName": "kasutamu",
+  "name": "decoai",
+  "displayName": "DecoAI",
   "version": "1.0.0",
-  "description": "Customize Your Ai Chat",
+  "description": "Decorate Your AI Chat",
   "author": "decoyer <nockback@naver.com>",
   "scripts": {
     "dev": "node scripts/locales.cjs dev",
@@ -36,14 +36,14 @@
       "identity"
     ],
     "oauth2": {
-      "client_id": "1006766461945-acnur43bugq9602eubtno3oo3pqad7es.apps.googleusercontent.com",
+      "client_id": "466788298507-rsedksgtu49jtvfap63sgc9cgf6vmu57.apps.googleusercontent.com",
       "scopes": [
         "openid",
         "email",
         "profile"
       ]
     },
-    "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsVytIJU8T8oCOVsYhOXeeOAJruKSnQB6dtk57+hJ895VtpEUhfZFmnfQlYQAQ69oMKo25Hu0MfbC0QcmOi5EfJ7o6Z9eI8925GK94Z2ON1f5iA6CxZEEODD1veQ626X/Dv+EmSRVLdBVh4OvYmimBBVsZAX4X2GqIHKI+df2TAOe/WPypPjQyuOaC+BJU0VOAkIXTdqzdaWTnBn7bBtX1d4ojkffj3X+7Ue7ZGQvZTcnIZqd1cmWxwlx/vuG8qeyXqdb8O0atE4uPCi7EjTTKIWgOM0w7WEJZMMvaJabyLZ0SknSnFu0FjG3A0YabuCMVT79HfXPlBXO9d0NOj8eJQIDAQAB",
+    "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAySs7ecsAKR97h5gRjhQq++F5UoZz1jip2uC+7uYYdEC7Q8ZG9Yo0HSbGH4PmguG4fFfe80U+pI+/MtOowYGOUi29lTS/KiG3QNbvmnkjVLpVEPsgUco7/W0/Vt/zkJOiMt3i+z9DrkAqO3PQendzcQEtjAfNYT0w5s9bm/pro+NyvSQC7nOdPcBm0R6Vugh4ij+sBVOTRAqwonThRGQqG+hNrXbY+qkaGMKwAxSMtbM5wDnl/6Mk+6E0+BnYTCoMFT0tSMl8h7qr5Zp0eyX1ADK4EGtna3qedxyLRyexPrsjzxhOKXp4c8YGmTZsLJsG6Yy0XBkqhklY/QQoE97UzwIDAQAB",
     "host_permissions": [
       "https://*/*"
     ],

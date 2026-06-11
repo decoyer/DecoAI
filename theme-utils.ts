@@ -33,15 +33,16 @@ type ThemeImportData = {
 
 export const CUSTOM_THEMES_STORAGE_KEY = "custom-themes"
 export const SELECTED_CUSTOM_THEME_ID_STORAGE_KEY = "selected-custom-theme-id"
+export const PREMIUM_THEME_BACKUP_STORAGE_KEY = "premium-theme-backup"
 export const SELECTED_THEME_STORAGE_KEY = "selected-theme"
 export const FAB_HIDDEN_STORAGE_KEY = "fab-hidden"
 export const THEME_HIDDEN_STORAGE_KEY = "theme-hidden"
 export const MODEL_ENABLED_STORAGE_KEY = "model-enabled-map"
 export const CUSTOM_THEME_LAYOUT_STORAGE_KEY = "custom-theme-layout-map"
-export const THEME_LOADING_EVENT = "kasutamu:theme-loading"
-export const FAB_OPEN_EVENT = "kasutamu:fab-open"
-export const CUSTOM_THEME_PREVIEW_EVENT = "kasutamu:custom-theme-preview"
-export const THEME_FILE_APP_ID = "kasutamu"
+export const THEME_LOADING_EVENT = "decoai:theme-loading"
+export const FAB_OPEN_EVENT = "decoai:fab-open"
+export const CUSTOM_THEME_PREVIEW_EVENT = "decoai:custom-theme-preview"
+export const THEME_FILE_APP_ID = "decoai"
 export const THEME_FILE_VERSION = 1
 export const IMAGE_HEADER_BYTES = 64 * 1024
 export const DATA_URL_SAMPLE_CHARS = 96 * 1024
@@ -69,7 +70,7 @@ export const DEFAULT_MODEL_ENABLED: ModelEnabledMap = {
 
 export const ALLOWED_IMAGE_SOURCE_URLS = new Set([
   "https://bing.biturl.top/?format=image&index=random&mkt=random",
-  "https://kasutamu.cokr.workers.dev/apod",
+  "https://decoai.cokr.workers.dev/apod",
   "https://wallpaperaccess.com/full/2068583.jpg",
   "https://wallpapercave.com/wp/wp11886768.jpg",
   "https://wallpaperaccess.com/full/1461802.jpg",

@@ -27,10 +27,9 @@ const isSupportedImageResponse = (response: Response) => {
 }
 
 const sendAuthToken = (
-  sendResponse: (response?: unknown) => void,
-  interactive: boolean
+  sendResponse: (response?: unknown) => void
 ) => {
-  chrome.identity.getAuthToken({ interactive }, (token) => {
+  chrome.identity.getAuthToken({ interactive: true }, (token) => {
     if (chrome.runtime.lastError || !token) {
       sendResponse({
         success: false,
@@ -44,14 +43,13 @@ const sendAuthToken = (
 
 chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
   if (message.type === "GET_GOOGLE_ACCESS_TOKEN") {
-    const identityApi = chrome.identity
-    if (!identityApi?.getAuthToken) {
+    if (!chrome.identity.getAuthToken) {
       sendResponse({ success: false, error: "Identity API unavailable" })
       return false
     }
 
     ; (async () => {
-      identityApi.getAuthToken({ interactive: false }, (token) => {
+      chrome.identity.getAuthToken({ interactive: true }, (token) => {
         if (chrome.runtime.lastError) {
           sendResponse({
             success: false,
@@ -61,13 +59,13 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
         }
 
         if (token) {
-          identityApi.removeCachedAuthToken({ token }, () => {
-            sendAuthToken(sendResponse, true)
+          chrome.identity.removeCachedAuthToken({ token }, () => {
+            sendAuthToken(sendResponse)
           })
           return
         }
 
-        sendAuthToken(sendResponse, true)
+        sendAuthToken(sendResponse)
       })
     })()
 
@@ -146,7 +144,7 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
         }
 
         const response = await fetch(
-          "https://kasutamu.cokr.workers.dev/checkout",
+          "https://decoai.cokr.workers.dev/checkout",
           {
             method: "POST",
             headers: { Authorization: `Bearer ${message.idToken}` }

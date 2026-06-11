@@ -1,9 +1,9 @@
 {
-  "appName": {
-    "message": "kasutamu"
-  },
   "setting": {
     "message": "设置"
+  },
+  "account": {
+    "message": "账户"
   },
   "general": {
     "message": "通用"
@@ -50,8 +50,23 @@
   "delete": {
     "message": "删除"
   },
+  "profile": {
+    "message": "个人资料"
+  },
+  "email": {
+    "message": "电子邮箱"
+  },
   "name": {
-    "message": "名称"
+    "message": "姓名"
+  },
+  "subscription": {
+    "message": "订阅"
+  },
+  "plan": {
+    "message": "套餐"
+  },
+  "status": {
+    "message": "状态"
   },
   "text": {
     "message": "文本颜色"
@@ -103,6 +118,9 @@
   },
   "layout": {
     "message": "布局"
+  },
+  "title": {
+    "message": "名称"
   },
   "hideHeader": {
     "message": "隐藏页眉"

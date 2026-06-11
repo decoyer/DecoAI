@@ -1,2 +1,2 @@
-# kasutamu
-Customize your AI chat
+# DecoAI
+Decorate your AI chat
