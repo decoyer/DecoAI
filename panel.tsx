@@ -15,13 +15,6 @@ import {
   useSortable
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import {
-  getAuth,
-  GoogleAuthProvider,
-  onAuthStateChanged,
-  signInWithCredential,
-  type User
-} from "firebase/auth"
 import { Vibrant } from "node-vibrant/browser"
 import {
   useEffect,
@@ -36,7 +29,12 @@ import { toast } from "react-toastify"
 import { Storage } from "@plasmohq/storage"
 import { useStorage } from "@plasmohq/storage/hook"
 
-import { app } from "./firebase"
+import {
+  AUTH_SESSION_STORAGE_KEY,
+  signInAndSaveAuthSession,
+  getValidAuthSessionSnapshot,
+  type PremiumStatus
+} from "./auth-utils"
 import {
   clearAnimatedBgUrl,
   createCustomTheme,
@@ -88,7 +86,6 @@ const SITE_DARK_SELECTORS: Record<SiteType, string> = {
 type ViewType = "themes" | "custom"
 type ThemeTabType = "preset" | "custom"
 type CustomEditTabType = "general" | "background" | "layout"
-type PremiumStatus = "unknown" | "free" | "premium"
 type PremiumThemeBackup = {
   customThemes: CustomTheme[]
   selectedCustomThemeId: string
@@ -454,11 +451,30 @@ export function FabPanelApp() {
   }, [view])
 
   useEffect(() => {
-    const auth = getAuth(app)
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      void syncPremiumStatus(user)
-    })
-    return unsubscribe
+    void syncGoogleSession()
+
+    const intervalId = window.setInterval(() => {
+      void syncGoogleSession()
+    }, 30_000)
+
+    return () => window.clearInterval(intervalId)
+  }, [])
+
+  useEffect(() => {
+    const onAuthSessionChanged = (
+      changes: Record<string, chrome.storage.StorageChange>,
+      areaName: string
+    ) => {
+      if (areaName !== "local") return
+
+      const authSessionChange = changes[AUTH_SESSION_STORAGE_KEY]
+      if (!authSessionChange) return
+
+      void syncGoogleSession()
+    }
+
+    chrome.storage.onChanged.addListener(onAuthSessionChanged)
+    return () => chrome.storage.onChanged.removeListener(onAuthSessionChanged)
   }, [])
 
   useEffect(() => {
@@ -472,7 +488,7 @@ export function FabPanelApp() {
 
   useEffect(() => {
     const onFabOpen = () => {
-      void syncPremiumStatus()
+      void syncGoogleSession()
       setThemeTab(theme === "custom" ? "custom" : "preset")
     }
     window.addEventListener(FAB_OPEN_EVENT, onFabOpen)
@@ -579,13 +595,14 @@ export function FabPanelApp() {
 
   useEffect(() => {
     if (!customThemes.length) return
+    if (!isPremiumChecked) return
 
     if (isPremiumUser) {
       restorePremiumThemes()
       return
     }
 
-    if (hasPremiumLockedThemes(customThemes)) {
+    if (isFreeUser && hasPremiumLockedThemes(customThemes)) {
       backupPremiumThemes()
       normalizeCustomThemes()
       return
@@ -599,6 +616,7 @@ export function FabPanelApp() {
     customThemes,
     editingCustomThemeId,
     isFreeUser,
+    isPremiumChecked,
     isPremiumUser,
     premiumThemeBackup,
     selectedCustomThemeId
@@ -637,61 +655,28 @@ export function FabPanelApp() {
     })
   }
 
-  const getGoogleAccessToken = () =>
-    new Promise<string>((resolve, reject) => {
-      chrome.runtime.sendMessage(
-        { type: "GET_GOOGLE_ACCESS_TOKEN" },
-        (response) => {
-          if (chrome.runtime.lastError) {
-            reject(new Error(chrome.runtime.lastError.message))
-            return
-          }
-          if (!response?.success || !response?.token) {
-            reject(
-              new Error(response?.error || "Failed to get Google access token")
-            )
-            return
-          }
-          resolve(response.token)
-        }
-      )
-    })
+  const syncGoogleSession = async () => {
+    const authSession = await getValidAuthSessionSnapshot()
 
-  const getSignedInUser = async () => {
-    const auth = getAuth(app)
-    if (auth.currentUser) return auth.currentUser
-
-    const accessToken = await getGoogleAccessToken()
-    const credential = GoogleAuthProvider.credential(null, accessToken)
-    const result = await signInWithCredential(auth, credential)
-    return result.user
-  }
-
-  const syncPremiumStatus = async (userArg?: User | null) => {
-    try {
-      const auth = getAuth(app)
-      const user = userArg ?? auth.currentUser
-      if (!user) {
-        setPremiumStatus("unknown")
-        return
-      }
-      const tokenResult = await user.getIdTokenResult(true)
-      setPremiumStatus(
-        tokenResult.claims.premium === true ? "premium" : "free"
-      )
-    } catch {
-      setPremiumStatus("unknown")
+    if (authSession) {
+      setPremiumStatus(authSession.premiumStatus)
+      return authSession
     }
+
+    setPremiumStatus("free")
+    return null
   }
 
   const refreshPremiumStatus = async () => {
-    const user = await getSignedInUser()
-    const tokenResult = await user.getIdTokenResult(true)
-    const premium = tokenResult.claims.premium === true
+    const authSession = await getValidAuthSessionSnapshot()
 
-    setPremiumStatus(premium ? "premium" : "free")
+    if (authSession) {
+      setPremiumStatus(authSession.premiumStatus)
+      return authSession.premiumStatus === "premium"
+    }
 
-    return premium
+    setPremiumStatus("free")
+    return false
   }
 
   const requirePremiumAccess = async (
@@ -710,11 +695,19 @@ export function FabPanelApp() {
   const onProClick = async () => {
     setIsLoading(true)
     try {
-      const user = await getSignedInUser()
-      const isPremium = await refreshPremiumStatus()
-      if (isPremium) return
-      const idToken = await user.getIdToken()
-      await openCheckout(idToken)
+      const authSession = await getValidAuthSessionSnapshot()
+
+      if (authSession) {
+        setPremiumStatus(authSession.premiumStatus)
+        if (authSession.premiumStatus === "premium") return
+        await openCheckout(authSession.idToken)
+        return
+      }
+
+      const nextAuthSession = await signInAndSaveAuthSession(true)
+      setPremiumStatus(nextAuthSession.premiumStatus)
+      if (nextAuthSession.premiumStatus === "premium") return
+      await openCheckout(nextAuthSession.idToken)
     } catch (e) {
       toast.error(t("error_checkoutFail"))
     } finally {

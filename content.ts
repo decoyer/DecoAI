@@ -1,4 +1,3 @@
-import { getAuth, onAuthStateChanged, type User } from "firebase/auth"
 import { Vibrant } from "node-vibrant/browser"
 import type { PlasmoCSConfig } from "plasmo"
 import { createElement } from "react"
@@ -7,7 +6,7 @@ import { ToastContainer } from "react-toastify"
 
 import { Storage } from "@plasmohq/storage"
 
-import { app } from "./firebase"
+import { getValidAuthSessionSnapshot } from "./auth-utils"
 import { FabPanelApp } from "./panel"
 import {
   clampNumber,
@@ -185,19 +184,6 @@ const emitThemeLoading = (loading: boolean) => {
   )
 }
 
-const waitForAuthUser = () =>
-  new Promise<User | null>((resolve) => {
-    const auth = getAuth(app)
-    if (auth.currentUser) {
-      resolve(auth.currentUser)
-      return
-    }
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      unsubscribe()
-      resolve(user)
-    })
-  })
-
 const getPremiumStatus = async ({ forceRefresh = false } = {}) => {
   if (
     !forceRefresh &&
@@ -211,16 +197,17 @@ const getPremiumStatus = async ({ forceRefresh = false } = {}) => {
   }
 
   try {
-    const user = await waitForAuthUser()
-    if (!user) {
-      return { isPremium: false, isChecked: false }
+    const authSession = await getValidAuthSessionSnapshot()
+
+    if (authSession) {
+      const isPremium = authSession.premiumStatus === "premium"
+      premiumCache = { checkedAt: Date.now(), value: isPremium }
+
+      return { isPremium, isChecked: authSession.premiumStatus !== "unknown" }
     }
 
-    const tokenResult = await user.getIdTokenResult(true)
-    const isPremium = tokenResult.claims.premium === true
-    premiumCache = { checkedAt: Date.now(), value: isPremium }
-
-    return { isPremium, isChecked: true }
+    premiumCache = { checkedAt: Date.now(), value: false }
+    return { isPremium: false, isChecked: true }
   } catch {
     return { isPremium: false, isChecked: false }
   }

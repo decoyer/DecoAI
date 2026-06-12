@@ -1,14 +1,13 @@
 import { useStorage } from "@plasmohq/storage/hook"
-import {
-  getAuth,
-  GoogleAuthProvider,
-  onAuthStateChanged,
-  signInWithCredential,
-  type User
-} from "firebase/auth"
 import { useEffect, useState } from "react"
 
-import { app } from "./firebase"
+import {
+  AUTH_SESSION_STORAGE_KEY,
+  getAuthSessionSnapshot,
+  signInAndSaveAuthSession,
+  type AuthSessionSnapshot,
+  type PremiumStatus
+} from "./auth-utils"
 import {
   DEFAULT_MODEL_ENABLED,
   MODEL_ENABLED_STORAGE_KEY,
@@ -26,38 +25,7 @@ const MODEL_LIST = [
   { key: "grok", icon: "assets/grok.ico", label: "Grok" }
 ] as const
 
-type PremiumStatus = "unknown" | "free" | "premium"
 type PopupTab = "settings" | "account"
-
-const getGoogleAccessToken = () =>
-  new Promise<string>((resolve, reject) => {
-    chrome.runtime.sendMessage(
-      { type: "GET_GOOGLE_ACCESS_TOKEN" },
-      (response?: { success?: boolean; token?: string; error?: string }) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message))
-          return
-        }
-        if (!response?.success || !response.token) {
-          reject(
-            new Error(response?.error || "Failed to get Google access token")
-          )
-          return
-        }
-        resolve(response.token)
-      }
-    )
-  })
-
-const signInCurrentUser = async () => {
-  const auth = getAuth(app)
-  if (auth.currentUser) return auth.currentUser
-
-  const accessToken = await getGoogleAccessToken()
-  const credential = GoogleAuthProvider.credential(null, accessToken)
-  const result = await signInWithCredential(auth, credential)
-  return result.user
-}
 
 const getPremiumStatusLabel = (status: PremiumStatus) => {
   switch (status) {
@@ -66,7 +34,7 @@ const getPremiumStatusLabel = (status: PremiumStatus) => {
     case "free":
       return "Free"
     default:
-      return "-"
+      return "Guest"
   }
 }
 
@@ -79,9 +47,11 @@ function IndexPopup() {
     MODEL_ENABLED_STORAGE_KEY,
     DEFAULT_MODEL_ENABLED
   )
-  const [authLoading, setAuthLoading] = useState(true)
+  const [authLoading, setAuthLoading] = useState(false)
   const [signingIn, setSigningIn] = useState(false)
-  const [currentUser, setCurrentUser] = useState<User | null>(null)
+  const [authSession, setAuthSession] = useState<AuthSessionSnapshot | null>(
+    null
+  )
   const [premiumStatus, setPremiumStatus] = useState<PremiumStatus>("unknown")
   const [activeTab, setActiveTab] = useState<PopupTab>("settings")
   const version = chrome.runtime.getManifest().version
@@ -89,72 +59,40 @@ function IndexPopup() {
     setModelEnabled({ ...modelEnabled, [key]: checked })
 
   useEffect(() => {
-    void refreshAccountState()
+    void loadSavedSession()
   }, [])
 
   useEffect(() => {
-    const auth = getAuth(app)
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user)
-      setAuthLoading(false)
+    const onAuthSessionChanged = (
+      changes: Record<string, chrome.storage.StorageChange>,
+      areaName: string
+    ) => {
+      if (areaName !== "local") return
+      if (!changes[AUTH_SESSION_STORAGE_KEY]) return
 
-      if (!user) {
-        setPremiumStatus("unknown")
-        return
-      }
+      void loadSavedSession()
+    }
 
-      void user
-        .getIdTokenResult(true)
-        .then((tokenResult) => {
-          setPremiumStatus(
-            tokenResult.claims.premium === true ? "premium" : "free"
-          )
-        })
-        .catch(() => {
-          setPremiumStatus("unknown")
-        })
-    })
-
-    return unsubscribe
+    chrome.storage.onChanged.addListener(onAuthSessionChanged)
+    return () => chrome.storage.onChanged.removeListener(onAuthSessionChanged)
   }, [])
 
-  const refreshAccountState = async () => {
-    const auth = getAuth(app)
-    const user = auth.currentUser
-    if (!user) {
-      setCurrentUser(null)
-      setPremiumStatus("unknown")
-      return
-    }
-
-    setAuthLoading(true)
-    try {
-      await user.reload()
-      const refreshedUser = auth.currentUser
-      setCurrentUser(refreshedUser)
-
-      if (!refreshedUser) {
-        setPremiumStatus("unknown")
-        return
-      }
-
-      const tokenResult = await refreshedUser.getIdTokenResult(true)
-      setPremiumStatus(tokenResult.claims.premium === true ? "premium" : "free")
-    } catch {
-      setPremiumStatus("unknown")
-    } finally {
-      setAuthLoading(false)
-    }
+  const loadSavedSession = async () => {
+    const snapshot = await getAuthSessionSnapshot()
+    setAuthSession(snapshot)
+    setPremiumStatus(snapshot?.premiumStatus || "unknown")
   }
 
   const onSignInClick = async () => {
     setSigningIn(true)
-    const user = await signInCurrentUser()
-    setCurrentUser(user)
-    const tokenResult = await user.getIdTokenResult(true)
-    setPremiumStatus(tokenResult.claims.premium === true ? "premium" : "free")
-    setSigningIn(false)
-    setAuthLoading(false)
+    try {
+      const nextAuthSession = await signInAndSaveAuthSession(true)
+      setAuthSession(nextAuthSession)
+      setPremiumStatus(nextAuthSession.premiumStatus)
+    } finally {
+      setSigningIn(false)
+      setAuthLoading(false)
+    }
   }
 
   const onSubscriptionClick = () => {
@@ -309,15 +247,13 @@ function IndexPopup() {
                 </div>
                 <button
                   type="button"
-                  onClick={currentUser ? refreshAccountState : onSignInClick}
+                  onClick={onSignInClick}
                   disabled={authLoading || signingIn}
                   style={actionButtonStyle}
                 >
                   <img
-                    src={chrome.runtime.getURL(
-                      currentUser ? "assets/refresh.svg" : "assets/key.svg"
-                    )}
-                    alt={currentUser ? "refresh info" : "google login"}
+                    src={chrome.runtime.getURL("assets/key.svg")}
+                    alt="google login"
                     draggable="false"
                     style={{ height: 24 }}
                   />
@@ -328,14 +264,14 @@ function IndexPopup() {
                 <div style={itemLabelStyle}>
                   <span>{t("email")}</span>
                 </div>
-                <span>{authLoading ? "-" : currentUser?.email || "-"}</span>
+                <span>{authLoading ? "-" : authSession?.email || "-"}</span>
               </div>
 
               <div style={rowStyle}>
                 <div style={itemLabelStyle}>
                   <span>{t("name")}</span>
                 </div>
-                <span>{authLoading ? "-" : currentUser?.displayName || "-"}</span>
+                <span>{authLoading ? "-" : authSession?.displayName || "-"}</span>
               </div>
 
               <div style={{ ...sectionWrapperStyle, marginTop: 16 }}>
@@ -368,9 +304,9 @@ function IndexPopup() {
                 </div>
                 <img
                   src={chrome.runtime.getURL(
-                    currentUser ? "assets/verified.svg" : "assets/release_alert.svg"
+                    authSession ? "assets/verified.svg" : "assets/release_alert.svg"
                   )}
-                  alt={currentUser ? "verified" : "not-verified"}
+                  alt={authSession ? "verified" : "not-verified"}
                   draggable="false"
                   style={{ height: 16 }}
                 />

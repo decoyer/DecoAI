@@ -1,5 +1,14 @@
 import { ALLOWED_IMAGE_SOURCE_URLS, MAX_FILE_BYTES } from "./theme-utils"
 
+const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+const GOOGLE_AUTH_SCOPES = ["openid", "email", "profile"]
+
+type ExtensionManifest = chrome.runtime.Manifest & {
+  oauth2?: {
+    client_id?: string
+  }
+}
+
 const isHttpsUrl = (value: unknown) => {
   if (typeof value !== "string") return false
   try {
@@ -26,47 +35,94 @@ const isSupportedImageResponse = (response: Response) => {
   )
 }
 
-const sendAuthToken = (
-  sendResponse: (response?: unknown) => void
+const getOAuthClientId = () => {
+  const manifest = chrome.runtime.getManifest() as ExtensionManifest
+  return manifest.oauth2?.client_id || ""
+}
+
+const getTokenFromRedirectUrl = (redirectUrl: string) => {
+  const url = new URL(redirectUrl)
+  const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""))
+  const queryParams = url.searchParams
+  return hashParams.get("access_token") || queryParams.get("access_token") || ""
+}
+
+const sendWebAuthToken = (
+  sendResponse: (response?: unknown) => void,
+  interactive: boolean
 ) => {
-  chrome.identity.getAuthToken({ interactive: true }, (token) => {
-    if (chrome.runtime.lastError || !token) {
-      sendResponse({
-        success: false,
-        error: chrome.runtime.lastError?.message || "Failed to get token"
-      })
-      return
+  const clientId = getOAuthClientId()
+
+  if (!clientId) {
+    sendResponse({ success: false, error: "Missing OAuth client ID" })
+    return
+  }
+
+  if (!chrome.identity.launchWebAuthFlow || !chrome.identity.getRedirectURL) {
+    sendResponse({ success: false, error: "Web auth flow unavailable" })
+    return
+  }
+
+  const redirectUri = chrome.identity.getRedirectURL("oauth2")
+  const authUrl = new URL(GOOGLE_AUTH_URL)
+
+  authUrl.searchParams.set("client_id", clientId)
+  authUrl.searchParams.set("redirect_uri", redirectUri)
+  authUrl.searchParams.set("response_type", "token")
+  authUrl.searchParams.set("scope", GOOGLE_AUTH_SCOPES.join(" "))
+  authUrl.searchParams.set("prompt", interactive ? "select_account" : "none")
+
+  chrome.identity.launchWebAuthFlow(
+    {
+      url: authUrl.toString(),
+      interactive
+    },
+    (redirectUrl) => {
+      if (chrome.runtime.lastError || !redirectUrl) {
+        sendResponse({
+          success: false,
+          error: chrome.runtime.lastError?.message || "Failed to complete login"
+        })
+        return
+      }
+
+      const token = getTokenFromRedirectUrl(redirectUrl)
+
+      if (!token) {
+        sendResponse({ success: false, error: "Missing access token" })
+        return
+      }
+
+      sendResponse({ success: true, token })
     }
-    sendResponse({ success: true, token })
-  })
+  )
 }
 
 chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
   if (message.type === "GET_GOOGLE_ACCESS_TOKEN") {
-    if (!chrome.identity.getAuthToken) {
-      sendResponse({ success: false, error: "Identity API unavailable" })
-      return false
-    }
+    sendWebAuthToken(sendResponse, message.interactive !== false)
+    return true
+  }
 
+  if (message.type === "VALIDATE_GOOGLE_ACCESS_TOKEN") {
     ; (async () => {
-      chrome.identity.getAuthToken({ interactive: true }, (token) => {
-        if (chrome.runtime.lastError) {
-          sendResponse({
-            success: false,
-            error: chrome.runtime.lastError.message
-          })
+      try {
+        if (typeof message.accessToken !== "string" || !message.accessToken) {
+          sendResponse({ success: true, valid: false })
           return
         }
 
-        if (token) {
-          chrome.identity.removeCachedAuthToken({ token }, () => {
-            sendAuthToken(sendResponse)
-          })
-          return
-        }
+        const response = await fetch(
+          "https://www.googleapis.com/oauth2/v3/userinfo",
+          {
+            headers: { Authorization: `Bearer ${message.accessToken}` }
+          }
+        )
 
-        sendAuthToken(sendResponse)
-      })
+        sendResponse({ success: true, valid: response.ok })
+      } catch {
+        sendResponse({ success: false, valid: false })
+      }
     })()
 
     return true
