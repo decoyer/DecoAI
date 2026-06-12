@@ -20,6 +20,9 @@
   "themeSettings": {
     "message": "Theme Settings"
   },
+  "widgetSettings": {
+    "message": "Widget Settings"
+  },
   "addTheme": {
     "message": "Add Theme"
   },

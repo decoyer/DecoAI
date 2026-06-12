@@ -20,6 +20,9 @@
   "themeSettings": {
     "message": "테마 설정"
   },
+  "widgetSettings": {
+    "message": "위젯 설정"
+  },
   "addTheme": {
     "message": "테마 추가"
   },

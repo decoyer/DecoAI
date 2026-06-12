@@ -12,6 +12,7 @@ import {
   DEFAULT_MODEL_ENABLED,
   MODEL_ENABLED_STORAGE_KEY,
   THEME_HIDDEN_STORAGE_KEY,
+  WIDGET_HIDDEN_STORAGE_KEY,
   type ModelEnabledMap
 } from "./theme-utils"
 
@@ -34,6 +35,10 @@ const getPremiumStatusLabel = (status: PremiumStatus) => {
 function IndexPopup() {
   const [themeHidden, setThemeHidden] = useStorage<boolean>(
     THEME_HIDDEN_STORAGE_KEY,
+    false
+  )
+  const [widgetHidden, setWidgetHidden] = useStorage<boolean>(
+    WIDGET_HIDDEN_STORAGE_KEY,
     false
   )
   const [modelEnabled, setModelEnabled] = useStorage<ModelEnabledMap>(
@@ -196,6 +201,22 @@ function IndexPopup() {
                 <ToggleSwitch
                   checked={!themeHidden}
                   onChange={(checked) => setThemeHidden(!checked)}
+                />
+              </label>
+
+              <label style={rowStyle}>
+                <div style={itemLabelStyle}>
+                  <img
+                    src={chrome.runtime.getURL("assets/widgets.svg")}
+                    alt="widget settings"
+                    draggable="false"
+                    style={{ height: 16 }}
+                  />
+                  <span style={{ lineHeight: 1 }}>{t("widgetSettings")}</span>
+                </div>
+                <ToggleSwitch
+                  checked={!widgetHidden}
+                  onChange={(checked) => setWidgetHidden(!checked)}
                 />
               </label>
 
