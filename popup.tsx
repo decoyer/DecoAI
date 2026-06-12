@@ -28,14 +28,7 @@ const MODEL_LIST = [
 type PopupTab = "settings" | "account"
 
 const getPremiumStatusLabel = (status: PremiumStatus) => {
-  switch (status) {
-    case "premium":
-      return "Pro"
-    case "free":
-      return "Free"
-    default:
-      return "Guest"
-  }
+  return status === "premium" ? "Pro" : "Free"
 }
 
 function IndexPopup() {
@@ -47,7 +40,7 @@ function IndexPopup() {
     MODEL_ENABLED_STORAGE_KEY,
     DEFAULT_MODEL_ENABLED
   )
-  const [signingIn, setSigningIn] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
   const [authSession, setAuthSession] = useState<AuthSessionSnapshot | null>(
     null
   )
@@ -83,13 +76,13 @@ function IndexPopup() {
   }
 
   const onSignInClick = async () => {
-    setSigningIn(true)
+    setIsLoading(true)
     try {
       const nextAuthSession = await signInAndSaveAuthSession(true)
       setAuthSession(nextAuthSession)
       setPremiumStatus(nextAuthSession.premiumStatus)
     } finally {
-      setSigningIn(false)
+      setIsLoading(false)
     }
   }
 
@@ -134,6 +127,9 @@ function IndexPopup() {
         }
         .toggle-switch:checked::before {
           transform: translateX(16px);
+        }
+        @keyframes loading-spin {
+          to { transform: rotate(360deg); }
         }
       `}</style>
       <div style={rootStyle}>
@@ -246,7 +242,7 @@ function IndexPopup() {
                 <button
                   type="button"
                   onClick={onSignInClick}
-                  disabled={signingIn}
+                  disabled={isLoading}
                   style={actionButtonStyle}
                 >
                   <img
@@ -262,14 +258,14 @@ function IndexPopup() {
                 <div style={itemLabelStyle}>
                   <span>{t("email")}</span>
                 </div>
-                <span>{authSession?.email || "-"}</span>
+                <span>{authSession?.email || "Guest"}</span>
               </div>
 
               <div style={rowStyle}>
                 <div style={itemLabelStyle}>
                   <span>{t("name")}</span>
                 </div>
-                <span>{authSession?.displayName || "-"}</span>
+                <span>{authSession?.displayName || "Guest"}</span>
               </div>
 
               <div style={{ ...sectionWrapperStyle, marginTop: 16 }}>
@@ -319,6 +315,29 @@ function IndexPopup() {
             </>
           )}
         </div>
+        {isLoading && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: "rgba(0, 0, 0, 0.5)",
+              zIndex: 10,
+              pointerEvents: "auto"
+            }}>
+            <img
+              src={chrome.runtime.getURL("assets/progress_activity.svg")}
+              alt="loading"
+              draggable="false"
+              style={{
+                height: 48,
+                animation: "loading-spin 1s linear infinite"
+              }}
+            />
+          </div>
+        )}
       </div >
     </>
   )

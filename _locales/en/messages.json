@@ -50,11 +50,14 @@
   "profile": {
     "message": "Profile"
   },
+  "name": {
+    "message": "Name"
+  },
   "email": {
     "message": "Email"
   },
-  "name": {
-    "message": "Name"
+  "signinRequired": {
+    "message": "Sign-in required"
   },
   "subscription": {
     "message": "Subscription"

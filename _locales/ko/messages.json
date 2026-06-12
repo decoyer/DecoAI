@@ -50,11 +50,14 @@
   "profile": {
     "message": "프로필"
   },
+  "name": {
+    "message": "이름"
+  },
   "email": {
     "message": "이메일"
   },
-  "name": {
-    "message": "이름"
+  "signinRequired": {
+    "message": "Sign-in required"
   },
   "subscription": {
     "message": "구독"

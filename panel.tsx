@@ -709,6 +709,7 @@ export function FabPanelApp() {
       if (nextAuthSession.premiumStatus === "premium") return
       await openCheckout(nextAuthSession.idToken)
     } catch (e) {
+      if (e?.message === "The user did not approve access.") return
       toast.error(t("error_checkoutFail"))
     } finally {
       setIsLoading(false)
