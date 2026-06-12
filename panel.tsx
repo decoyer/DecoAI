@@ -31,8 +31,8 @@ import { useStorage } from "@plasmohq/storage/hook"
 
 import {
   AUTH_SESSION_STORAGE_KEY,
-  signInAndSaveAuthSession,
   getValidAuthSessionSnapshot,
+  signInAndSaveAuthSession,
   type PremiumStatus
 } from "./auth-utils"
 import {
@@ -1119,11 +1119,14 @@ export function FabPanelApp() {
           opacity: 1;
           transform: scale(1);
         }
-        .pro-button { animation: pro-gradient 20s linear infinite; }
+        .pro-button { animation: pro-gradient 10s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
         .footer button:hover { filter: brightness(1.1); }
         @keyframes pro-gradient {
           from { background-position: 500% 50%; }
           to { background-position: 0% 50%; }
+        }
+        @keyframes loading-spin {
+          to { transform: rotate(360deg); }
         }
       `}</style>
       <div style={wrapperStyle}>
@@ -1563,12 +1566,18 @@ export function FabPanelApp() {
               alignItems: "center",
               justifyContent: "center",
               backgroundColor: "rgba(0, 0, 0, 0.5)",
-              color: "#fff",
-              fontSize: 16,
               zIndex: 10,
               pointerEvents: "auto"
             }}>
-            {t("loading")}...
+            <img
+              src={chrome.runtime.getURL("assets/progress_activity.svg")}
+              alt="loading"
+              draggable="false"
+              style={{
+                height: 48,
+                animation: "loading-spin 1s linear infinite"
+              }}
+            />
           </div>
         )}
       </div>

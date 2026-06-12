@@ -47,7 +47,6 @@ function IndexPopup() {
     MODEL_ENABLED_STORAGE_KEY,
     DEFAULT_MODEL_ENABLED
   )
-  const [authLoading, setAuthLoading] = useState(false)
   const [signingIn, setSigningIn] = useState(false)
   const [authSession, setAuthSession] = useState<AuthSessionSnapshot | null>(
     null
@@ -91,7 +90,6 @@ function IndexPopup() {
       setPremiumStatus(nextAuthSession.premiumStatus)
     } finally {
       setSigningIn(false)
-      setAuthLoading(false)
     }
   }
 
@@ -248,12 +246,12 @@ function IndexPopup() {
                 <button
                   type="button"
                   onClick={onSignInClick}
-                  disabled={authLoading || signingIn}
+                  disabled={signingIn}
                   style={actionButtonStyle}
                 >
                   <img
-                    src={chrome.runtime.getURL("assets/key.svg")}
-                    alt="google login"
+                    src={chrome.runtime.getURL("assets/sync.svg")}
+                    alt="google signin"
                     draggable="false"
                     style={{ height: 24 }}
                   />
@@ -264,14 +262,14 @@ function IndexPopup() {
                 <div style={itemLabelStyle}>
                   <span>{t("email")}</span>
                 </div>
-                <span>{authLoading ? "-" : authSession?.email || "-"}</span>
+                <span>{authSession?.email || "-"}</span>
               </div>
 
               <div style={rowStyle}>
                 <div style={itemLabelStyle}>
                   <span>{t("name")}</span>
                 </div>
-                <span>{authLoading ? "-" : authSession?.displayName || "-"}</span>
+                <span>{authSession?.displayName || "-"}</span>
               </div>
 
               <div style={{ ...sectionWrapperStyle, marginTop: 16 }}>
