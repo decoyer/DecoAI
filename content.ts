@@ -152,7 +152,6 @@ const FAB_THEME_PANEL_CLASS = "decoai-fab-theme-panel"
 const FAB_THEME_MOUNT_ID = "decoai-fab-theme-mount"
 const TOAST_STYLE_ID = "decoai-toastify-style"
 const TOAST_ROOT_ID = "decoai-toast-root"
-const FAB_THEME_BTN_ICON = `<img src="${chrome.runtime.getURL("assets/wallpaper.svg")}" alt="theme settings" draggable="false" style={{ height: 24 }} />`
 const CUSTOM_THEME_WATCH_STORAGE_KEYS = [
   CUSTOM_THEMES_STORAGE_KEY,
   SELECTED_CUSTOM_THEME_ID_STORAGE_KEY
@@ -674,8 +673,8 @@ const mountFab = async () => {
   const themeAction = createFabAction({
     buttonClass: FAB_THEME_BTN_CLASS,
     ariaLabel: "Theme Settings Button",
-    icon: FAB_THEME_BTN_ICON,
-    tooltipText: `${t("themeSettings")}`
+    icon: `<img src="${chrome.runtime.getURL("assets/wallpaper.svg")}" alt="theme settings" draggable="false" style={{ height: 24 }} />`,
+    tooltipText: t("themeSettings")
   })
 
   root.appendChild(panel)
