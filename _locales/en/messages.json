@@ -77,8 +77,8 @@
   "accent": {
     "message": "Accent"
   },
-  "autoFitColors": {
-    "message": "Auto-fit colors"
+  "colorMatch": {
+    "message": "AI Color Match"
   },
   "background": {
     "message": "BG"
@@ -188,16 +188,16 @@
   "success_themeDuplicate": {
     "message": "Theme duplicated successfully."
   },
-  "success_autoFitColors": {
-    "message": "Auto-fit colors completed successfully."
+  "success_colorMatch": {
+    "message": "AI Color Match completed successfully."
   },
   "pro_themePreset": {
-    "message": "Upgrade to Pro for unlimited theme presets."
+    "message": "Upgrade to Pro for Unlimited Theme Presets."
   },
   "pro_animatedImage": {
-    "message": "Upgrade to Pro for animated backgrounds."
+    "message": "Upgrade to Pro for Animated Backgrounds."
   },
-  "pro_autoFitColors": {
-    "message": "Upgrade to Pro to use auto-fit colors."
+  "pro_colorMatch": {
+    "message": "Upgrade to Pro for AI Color Match."
   }
 }

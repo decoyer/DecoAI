@@ -21,10 +21,10 @@ const t = (key: string) => chrome.i18n.getMessage(key)
 type ModelKey = keyof ModelEnabledMap
 
 const MODEL_LIST = [
-  { key: "chatgpt", icon: "assets/chatgpt.ico", label: "ChatGPT" },
-  { key: "gemini", icon: "assets/gemini.ico", label: "Gemini" },
-  { key: "claude", icon: "assets/claude.ico", label: "Claude" },
-  { key: "grok", icon: "assets/grok.ico", label: "Grok" }
+  { key: "chatgpt", icon: "bi:openai", label: "ChatGPT" },
+  { key: "gemini", icon: "vscode-icons:file-type-gemini", label: "Gemini" },
+  { key: "claude", icon: "logos:claude-icon", label: "Claude" },
+  { key: "grok", icon: "bxl:grok", label: "Grok" }
 ] as const
 
 type PopupTab = "settings" | "account"
@@ -210,11 +210,10 @@ function IndexPopup() {
               {MODEL_LIST.map((site) => (
                 <label key={site.key} style={rowStyle}>
                   <div style={itemLabelStyle}>
-                    <img
-                      src={chrome.runtime.getURL(site.icon)}
-                      alt="site icon"
-                      draggable="false"
-                      style={{ height: 16 }}
+                    <Icon
+                      icon={site.icon}
+                      height={16}
+                      aria-hidden="true"
                     />
                     <span style={{ lineHeight: 1 }}>{site.label}</span>
                   </div>

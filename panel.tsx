@@ -671,7 +671,7 @@ export function FabPanelApp() {
   }
 
   const requirePremiumAccess = async (
-    messageKey: "pro_themePreset" | "pro_animatedImage" | "pro_autoFitColors"
+    messageKey: "pro_themePreset" | "pro_animatedImage" | "pro_colorMatch"
   ) => {
     setIsLoading(true)
     try {
@@ -827,8 +827,8 @@ export function FabPanelApp() {
   const resetCustomBgColor = () => {
     setLocalCustomBgColor("")
   }
-  const onAutoFitColorsClick = async () => {
-    if (!(await requirePremiumAccess("pro_autoFitColors"))) {
+  const onColorMatchClick = async () => {
+    if (!(await requirePremiumAccess("pro_colorMatch"))) {
       return
     }
 
@@ -848,7 +848,7 @@ export function FabPanelApp() {
       if (nextAccent) setLocalAccent(nextAccent)
       if (nextText) setLocalText(nextText)
 
-      toast.success(t("success_autoFitColors"))
+      toast.success(t("success_colorMatch"))
     } finally {
       setIsLoading(false)
     }
@@ -1259,9 +1259,7 @@ export function FabPanelApp() {
                       />
                       <Card>
                         <label style={rowStyle}>
-                          <span style={fieldLabelStyle}>
-                            {t("backgroundImage")}
-                          </span>
+                          <span style={fieldLabelStyle}>{t("backgroundImage")}</span>
                           <div style={{ display: "flex", gap: 4 }}>
                             <input
                               ref={bgUploadRef}
@@ -1403,19 +1401,12 @@ export function FabPanelApp() {
                           <Card>
                             <label style={rowStyle}>
                               <div style={inlineControlStyle}>
-                                <img
-                                  src={chrome.runtime.getURL("assets/icon.png")}
-                                  alt="app icon"
-                                  draggable="false"
-                                  style={{ height: 12 }}
-                                />
-                                <span style={fieldLabelStyle}>
-                                  {t("autoFitColors")}
-                                </span>
+                                <Icon icon="mdi:wand" height={24} color="#66cdaa" aria-hidden="true" />
+                                <span style={fieldLabelStyle}>{t("colorMatch")}</span>
                               </div>
                               <button
                                 type="button"
-                                onClick={onAutoFitColorsClick}
+                                onClick={onColorMatchClick}
                                 style={controlButtonStyle}>
                                 {t("apply")}
                               </button>
