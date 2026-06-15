@@ -345,7 +345,7 @@ function CustomThemeSortableCard({
             className="custom-theme-card__action custom-theme-card__duplicate"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => onCustomCardDuplicateClick(event, item)}>
-            <Icon icon="lucide:square-plus" height={16} aria-hidden="true" />
+            <Icon icon="lucide:copy-plus" height={16} aria-hidden="true" />
           </button>
           <button
             type="button"
@@ -1114,9 +1114,6 @@ export function FabPanelApp() {
           from { background-position: 500% 50%; }
           to { background-position: 0% 50%; }
         }
-        @keyframes loading-spin {
-          to { transform: rotate(360deg); }
-        }
       `}</style>
       <div style={wrapperStyle}>
         <div ref={panelRootRef} style={rootStyle}>
@@ -1553,10 +1550,9 @@ export function FabPanelApp() {
               pointerEvents: "auto"
             }}>
             <Icon
-              icon="lucide:loader-circle"
+              icon="line-md:loading-twotone-loop"
               height={48}
               aria-hidden="true"
-              style={{ animation: "loading-spin 1s linear infinite" }}
             />
           </div>
         )}

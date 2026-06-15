@@ -133,9 +133,6 @@ function IndexPopup() {
         .toggle-switch:checked::before {
           transform: translateX(16px);
         }
-        @keyframes loading-spin {
-          to { transform: rotate(360deg); }
-        }
       `}</style>
       <div style={rootStyle}>
         <div style={headerStyle}>
@@ -307,11 +304,10 @@ function IndexPopup() {
               pointerEvents: "auto"
             }}>
             <Icon
-              icon="lucide:loader-circle"
+              icon="line-md:loading-twotone-loop"
               height={48}
               color="#66cdaa"
               aria-hidden="true"
-              style={{ animation: "loading-spin 1s linear infinite" }}
             />
           </div>
         )}
