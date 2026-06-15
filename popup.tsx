@@ -1,3 +1,4 @@
+import { Icon } from "@iconify/react"
 import { useStorage } from "@plasmohq/storage/hook"
 import { useEffect, useState } from "react"
 
@@ -110,8 +111,8 @@ function IndexPopup() {
           cursor: pointer;
           position: relative;
           background: #6b7280;
-          transition: background-color 220ms ease, box-shadow 220ms ease;
           box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .toggle-switch::before {
           content: "";
@@ -124,8 +125,7 @@ function IndexPopup() {
           background: #fff;
           box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(0, 0, 0, 0.06);
           transform: translateX(0);
-          transition: transform 240ms cubic-bezier(0.22, 0.61, 0.36, 1);
-          will-change: transform;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .toggle-switch:checked {
           background: #66cdaa;
@@ -179,23 +179,13 @@ function IndexPopup() {
           {activeTab !== "account" ? (
             <>
               <div style={sectionHeaderStyle}>
-                <img
-                  src={chrome.runtime.getURL("assets/visibility.svg")}
-                  alt="visibility settings"
-                  draggable="false"
-                  style={{ height: 24 }}
-                />
+                <Icon icon="lucide:eye" height={24} aria-hidden="true" />
                 <h3>{t("visibility")}</h3>
               </div>
 
               <label style={rowStyle}>
                 <div style={itemLabelStyle}>
-                  <img
-                    src={chrome.runtime.getURL("assets/wallpaper.svg")}
-                    alt="theme settings"
-                    draggable="false"
-                    style={{ height: 16 }}
-                  />
+                  <Icon icon="lucide:wallpaper" color="#66cdaa" height={16} aria-hidden="true" />
                   <span style={{ lineHeight: 1 }}>{t("themeSettings")}</span>
                 </div>
                 <ToggleSwitch
@@ -206,12 +196,7 @@ function IndexPopup() {
 
               <label style={rowStyle}>
                 <div style={itemLabelStyle}>
-                  <img
-                    src={chrome.runtime.getURL("assets/widgets.svg")}
-                    alt="widget settings"
-                    draggable="false"
-                    style={{ height: 16 }}
-                  />
+                  <Icon icon="lucide:component" color="#66cdaa" height={16} aria-hidden="true" />
                   <span style={{ lineHeight: 1 }}>{t("widgetSettings")}</span>
                 </div>
                 <ToggleSwitch
@@ -221,12 +206,7 @@ function IndexPopup() {
               </label>
 
               <div style={{ ...sectionHeaderStyle, marginTop: 16 }}>
-                <img
-                  src={chrome.runtime.getURL("assets/smart_toy.svg")}
-                  alt="model settings"
-                  draggable="false"
-                  style={{ height: 24 }}
-                />
+                <Icon icon="lucide:bot" height={24} aria-hidden="true" />
                 <h3>{t("models")}</h3>
               </div>
 
@@ -252,12 +232,7 @@ function IndexPopup() {
             <>
               <div style={sectionWrapperStyle}>
                 <div style={sectionHeaderStyle}>
-                  <img
-                    src={chrome.runtime.getURL("assets/account.svg")}
-                    alt="profile info"
-                    draggable="false"
-                    style={{ height: 24 }}
-                  />
+                  <Icon icon="lucide:circle-user-round" height={24} aria-hidden="true" />
                   <h3>{t("profile")}</h3>
                 </div>
                 <button
@@ -266,12 +241,7 @@ function IndexPopup() {
                   disabled={isLoading}
                   style={actionButtonStyle}
                 >
-                  <img
-                    src={chrome.runtime.getURL("assets/sync.svg")}
-                    alt="google signin"
-                    draggable="false"
-                    style={{ height: 24 }}
-                  />
+                  <Icon icon="lucide:refresh-ccw" color="#66cdaa" height={24} aria-hidden="true" />
                 </button>
               </div>
 
@@ -291,12 +261,7 @@ function IndexPopup() {
 
               <div style={{ ...sectionWrapperStyle, marginTop: 16 }}>
                 <div style={sectionHeaderStyle}>
-                  <img
-                    src={chrome.runtime.getURL("assets/diamond.svg")}
-                    alt="subscription info"
-                    draggable="false"
-                    style={{ height: 24 }}
-                  />
+                  <Icon icon="lucide:gem" height={24} aria-hidden="true" />
                   <h3>{t("subscription")}</h3>
                 </div>
                 <button
@@ -304,12 +269,7 @@ function IndexPopup() {
                   onClick={onSubscriptionClick}
                   style={actionButtonStyle}
                 >
-                  <img
-                    src={chrome.runtime.getURL("assets/subscriptions.svg")}
-                    alt={"subscription portal"}
-                    draggable="false"
-                    style={{ height: 24 }}
-                  />
+                  <Icon icon="lucide:repeat" color="#66cdaa" height={24} aria-hidden="true" />
                 </button>
               </div>
 
@@ -317,13 +277,11 @@ function IndexPopup() {
                 <div style={itemLabelStyle}>
                   <span>{t("status")}</span>
                 </div>
-                <img
-                  src={chrome.runtime.getURL(
-                    authSession ? "assets/verified.svg" : "assets/release_alert.svg"
-                  )}
-                  alt={authSession ? "verified" : "not-verified"}
-                  draggable="false"
-                  style={{ height: 16 }}
+                <Icon
+                  icon={`lucide:${authSession ? "circle-check-big" : "circle-alert"}`}
+                  height={16}
+                  color={authSession ? "#0d6efd" : "#ffc107"}
+                  aria-hidden="true"
                 />
               </div>
 
@@ -348,14 +306,12 @@ function IndexPopup() {
               zIndex: 10,
               pointerEvents: "auto"
             }}>
-            <img
-              src={chrome.runtime.getURL("assets/progress_activity.svg")}
-              alt="loading"
-              draggable="false"
-              style={{
-                height: 48,
-                animation: "loading-spin 1s linear infinite"
-              }}
+            <Icon
+              icon="lucide:loader-circle"
+              height={48}
+              color="#66cdaa"
+              aria-hidden="true"
+              style={{ animation: "loading-spin 1s linear infinite" }}
             />
           </div>
         )}

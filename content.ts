@@ -1,6 +1,7 @@
+import { Icon } from "@iconify/react"
 import { Vibrant } from "node-vibrant/browser"
 import type { PlasmoCSConfig } from "plasmo"
-import { createElement } from "react"
+import React, { createElement } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { ToastContainer } from "react-toastify"
 
@@ -254,7 +255,7 @@ const getFABStyle = () => {
         align-items: center;
         justify-content: center;
         background-color: #000;
-        border: 1px solid #66cdaa4D;
+        border: none;
         border-radius: 999px;
         color: #66cdaa;
         cursor: pointer;
@@ -635,19 +636,20 @@ const mountFab = async () => {
   const createFabAction = ({
     buttonClass,
     ariaLabel,
-    icon,
+    iconComponent,
     tooltipText
   }: {
     buttonClass: string
     ariaLabel: string
-    icon: string
+    iconComponent: React.ReactElement
     tooltipText: string
   }) => {
     const button = document.createElement("button")
     button.type = "button"
     button.className = buttonClass
     button.setAttribute("aria-label", ariaLabel)
-    button.innerHTML = icon
+    const iconRoot = createRoot(button)
+    iconRoot.render(iconComponent)
     button.addEventListener("click", (event) => {
       event.stopPropagation()
       if (fabOpen) {
@@ -673,7 +675,11 @@ const mountFab = async () => {
   const themeAction = createFabAction({
     buttonClass: FAB_THEME_BTN_CLASS,
     ariaLabel: "Theme Settings Button",
-    icon: `<img src="${chrome.runtime.getURL("assets/wallpaper.svg")}" alt="theme settings" draggable="false" style={{ height: 24 }} />`,
+    iconComponent: React.createElement(Icon, {
+      icon: "lucide:wallpaper",
+      height: 24,
+      "aria-hidden": "true"
+    }),
     tooltipText: t("themeSettings")
   })
 

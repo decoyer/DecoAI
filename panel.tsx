@@ -15,6 +15,7 @@ import {
   useSortable
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
+import { Icon } from "@iconify/react"
 import { Vibrant } from "node-vibrant/browser"
 import {
   useEffect,
@@ -338,32 +339,22 @@ function CustomThemeSortableCard({
         <div className="custom-theme-card__title">{item.name}</div>
       </button>
       {!isDragging && (
-        <>
+        <div className="custom-theme-card__actions">
           <button
             type="button"
             className="custom-theme-card__action custom-theme-card__duplicate"
-            aria-label="Duplicate"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => onCustomCardDuplicateClick(event, item)}>
-            <img
-              src={chrome.runtime.getURL("assets/add.svg")}
-              alt="duplicate icon"
-              draggable="false"
-            />
+            <Icon icon="lucide:square-plus" height={16} aria-hidden="true" />
           </button>
           <button
             type="button"
             className="custom-theme-card__action custom-theme-card__delete"
-            aria-label={t("delete")}
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => onCustomCardDeleteClick(event, item)}>
-            <img
-              src={chrome.runtime.getURL("assets/cancel.svg")}
-              alt="cancel icon"
-              draggable="false"
-            />
+            <Icon icon="lucide:trash-2" height={16} aria-hidden="true" />
           </button>
-        </>
+        </div>
       )}
     </div>
   )
@@ -1077,12 +1068,20 @@ export function FabPanelApp() {
           text-align: center;
           transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .custom-theme-card__action {
+        .custom-theme-card__actions {
           position: absolute;
-          top: 2px;
+          top: 1px;
+          right: 1px;
           z-index: 3;
-          width: 24px;
-          height: 24px;
+          display: flex;
+          gap: 2px;
+          opacity: 0;
+          transform: scale(0.9);
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .custom-theme-card__action {
+          width: 20px;
+          height: 20px;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -1091,17 +1090,13 @@ export function FabPanelApp() {
           border-radius: 999px;
           background-color: #0000004D;
           cursor: pointer;
-          opacity: 0;
-          transform: scale(0.9);
           transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .custom-theme-card__duplicate {
-          right: 26px;
+        .custom-theme-card-wrap {
+          position: relative;
         }
-        .custom-theme-card__delete {
-          right: 2px;
-        }
-        .custom-theme-card:hover .custom-theme-card__action {
+        .custom-theme-card:hover .custom-theme-card__actions,
+        .custom-theme-card-wrap:hover .custom-theme-card__actions {
           opacity: 1;
           transform: scale(1);
         }
@@ -1113,13 +1108,6 @@ export function FabPanelApp() {
         }
         .custom-theme-card:hover .custom-theme-card__bg { transform: scale(1.1); }
         .custom-theme-card:hover .custom-theme-card__title { background-color: #0000004D; }
-        .custom-theme-card-wrap {
-          position: relative;
-        }
-        .custom-theme-card-wrap:hover .custom-theme-card__action {
-          opacity: 1;
-          transform: scale(1);
-        }
         .pro-button { animation: pro-gradient 10s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
         .footer button:hover { filter: brightness(1.1); }
         @keyframes pro-gradient {
@@ -1497,15 +1485,13 @@ export function FabPanelApp() {
                     ...footerButtonStyle,
                     ...disabledControlStyle(theme === "custom")
                   }}
-                  icon="assets/upload.svg"
-                  iconAlt="export icon"
+                  icon="upload"
                   label={t("exportTheme")}
                 />
                 <FooterButton
                   onClick={onImportClick}
                   style={footerButtonStyle}
-                  icon="assets/download.svg"
-                  iconAlt="import icon"
+                  icon="download"
                   label={t("importTheme")}
                 />
                 <input
@@ -1525,8 +1511,7 @@ export function FabPanelApp() {
                     ...footerButtonStyle,
                     backgroundColor: "#d32f2f"
                   }}
-                  icon="assets/delete.svg"
-                  iconAlt="delete icon"
+                  icon="trash-2"
                   label={t("delete")}
                 />
                 <FooterButton
@@ -1535,8 +1520,7 @@ export function FabPanelApp() {
                     ...footerButtonStyle,
                     backgroundColor: "#1976d2"
                   }}
-                  icon="assets/save.svg"
-                  iconAlt="save icon"
+                  icon="save"
                   label={t("save")}
                 />
               </div>
@@ -1551,8 +1535,6 @@ export function FabPanelApp() {
                   justifyContent: "center"
                 }}
                 icon="assets/gem_stone.gif"
-                iconAlt="pro icon"
-                iconGap={8}
                 label={t("upgradePro")}
               />
             )}
@@ -1570,14 +1552,11 @@ export function FabPanelApp() {
               zIndex: 10,
               pointerEvents: "auto"
             }}>
-            <img
-              src={chrome.runtime.getURL("assets/progress_activity.svg")}
-              alt="loading"
-              draggable="false"
-              style={{
-                height: 48,
-                animation: "loading-spin 1s linear infinite"
-              }}
+            <Icon
+              icon="lucide:loader-circle"
+              height={48}
+              aria-hidden="true"
+              style={{ animation: "loading-spin 1s linear infinite" }}
             />
           </div>
         )}
@@ -1684,14 +1663,10 @@ function CheckboxCard(props: CheckboxControlProps) {
 
 function FooterButton({
   icon,
-  iconAlt,
-  iconGap,
   label,
   ...buttonProps
 }: {
   icon: string
-  iconAlt: string
-  iconGap?: number
   label: string
   className?: string
   disabled?: boolean
@@ -1700,12 +1675,16 @@ function FooterButton({
 }) {
   return (
     <button type="button" {...buttonProps}>
-      <div style={{ ...iconLabelStyle, gap: iconGap ?? iconLabelStyle.gap }}>
-        <img
-          src={chrome.runtime.getURL(icon)}
-          alt={iconAlt}
-          draggable="false"
-          style={{ height: 16 }}></img>
+      <div style={iconLabelStyle}>
+        {icon.includes("assets") ? (
+          <img
+            src={chrome.runtime.getURL(icon)}
+            draggable="false"
+            style={{ height: 16 }}
+          />
+        ) : (
+          <Icon icon={`lucide:${icon}`} height={16} aria-hidden="true" />
+        )}
         <span>{label}</span>
       </div>
     </button>
