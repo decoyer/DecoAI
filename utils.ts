@@ -25,6 +25,38 @@ export type SiteType = "chatgpt" | "gemini" | "claude" | "grok"
 
 export type ModelEnabledMap = Record<SiteType, boolean>
 
+export type WidgetKey = "note" | "todo" | "timer"
+
+export type WidgetInstance = {
+  id: string
+  type: WidgetKey
+  name?: string
+}
+
+export type WidgetEnabledMap = Record<WidgetKey, boolean>
+
+export type WidgetLayoutOptions = {
+  textColor: string
+  backgroundColor: string
+  accentColor: string
+  opacity: number
+  glassBlur: number
+}
+
+export type WidgetFrame = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export type WidgetFrameMap = Record<string, WidgetFrame>
+
+export type WidgetSize = {
+  width: number
+  height: number
+}
+
 type ThemeImportData = {
   app?: string
   version?: number
@@ -39,10 +71,15 @@ export const FAB_HIDDEN_STORAGE_KEY = "fab-hidden"
 export const THEME_HIDDEN_STORAGE_KEY = "theme-hidden"
 export const WIDGET_HIDDEN_STORAGE_KEY = "widget-hidden"
 export const MODEL_ENABLED_STORAGE_KEY = "model-enabled-map"
+export const WIDGET_ENABLED_STORAGE_KEY = "widget-enabled-map"
+export const WIDGET_LAYOUT_STORAGE_KEY = "widget-layout"
+export const WIDGET_FRAME_STORAGE_KEY = "widget-frame-map"
+export const WIDGET_INSTANCES_STORAGE_KEY = "widget-instances"
 export const CUSTOM_THEME_LAYOUT_STORAGE_KEY = "custom-theme-layout-map"
 export const THEME_LOADING_EVENT = "decoai:theme-loading"
 export const FAB_OPEN_EVENT = "decoai:fab-open"
 export const CUSTOM_THEME_PREVIEW_EVENT = "decoai:custom-theme-preview"
+export const WIDGET_LAYOUT_PREVIEW_EVENT = "decoai:widget-layout-preview"
 export const THEME_FILE_APP_ID = "decoai"
 export const THEME_FILE_VERSION = 1
 export const IMAGE_HEADER_BYTES = 64 * 1024
@@ -69,7 +106,32 @@ export const DEFAULT_MODEL_ENABLED: ModelEnabledMap = {
   grok: true
 }
 
-export const ALLOWED_IMAGE_SOURCE_URLS = new Set([
+export const DEFAULT_WIDGET_INSTANCES: WidgetInstance[] = [
+  { id: "note", type: "note" },
+  { id: "todo", type: "todo" },
+  { id: "timer", type: "timer" }
+]
+
+export const DEFAULT_WIDGET_ENABLED: WidgetEnabledMap = {
+  note: true,
+  todo: true,
+  timer: true
+}
+
+export const DEFAULT_WIDGET_LAYOUT: WidgetLayoutOptions = {
+  textColor: "",
+  backgroundColor: "",
+  accentColor: "",
+  opacity: DEFAULT_CUSTOM_BG_OPTIONS.opacity,
+  glassBlur: DEFAULT_CUSTOM_BG_OPTIONS.glassBlur
+}
+
+export const DEFAULT_WIDGET_MIN_SIZE: WidgetSize = {
+  width: 250,
+  height: 150
+}
+
+export const IMAGE_SOURCE_URLS = new Set([
   "https://bing.biturl.top/?format=image&index=random&mkt=random",
   "https://decoai.cokr.workers.dev/apod",
   "https://wallpaperaccess.com/full/2068583.jpg",
@@ -128,20 +190,22 @@ export const sanitizePosition = (value: unknown) => {
   return DEFAULT_CUSTOM_BG_OPTIONS.position
 }
 
+const getSanitizedPositionPercentPair = (value: unknown) => {
+  const position = sanitizePosition(value)
+  const percentMatch = position.match(/^(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%$/)
+
+  return {
+    x: percentMatch ? clampNumber(percentMatch[1], 0, 100, 50) : 50,
+    y: percentMatch ? clampNumber(percentMatch[2], 0, 100, 50) : 50
+  }
+}
+
 export const getPositionXPercent = (value: unknown) => {
-  const safePosition = sanitizePosition(value)
-  const percentMatch = safePosition.match(
-    /^(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%$/
-  )
-  return percentMatch ? clampNumber(percentMatch[1], 0, 100, 50) : 50
+  return getSanitizedPositionPercentPair(value).x
 }
 
 export const getPositionYPercent = (value: unknown) => {
-  const safePosition = sanitizePosition(value)
-  const percentMatch = safePosition.match(
-    /^(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%$/
-  )
-  return percentMatch ? clampNumber(percentMatch[2], 0, 100, 50) : 50
+  return getSanitizedPositionPercentPair(value).y
 }
 
 export const sanitizeCustomBgOptions = (
@@ -184,18 +248,15 @@ export const renderImageToCanvas = async (
   options?: Partial<CustomBgOptions>,
   maxSize = 256
 ) => {
-  const safeSource = sanitizeCustomBgUrl(imageSource)
-  const safeOptions = sanitizeCustomBgOptions(options)
-  const position = sanitizePosition(safeOptions.position)
-  const percentMatch = position.match(/^(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%$/)
-  const positionX = percentMatch ? clampNumber(percentMatch[1], 0, 100, 50) : 50
-  const positionY = percentMatch ? clampNumber(percentMatch[2], 0, 100, 50) : 50
+  const imageUrl = sanitizeCustomBgUrl(imageSource)
+  const imageOptions = sanitizeCustomBgOptions(options)
+  const position = getSanitizedPositionPercentPair(imageOptions.position)
 
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
     const nextImage = new Image()
     nextImage.onload = () => resolve(nextImage)
     nextImage.onerror = () => reject()
-    nextImage.src = safeSource
+    nextImage.src = imageUrl
   })
 
   const canvas = document.createElement("canvas")
@@ -209,13 +270,13 @@ export const renderImageToCanvas = async (
   )
   const drawWidth = image.naturalWidth * scale
   const drawHeight = image.naturalHeight * scale
-  const drawX = (canvas.width - drawWidth) * (positionX / 100)
-  const drawY = (canvas.height - drawHeight) * (positionY / 100)
+  const drawX = (canvas.width - drawWidth) * (position.x / 100)
+  const drawY = (canvas.height - drawHeight) * (position.y / 100)
 
   context.clearRect(0, 0, canvas.width, canvas.height)
-  context.filter = `invert(${safeOptions.invert}) grayscale(${safeOptions.grayscale}) blur(${safeOptions.blur}px) brightness(${safeOptions.brightness})`
+  context.filter = `invert(${imageOptions.invert}) grayscale(${imageOptions.grayscale}) blur(${imageOptions.blur}px) brightness(${imageOptions.brightness})`
   context.save()
-  if (safeOptions.scaleX === -1) {
+  if (imageOptions.scaleX === -1) {
     context.translate(canvas.width, 0)
     context.scale(-1, 1)
   }

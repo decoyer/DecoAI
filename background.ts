@@ -1,4 +1,4 @@
-import { ALLOWED_IMAGE_SOURCE_URLS, MAX_FILE_BYTES } from "./theme-utils"
+import { IMAGE_SOURCE_URLS, MAX_FILE_BYTES } from "./utils"
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 const GOOGLE_AUTH_SCOPES = ["openid", "email", "profile"]
@@ -18,8 +18,8 @@ const isHttpsUrl = (value: unknown) => {
   }
 }
 
-const isAllowedImageSource = (value: unknown) =>
-  typeof value === "string" && ALLOWED_IMAGE_SOURCE_URLS.has(value)
+const isImageSource = (value: unknown) =>
+  typeof value === "string" && IMAGE_SOURCE_URLS.has(value)
 
 const getContentLength = (response: Response) => {
   const value = Number(response.headers.get("content-length") || 0)
@@ -98,6 +98,130 @@ const sendWebAuthToken = (
   )
 }
 
+const validateGoogleAccessToken = async (
+  accessToken: unknown,
+  sendResponse: (response?: unknown) => void
+) => {
+  try {
+    if (typeof accessToken !== "string" || !accessToken) {
+      sendResponse({ success: true, valid: false })
+      return
+    }
+
+    const response = await fetch(
+      "https://www.googleapis.com/oauth2/v3/userinfo",
+      {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      }
+    )
+
+    sendResponse({ success: true, valid: response.ok })
+  } catch {
+    sendResponse({ success: false, valid: false })
+  }
+}
+
+const fetchImageAsDataUrl = async (
+  imageSourceUrl: string,
+  sendResponse: (response?: unknown) => void
+) => {
+  if (!isImageSource(imageSourceUrl)) {
+    sendResponse({ success: false })
+    return
+  }
+
+  const response = await fetch(imageSourceUrl)
+
+  if (!response.ok) {
+    sendResponse({ success: false })
+    return
+  }
+
+  const contentType = response.headers.get("content-type") || ""
+  let imageResponse = response
+
+  if (contentType.includes("application/json")) {
+    const data = await response.json()
+    const resolvedImageUrl = typeof data?.url === "string" ? data.url : ""
+
+    if (!isHttpsUrl(resolvedImageUrl)) {
+      sendResponse({ success: false })
+      return
+    }
+
+    imageResponse = await fetch(resolvedImageUrl)
+
+    if (!imageResponse.ok) {
+      sendResponse({ success: false })
+      return
+    }
+  }
+
+  if (!isSupportedImageResponse(imageResponse)) {
+    sendResponse({ success: false })
+    return
+  }
+
+  const blob = await imageResponse.blob()
+  if (blob.size > MAX_FILE_BYTES) {
+    sendResponse({ success: false })
+    return
+  }
+
+  const reader = new FileReader()
+
+  reader.onloadend = () => {
+    sendResponse({
+      success: true,
+      dataUrl: reader.result
+    })
+  }
+
+  reader.readAsDataURL(blob)
+}
+
+const openCheckout = async (
+  idToken: unknown,
+  sendResponse: (response?: unknown) => void
+) => {
+  try {
+    if (typeof idToken !== "string" || idToken.length < 100) {
+      sendResponse({ success: false, error: "Invalid token" })
+      return
+    }
+
+    const response = await fetch("https://decoai.cokr.workers.dev/checkout", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${idToken}` }
+    })
+
+    if (!response.ok) {
+      sendResponse({
+        success: false,
+        error: `Checkout request failed: ${response.status}`
+      })
+      return
+    }
+
+    const data = await response.json()
+    const checkoutUrl =
+      typeof data?.checkoutUrl === "string" ? data.checkoutUrl : ""
+
+    if (!checkoutUrl || !isHttpsUrl(checkoutUrl)) {
+      sendResponse({ success: false, error: "Checkout URL missing" })
+      return
+    }
+
+    chrome.tabs.create({ url: checkoutUrl })
+    sendResponse({ success: true })
+  } catch (error) {
+    sendResponse({
+      success: false,
+      error: error instanceof Error ? error.message : "Checkout request failed"
+    })
+  }
+}
+
 chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
   if (message.type === "GET_GOOGLE_ACCESS_TOKEN") {
     sendWebAuthToken(sendResponse, message.interactive !== false)
@@ -105,136 +229,17 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
   }
 
   if (message.type === "VALIDATE_GOOGLE_ACCESS_TOKEN") {
-    ; (async () => {
-      try {
-        if (typeof message.accessToken !== "string" || !message.accessToken) {
-          sendResponse({ success: true, valid: false })
-          return
-        }
-
-        const response = await fetch(
-          "https://www.googleapis.com/oauth2/v3/userinfo",
-          {
-            headers: { Authorization: `Bearer ${message.accessToken}` }
-          }
-        )
-
-        sendResponse({ success: true, valid: response.ok })
-      } catch {
-        sendResponse({ success: false, valid: false })
-      }
-    })()
-
+    void validateGoogleAccessToken(message.accessToken, sendResponse)
     return true
   }
 
   if (message.type === "FETCH_IMAGE_AS_DATA_URL") {
-    ; (async () => {
-      if (!isAllowedImageSource(message.url)) {
-        sendResponse({ success: false })
-        return
-      }
-
-      const response = await fetch(message.url)
-
-      if (!response.ok) {
-        sendResponse({ success: false })
-        return
-      }
-
-      const contentType = response.headers.get("content-type") || ""
-      let url = response
-
-      if (contentType.includes("application/json")) {
-        const data = await response.json()
-        const imageUrl = typeof data?.url === "string" ? data.url : ""
-
-        if (!isHttpsUrl(imageUrl)) {
-          sendResponse({ success: false })
-          return
-        }
-
-        url = await fetch(imageUrl)
-
-        if (!url.ok) {
-          sendResponse({ success: false })
-          return
-        }
-      }
-
-      if (!isSupportedImageResponse(url)) {
-        sendResponse({ success: false })
-        return
-      }
-
-      const blob = await url.blob()
-      if (blob.size > MAX_FILE_BYTES) {
-        sendResponse({ success: false })
-        return
-      }
-
-      const reader = new FileReader()
-
-      reader.onloadend = () => {
-        sendResponse({
-          success: true,
-          dataUrl: reader.result
-        })
-      }
-
-      reader.readAsDataURL(blob)
-    })()
-
+    void fetchImageAsDataUrl(message.url, sendResponse)
     return true
   }
 
   if (message.type === "OPEN_CHECKOUT") {
-    ; (async () => {
-      try {
-        if (
-          typeof message.idToken !== "string" ||
-          message.idToken.length < 100
-        ) {
-          sendResponse({ success: false, error: "Invalid token" })
-          return
-        }
-
-        const response = await fetch(
-          "https://decoai.cokr.workers.dev/checkout",
-          {
-            method: "POST",
-            headers: { Authorization: `Bearer ${message.idToken}` }
-          }
-        )
-
-        if (!response.ok) {
-          sendResponse({
-            success: false,
-            error: `Checkout request failed: ${response.status}`
-          })
-          return
-        }
-
-        const data = await response.json()
-        const checkoutUrl =
-          typeof data?.checkoutUrl === "string" ? data.checkoutUrl : ""
-
-        if (!checkoutUrl || !isHttpsUrl(checkoutUrl)) {
-          sendResponse({ success: false, error: "Checkout URL missing" })
-          return
-        }
-
-        chrome.tabs.create({ url: checkoutUrl })
-        sendResponse({ success: true })
-      } catch (error) {
-        sendResponse({
-          success: false,
-          error:
-            error instanceof Error ? error.message : "Checkout request failed"
-        })
-      }
-    })()
-
+    void openCheckout(message.idToken, sendResponse)
     return true
   }
 })

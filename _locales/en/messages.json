@@ -50,6 +50,15 @@
   "delete": {
     "message": "Delete"
   },
+  "noteWidget": {
+    "message": "Notepad"
+  },
+  "todoWidget": {
+    "message": "To-do List"
+  },
+  "timerWidget": {
+    "message": "Timer"
+  },
   "profile": {
     "message": "Profile"
   },
@@ -191,7 +200,7 @@
   "success_colorMatch": {
     "message": "AI Color Match completed successfully."
   },
-  "pro_themePreset": {
+  "pro_themeLimit": {
     "message": "Upgrade to Pro for Unlimited Theme Presets."
   },
   "pro_animatedImage": {
@@ -199,5 +208,8 @@
   },
   "pro_colorMatch": {
     "message": "Upgrade to Pro for AI Color Match."
+  },
+  "pro_widgetLimit": {
+    "message": "Upgrade to Pro for Multiple Widgets."
   }
 }

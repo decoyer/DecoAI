@@ -1,6 +1,7 @@
 import { Icon } from "@iconify/react"
-import { useStorage } from "@plasmohq/storage/hook"
 import { useEffect, useState } from "react"
+
+import { useStorage } from "@plasmohq/storage/hook"
 
 import {
   AUTH_SESSION_STORAGE_KEY,
@@ -8,14 +9,14 @@ import {
   signInAndSaveAuthSession,
   type AuthSessionSnapshot,
   type PremiumStatus
-} from "./auth-utils"
+} from "./auth"
 import {
   DEFAULT_MODEL_ENABLED,
   MODEL_ENABLED_STORAGE_KEY,
   THEME_HIDDEN_STORAGE_KEY,
   WIDGET_HIDDEN_STORAGE_KEY,
   type ModelEnabledMap
-} from "./theme-utils"
+} from "./utils"
 
 const t = (key: string) => chrome.i18n.getMessage(key)
 type ModelKey = keyof ModelEnabledMap
@@ -53,7 +54,7 @@ function IndexPopup() {
   const [premiumStatus, setPremiumStatus] = useState<PremiumStatus>("unknown")
   const [activeTab, setActiveTab] = useState<PopupTab>("settings")
   const version = chrome.runtime.getManifest().version
-  const setModelChecked = (key: ModelKey, checked: boolean) =>
+  const updateModelEnabled = (key: ModelKey, checked: boolean) =>
     setModelEnabled({ ...modelEnabled, [key]: checked })
 
   useEffect(() => {
@@ -148,12 +149,6 @@ function IndexPopup() {
               draggable="false"
               style={{ height: 24 }}
             />
-            {/* <img
-              src={chrome.runtime.getURL("assets/logo.png")}
-              alt="app logo"
-              draggable="false"
-              style={{ height: 24 }}
-            /> */}
             <h3>DecoAI</h3>
             <span style={{ lineHeight: 1 }}>v{version}</span>
           </div>
@@ -182,7 +177,12 @@ function IndexPopup() {
 
               <label style={rowStyle}>
                 <div style={itemLabelStyle}>
-                  <Icon icon="lucide:wallpaper" color="#66cdaa" height={16} aria-hidden="true" />
+                  <Icon
+                    icon="lucide:wallpaper"
+                    color="#66cdaa"
+                    height={16}
+                    aria-hidden="true"
+                  />
                   <span style={{ lineHeight: 1 }}>{t("themeSettings")}</span>
                 </div>
                 <ToggleSwitch
@@ -193,7 +193,12 @@ function IndexPopup() {
 
               <label style={rowStyle}>
                 <div style={itemLabelStyle}>
-                  <Icon icon="lucide:component" color="#66cdaa" height={16} aria-hidden="true" />
+                  <Icon
+                    icon="lucide:component"
+                    color="#66cdaa"
+                    height={16}
+                    aria-hidden="true"
+                  />
                   <span style={{ lineHeight: 1 }}>{t("widgetSettings")}</span>
                 </div>
                 <ToggleSwitch
@@ -210,16 +215,14 @@ function IndexPopup() {
               {MODEL_LIST.map((site) => (
                 <label key={site.key} style={rowStyle}>
                   <div style={itemLabelStyle}>
-                    <Icon
-                      icon={site.icon}
-                      height={16}
-                      aria-hidden="true"
-                    />
+                    <Icon icon={site.icon} height={16} aria-hidden="true" />
                     <span style={{ lineHeight: 1 }}>{site.label}</span>
                   </div>
                   <ToggleSwitch
                     checked={Boolean(modelEnabled?.[site.key])}
-                    onChange={(checked) => setModelChecked(site.key, checked)}
+                    onChange={(checked) =>
+                      updateModelEnabled(site.key, checked)
+                    }
                   />
                 </label>
               ))}
@@ -228,16 +231,24 @@ function IndexPopup() {
             <>
               <div style={sectionWrapperStyle}>
                 <div style={sectionHeaderStyle}>
-                  <Icon icon="lucide:circle-user-round" height={24} aria-hidden="true" />
+                  <Icon
+                    icon="lucide:circle-user-round"
+                    height={24}
+                    aria-hidden="true"
+                  />
                   <h3>{t("profile")}</h3>
                 </div>
                 <button
                   type="button"
                   onClick={onSignInClick}
                   disabled={isLoading}
-                  style={actionButtonStyle}
-                >
-                  <Icon icon="lucide:refresh-ccw" color="#66cdaa" height={24} aria-hidden="true" />
+                  style={actionButtonStyle}>
+                  <Icon
+                    icon="lucide:refresh-ccw"
+                    color="#66cdaa"
+                    height={24}
+                    aria-hidden="true"
+                  />
                 </button>
               </div>
 
@@ -263,9 +274,13 @@ function IndexPopup() {
                 <button
                   type="button"
                   onClick={onSubscriptionClick}
-                  style={actionButtonStyle}
-                >
-                  <Icon icon="lucide:repeat" color="#66cdaa" height={24} aria-hidden="true" />
+                  style={actionButtonStyle}>
+                  <Icon
+                    icon="lucide:repeat"
+                    color="#66cdaa"
+                    height={24}
+                    aria-hidden="true"
+                  />
                 </button>
               </div>
 
@@ -310,7 +325,7 @@ function IndexPopup() {
             />
           </div>
         )}
-      </div >
+      </div>
     </>
   )
 }

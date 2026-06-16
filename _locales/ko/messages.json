@@ -50,6 +50,15 @@
   "delete": {
     "message": "삭제"
   },
+  "noteWidget": {
+    "message": "메모장"
+  },
+  "todoWidget": {
+    "message": "체크리스트"
+  },
+  "timerWidget": {
+    "message": "타이머"
+  },
   "profile": {
     "message": "프로필"
   },
@@ -191,7 +200,7 @@
   "success_colorMatch": {
     "message": "AI 컬러 매칭을 적용했습니다."
   },
-  "pro_themePreset": {
+  "pro_themeLimit": {
     "message": "커스텀 테마를 더 추가하려면 Pro로 업그레이드하세요."
   },
   "pro_animatedImage": {
@@ -199,5 +208,8 @@
   },
   "pro_colorMatch": {
     "message": "AI 컬러 매칭을 사용하려면 Pro로 업그레이드하세요."
+  },
+  "pro_widgetLimit": {
+    "message": "같은 위젯을 더 추가하려면 Pro로 업그레이드하세요."
   }
 }

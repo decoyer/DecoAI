@@ -1,19 +1,31 @@
 import { Icon } from "@iconify/react"
 import { Vibrant } from "node-vibrant/browser"
 import type { PlasmoCSConfig } from "plasmo"
-import React, { createElement } from "react"
+import React, {
+  createElement,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties
+} from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { ToastContainer } from "react-toastify"
+import Moveable from "react-moveable"
+import { toast, ToastContainer } from "react-toastify"
 
 import { Storage } from "@plasmohq/storage"
+import { useStorage } from "@plasmohq/storage/hook"
 
-import { getValidAuthSessionSnapshot } from "./auth-utils"
+import { getValidAuthSessionSnapshot } from "./auth"
 import { FabPanelApp } from "./panel"
 import {
   clampNumber,
   clearAnimatedBgUrl,
   CUSTOM_THEME_PREVIEW_EVENT,
   CUSTOM_THEMES_STORAGE_KEY,
+  DEFAULT_WIDGET_ENABLED,
+  DEFAULT_WIDGET_INSTANCES,
+  DEFAULT_WIDGET_LAYOUT,
+  DEFAULT_WIDGET_MIN_SIZE,
   detectCurrentSite,
   FAB_OPEN_EVENT,
   isAnimatedCustomTheme,
@@ -22,16 +34,27 @@ import {
   sanitizeColor,
   sanitizeCustomBgOptions,
   sanitizeCustomBgUrl,
-  sanitizePosition,
   SELECTED_CUSTOM_THEME_ID_STORAGE_KEY,
   SELECTED_THEME_STORAGE_KEY,
   THEME_HIDDEN_STORAGE_KEY,
   THEME_LOADING_EVENT,
+  WIDGET_ENABLED_STORAGE_KEY,
+  WIDGET_FRAME_STORAGE_KEY,
+  WIDGET_HIDDEN_STORAGE_KEY,
+  WIDGET_INSTANCES_STORAGE_KEY,
+  WIDGET_LAYOUT_PREVIEW_EVENT,
+  WIDGET_LAYOUT_STORAGE_KEY,
   type CustomBgOptions,
   type CustomTheme,
   type ModelEnabledMap,
-  type SiteType
-} from "./theme-utils"
+  type SiteType,
+  type WidgetFrame,
+  type WidgetFrameMap,
+  type WidgetInstance,
+  type WidgetKey,
+  type WidgetLayoutOptions,
+  type WidgetSize
+} from "./utils"
 
 export const config: PlasmoCSConfig = {
   matches: [
@@ -108,7 +131,9 @@ let applyThemeRequestId = 0
 let currentLocation = location.href
 let fabMounted = false
 let fabOpen = false
+let fabPanelView: FabPanelView = "theme"
 let fabThemeRoot: Root | null = null
+let widgetMounted = false
 let toastMounted = false
 let cachedThemeKey: string | null = null
 let cachedThemeData: ThemeConfig | null = null
@@ -148,9 +173,11 @@ const FAB_ROOT_CLASS = "decoai-fab"
 const FAB_OPEN_CLASS = "is-open"
 const FAB_ACTION_CLASS = "decoai-fab-action"
 const FAB_THEME_BTN_CLASS = "decoai-fab-theme"
+const FAB_WIDGET_BTN_CLASS = "decoai-fab-widget"
 const FAB_TOOLTIP_CLASS = "decoai-fab-tooltip"
 const FAB_THEME_PANEL_CLASS = "decoai-fab-theme-panel"
 const FAB_THEME_MOUNT_ID = "decoai-fab-theme-mount"
+const WIDGET_ROOT_ID = "decoai-widget-root"
 const TOAST_STYLE_ID = "decoai-toastify-style"
 const TOAST_ROOT_ID = "decoai-toast-root"
 const CUSTOM_THEME_WATCH_STORAGE_KEYS = [
@@ -164,8 +191,24 @@ type PremiumThemeBackup = {
   selectedCustomThemeId: string
 }
 
+type FabPanelView = "theme" | "widget"
+
+const WIDGET_LIST: Array<{
+  key: WidgetKey
+  labelKey: string
+  icon: string
+}> = [
+    { key: "note", labelKey: "noteWidget", icon: "lucide:notepad-text" },
+    { key: "todo", labelKey: "todoWidget", icon: "lucide:list-checks" },
+    { key: "timer", labelKey: "timerWidget", icon: "lucide:clock" }
+  ]
+
 const appendToPage = (element: HTMLElement) => {
   ; (document.head || document.documentElement).appendChild(element)
+}
+
+const appendToBody = (element: HTMLElement) => {
+  ; (document.body || document.documentElement).appendChild(element)
 }
 
 const getOrCreateStyle = (id: string) => {
@@ -213,7 +256,7 @@ const getPremiumStatus = async ({ forceRefresh = false } = {}) => {
   }
 }
 
-const whiteListUrl = (site: SiteType) => {
+const isAllowedRoute = (site: SiteType) => {
   const { pathname } = window.location
 
   switch (site) {
@@ -245,10 +288,10 @@ const getFABStyle = () => {
         flex-direction: column;
         align-items: flex-end;
         gap: 10px;
-        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
       }
 
-      .${FAB_THEME_BTN_CLASS} {
+      .${FAB_THEME_BTN_CLASS},
+      .${FAB_WIDGET_BTN_CLASS} {
         width: 45px;
         height: 45px;
         display: inline-flex;
@@ -262,12 +305,16 @@ const getFABStyle = () => {
       }
 
       html.dark .${FAB_THEME_BTN_CLASS},
+      html.dark .${FAB_WIDGET_BTN_CLASS},
       body.dark-theme .${FAB_THEME_BTN_CLASS},
-      html[data-mode="dark"] .${FAB_THEME_BTN_CLASS} {
+      body.dark-theme .${FAB_WIDGET_BTN_CLASS},
+      html[data-mode="dark"] .${FAB_THEME_BTN_CLASS},
+      html[data-mode="dark"] .${FAB_WIDGET_BTN_CLASS} {
         background-color: #fff;
       }
 
-      .${FAB_THEME_BTN_CLASS}:hover {
+      .${FAB_THEME_BTN_CLASS}:hover,
+      .${FAB_WIDGET_BTN_CLASS}:hover {
         opacity: 0.7;
       }
 
@@ -294,7 +341,9 @@ const getFABStyle = () => {
       }
 
       .${FAB_THEME_BTN_CLASS}:hover + .${FAB_TOOLTIP_CLASS},
-      .${FAB_THEME_BTN_CLASS}:focus-visible + .${FAB_TOOLTIP_CLASS} {
+      .${FAB_THEME_BTN_CLASS}:focus-visible + .${FAB_TOOLTIP_CLASS},
+      .${FAB_WIDGET_BTN_CLASS}:hover + .${FAB_TOOLTIP_CLASS},
+      .${FAB_WIDGET_BTN_CLASS}:focus-visible + .${FAB_TOOLTIP_CLASS} {
         opacity: 1;
       }
 
@@ -341,7 +390,7 @@ const mountToastContainer = () => {
 
   const root = document.createElement("div")
   root.id = TOAST_ROOT_ID
-    ; (document.body || document.documentElement).appendChild(root)
+  appendToBody(root)
 
   createRoot(root).render(
     createElement(ToastContainer, {
@@ -430,9 +479,10 @@ const getSelectedCustomTheme = async (): Promise<{
   const customThemes = customData[CUSTOM_THEMES_STORAGE_KEY] as
     | CustomTheme[]
     | undefined
-  const premiumThemeBackup = customData[
-    PREMIUM_THEME_BACKUP_STORAGE_KEY
-  ] as PremiumThemeBackup | null | undefined
+  const premiumThemeBackup = customData[PREMIUM_THEME_BACKUP_STORAGE_KEY] as
+    | PremiumThemeBackup
+    | null
+    | undefined
   const selectedCustomThemeId = customData[
     SELECTED_CUSTOM_THEME_ID_STORAGE_KEY
   ] as string | undefined
@@ -448,7 +498,7 @@ const getSelectedCustomTheme = async (): Promise<{
     return { isPremium: false, theme: customThemePreview.theme }
   }
 
-  let selectedTheme =
+  const selectedTheme =
     customThemes.find((item) => item.id === selectedCustomThemeId) || null
   const hasAnimatedTheme = customThemes.some(isAnimatedCustomTheme)
   const needsPremium = customThemes.length > 1 || hasAnimatedTheme
@@ -475,7 +525,8 @@ const getSelectedCustomTheme = async (): Promise<{
   }
 
   if (needsPremium) {
-    const nextSelectedThemeId = selectedCustomThemeId || customThemes[0]?.id || ""
+    const nextSelectedThemeId =
+      selectedCustomThemeId || customThemes[0]?.id || ""
     if (!premiumThemeBackup) {
       await localStorageInstance.set(PREMIUM_THEME_BACKUP_STORAGE_KEY, {
         customThemes,
@@ -577,28 +628,550 @@ const setFabSurfaceOptions = (customBgOptions?: CustomBgOptions) => {
   root.style.setProperty("--decoai-surface-opacity", `${opacity}`)
 }
 
+const clampWidgetFrameToViewport = (
+  frame: WidgetFrame,
+  minSize: WidgetSize
+): WidgetFrame => {
+  const viewportWidth = Math.max(document.documentElement.clientWidth, 320)
+  const viewportHeight = Math.max(document.documentElement.clientHeight, 240)
+  const minWidth = Math.min(minSize.width, viewportWidth)
+  const minHeight = Math.min(minSize.height, viewportHeight)
+  const width = clampNumber(frame.width, minWidth, viewportWidth, minWidth)
+  const height = clampNumber(frame.height, minHeight, viewportHeight, minHeight)
+  return {
+    width,
+    height,
+    x: clampNumber(frame.x, 0, Math.max(0, viewportWidth - width), 0),
+    y: clampNumber(frame.y, 0, Math.max(0, viewportHeight - height), 0)
+  }
+}
+
+const getInitialWidgetFrame = (index: number): WidgetFrame => {
+  const gap = 20
+  const itemsPerColumn = 5
+  const viewportWidth = Math.max(document.documentElement.clientWidth, 320)
+  const viewportHeight = Math.max(document.documentElement.clientHeight, 240)
+  const width = Math.min(DEFAULT_WIDGET_MIN_SIZE.width, viewportWidth)
+  const height = Math.min(DEFAULT_WIDGET_MIN_SIZE.height, viewportHeight)
+  const maxX = Math.max(0, viewportWidth - width)
+  const maxY = Math.max(0, viewportHeight - height)
+  const column = Math.floor(index / itemsPerColumn)
+  const row = index % itemsPerColumn
+  const x = Math.min(maxX, 300 + column * (width + gap))
+  const y = Math.min(maxY, gap + row * (height + gap))
+
+  return { x, y, width, height }
+}
+
+const isWidgetDarkMode = () => {
+  const currentSite = detectCurrentSite()
+  if (!currentSite) return false
+  return document.querySelector(SITE_SELECTORS[currentSite].darkClass) !== null
+}
+
+function WidgetOverlayApp() {
+  const [previewLayout, setPreviewLayout] =
+    useState<WidgetLayoutOptions | null>(null)
+  const [isDarkMode, setIsDarkMode] = useState(isWidgetDarkMode)
+  const [widgetItems, setWidgetItems] = useStorage<WidgetInstance[]>(
+    WIDGET_INSTANCES_STORAGE_KEY,
+    DEFAULT_WIDGET_INSTANCES
+  )
+  const [enabledMap] = useStorage(
+    WIDGET_ENABLED_STORAGE_KEY,
+    DEFAULT_WIDGET_ENABLED
+  )
+  const [layoutOptions] = useStorage<WidgetLayoutOptions>(
+    WIDGET_LAYOUT_STORAGE_KEY,
+    DEFAULT_WIDGET_LAYOUT
+  )
+  const [frameMap, setFrameMap] = useStorage<WidgetFrameMap>(
+    WIDGET_FRAME_STORAGE_KEY,
+    {}
+  )
+  const [editingWidgetId, setEditingWidgetId] = useState<string | null>(null)
+  const widgetRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const liveFrameRef = useRef<Partial<WidgetFrameMap>>({})
+  const interactionStartFrameRef = useRef<WidgetFrame | null>(null)
+  const layout = {
+    ...DEFAULT_WIDGET_LAYOUT,
+    ...(previewLayout || layoutOptions)
+  }
+  const frames = useMemo(
+    () =>
+      (widgetItems || DEFAULT_WIDGET_INSTANCES).reduce(
+        (nextFrames, item, index) => {
+          const fallback = getInitialWidgetFrame(index)
+          nextFrames[item.id] = clampWidgetFrameToViewport(
+            { ...fallback, ...frameMap?.[item.id] },
+            DEFAULT_WIDGET_MIN_SIZE
+          )
+          return nextFrames
+        },
+        {} as WidgetFrameMap
+      ),
+    [frameMap, widgetItems]
+  )
+  const selectedTarget = editingWidgetId
+    ? widgetRefs.current[editingWidgetId] || null
+    : null
+
+  React.useEffect(() => {
+    const onWidgetLayoutPreview = (event: Event) => {
+      const customEvent = event as CustomEvent<WidgetLayoutOptions | null>
+      setPreviewLayout(customEvent.detail)
+    }
+    window.addEventListener(WIDGET_LAYOUT_PREVIEW_EVENT, onWidgetLayoutPreview)
+    return () =>
+      window.removeEventListener(
+        WIDGET_LAYOUT_PREVIEW_EVENT,
+        onWidgetLayoutPreview
+      )
+  }, [])
+
+  React.useEffect(() => {
+    const updateDarkMode = () => setIsDarkMode(isWidgetDarkMode())
+    const observer = new MutationObserver(updateDarkMode)
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class", "data-mode"]
+    })
+    if (document.body) {
+      observer.observe(document.body, {
+        attributes: true,
+        attributeFilter: ["class"]
+      })
+    }
+    updateDarkMode()
+    return () => observer.disconnect()
+  }, [])
+
+  React.useEffect(() => {
+    const onDocumentPointerDown = (event: PointerEvent) => {
+      if (!editingWidgetId) return
+      const target = event.target as Element | null
+      if (
+        target?.closest(".decoai-widget-card") ||
+        target?.closest(".moveable-control-box")
+      ) {
+        return
+      }
+      setEditingWidgetId(null)
+    }
+    document.addEventListener("pointerdown", onDocumentPointerDown, {
+      capture: true
+    })
+    return () =>
+      document.removeEventListener("pointerdown", onDocumentPointerDown, true)
+  }, [editingWidgetId])
+
+  const getWidgetStyle = (id: string): CSSProperties => {
+    const frame = frames[id]
+    const opacity = clampNumber(layout.opacity, 0, 1, 0.8)
+    const textColor = layout.textColor
+    const accentColor = layout.accentColor
+    const backgroundColor =
+      layout.backgroundColor ||
+      (isDarkMode
+        ? `rgba(24, 24, 24, ${opacity})`
+        : `rgba(255, 255, 255, ${opacity})`)
+
+    return {
+      position: "absolute",
+      left: 0,
+      top: 0,
+      width: frame.width,
+      height: frame.height,
+      transform: `translate(${frame.x}px, ${frame.y}px)`,
+      backgroundColor,
+      color: textColor,
+      "--decoai-widget-bg": backgroundColor,
+      "--decoai-widget-text": textColor || "inherit",
+      border: "none",
+      borderRadius: 8,
+      boxShadow: accentColor ? `inset 0 2px 16px ${accentColor}4D` : "none",
+      backdropFilter: `blur(${clampNumber(layout.glassBlur, 0, 50, 10)}px) saturate(140%)`,
+      overflow: "hidden",
+      pointerEvents: "auto",
+      touchAction: "none",
+      willChange: "transform, width, height"
+    } as CSSProperties
+  }
+
+  const persistLiveFrame = (id: string | null) => {
+    if (!id || !liveFrameRef.current[id]) return
+    const nextFrame = liveFrameRef.current[id] as WidgetFrame
+    setFrameMap((prev) => ({
+      ...prev,
+      [id]: clampWidgetFrameToViewport(nextFrame, DEFAULT_WIDGET_MIN_SIZE)
+    }))
+  }
+
+  const duplicateWidget = async (item: WidgetInstance) => {
+    const { isPremium } = await getPremiumStatus({ forceRefresh: true })
+    if (!isPremium) {
+      toast.error(t("pro_widgetLimit"))
+      return
+    }
+
+    const sourceFrame = frames[item.id]
+    const copiedId = `${item.type}-${crypto.randomUUID()}`
+    setWidgetItems((prev) => {
+      const nextItems = [...(prev || DEFAULT_WIDGET_INSTANCES)]
+      const sourceIndex = nextItems.findIndex((widget) => widget.id === item.id)
+      const widgetMeta = WIDGET_LIST.find((widget) => widget.key === item.type)
+      nextItems.splice(sourceIndex + 1, 0, {
+        id: copiedId,
+        type: item.type,
+        name: t(widgetMeta?.labelKey || "noteWidget")
+      })
+      return nextItems
+    })
+    setFrameMap((prev) => ({
+      ...prev,
+      [copiedId]: {
+        ...sourceFrame,
+        x: sourceFrame.x + 50,
+        y: sourceFrame.y + 50
+      }
+    }))
+  }
+
+  const deleteWidget = (item: WidgetInstance) => {
+    setWidgetItems((prev) =>
+      (prev || DEFAULT_WIDGET_INSTANCES).filter(
+        (widget) => widget.id !== item.id
+      )
+    )
+    if (editingWidgetId === item.id) setEditingWidgetId(null)
+  }
+
+  const updateWidgetName = (id: string, name: string) => {
+    setWidgetItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, name } : item))
+    )
+  }
+
+  return createElement(
+    "div",
+    {
+      style: {
+        position: "fixed",
+        inset: 0,
+        zIndex: 4,
+        pointerEvents: "none"
+      } as CSSProperties
+    },
+    (widgetItems || DEFAULT_WIDGET_INSTANCES).map((item) => {
+      const widgetMeta = WIDGET_LIST.find((widget) => widget.key === item.type)
+      if (!widgetMeta) return null
+      if (enabledMap?.[item.type] === false) return null
+      return createElement(
+        "div",
+        {
+          key: item.id,
+          ref: (node: HTMLDivElement | null) => {
+            widgetRefs.current[item.id] = node
+          },
+          className: "decoai-widget-card",
+          onClick: (e) => {
+            e.stopPropagation()
+            setEditingWidgetId(item.id)
+          },
+          style: getWidgetStyle(item.id)
+        },
+        createElement(
+          "div",
+          { className: "decoai-widget-card__actions" },
+          createElement(
+            "button",
+            {
+              type: "button",
+              className:
+                "decoai-widget-card__action decoai-widget-card__duplicate",
+              "aria-hidden": "true",
+              onClick: (e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                void duplicateWidget(item)
+              }
+            },
+            createElement(Icon, {
+              icon: "lucide:copy-plus",
+              height: 16,
+              "aria-hidden": "true"
+            })
+          ),
+          createElement(
+            "button",
+            {
+              type: "button",
+              className:
+                "decoai-widget-card__action decoai-widget-card__delete",
+              "aria-hidden": "true",
+              onClick: (e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                deleteWidget(item)
+              }
+            },
+            createElement(Icon, {
+              icon: "lucide:trash-2",
+              height: 16,
+              "aria-hidden": "true"
+            })
+          )
+        ),
+        createElement(
+          "div",
+          {
+            style: {
+              height: 32,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "0 10px"
+            }
+          },
+          createElement(Icon, {
+            icon: widgetMeta.icon,
+            height: 16,
+            "aria-hidden": "true"
+          }),
+          createElement("input", {
+            type: "text",
+            defaultValue: item.name,
+            maxLength: 20,
+            spellCheck: false,
+            autoComplete: "off",
+            onChange: (e) =>
+              updateWidgetName(item.id, e.target.value.slice(0, 20)),
+            onKeyDown: (e) => e.stopPropagation(),
+            onKeyUp: (e) => e.stopPropagation(),
+            style: {
+              width: 160,
+              padding: 0,
+              border: "none",
+              outline: "none",
+              background: "transparent",
+              font: "inherit",
+              color: "inherit",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap"
+            }
+          })
+        )
+      )
+    }),
+    createElement(Moveable, {
+      target: selectedTarget,
+      draggable: true,
+      resizable: true,
+      checkInput: true,
+      snappable: true,
+      snapDirections: true,
+      elementSnapDirections: true,
+      elementGuidelines: Object.entries(widgetRefs.current)
+        .filter(([id, node]) => id !== editingWidgetId && node)
+        .map(([, node]) => node as HTMLDivElement),
+      snapGap: true,
+      isDisplaySnapDigit: false,
+      origin: false,
+      edge: false,
+      keepRatio: false,
+      bounds: {
+        left: 0,
+        top: 0,
+        right: Math.max(document.documentElement.clientWidth, 320),
+        bottom: Math.max(document.documentElement.clientHeight, 240)
+      },
+      hideDefaultLines: false,
+      renderDirections: ["nw", "n", "ne", "w", "e", "sw", "s", "se"],
+      throttleDrag: 0,
+      throttleResize: 0,
+      onDragStart: () => {
+        interactionStartFrameRef.current = editingWidgetId
+          ? frames[editingWidgetId]
+          : null
+      },
+      onDrag: (event) => {
+        if (!editingWidgetId) return
+        const frame =
+          interactionStartFrameRef.current || frames[editingWidgetId]
+        const [deltaX, deltaY] = event.beforeDist
+        const nextFrame = clampWidgetFrameToViewport(
+          {
+            ...frame,
+            x: frame.x + deltaX,
+            y: frame.y + deltaY
+          },
+          DEFAULT_WIDGET_MIN_SIZE
+        )
+        event.target.style.transform = `translate(${nextFrame.x}px, ${nextFrame.y}px)`
+        liveFrameRef.current[editingWidgetId] = nextFrame
+      },
+      onDragEnd: () => {
+        persistLiveFrame(editingWidgetId)
+        interactionStartFrameRef.current = null
+      },
+      onResizeStart: () => {
+        interactionStartFrameRef.current = editingWidgetId
+          ? frames[editingWidgetId]
+          : null
+      },
+      onResize: (event) => {
+        if (!editingWidgetId) return
+        const frame =
+          interactionStartFrameRef.current || frames[editingWidgetId]
+        const [deltaX, deltaY] = event.drag.beforeDist
+        const nextFrame = clampWidgetFrameToViewport(
+          {
+            ...frame,
+            x: frame.x + deltaX,
+            y: frame.y + deltaY,
+            width: event.width,
+            height: event.height
+          },
+          DEFAULT_WIDGET_MIN_SIZE
+        )
+        event.target.style.width = `${nextFrame.width}px`
+        event.target.style.height = `${nextFrame.height}px`
+        event.target.style.transform = `translate(${nextFrame.x}px, ${nextFrame.y}px)`
+        liveFrameRef.current[editingWidgetId] = nextFrame
+      },
+      onResizeEnd: () => {
+        persistLiveFrame(editingWidgetId)
+        interactionStartFrameRef.current = null
+      }
+    })
+  )
+}
+
+const mountWidgetOverlay = () => {
+  if (widgetMounted || document.getElementById(WIDGET_ROOT_ID)) {
+    widgetMounted = true
+    return
+  }
+
+  const root = document.createElement("div")
+  root.id = WIDGET_ROOT_ID
+  root.style.display = "none"
+  root.innerHTML = `
+    <style>
+      .decoai-widget-card__actions {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        z-index: 3;
+        display: flex;
+        gap: 2px;
+        opacity: 0;
+        transform: scale(0.9);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .moveable-control-box,
+      .moveable-line,
+      .moveable-control {
+        pointer-events: auto !important;
+        z-index: 4 !important;
+      }
+      .moveable-control {
+        width: 12px !important;
+        height: 12px !important;
+        margin-top: -6px !important;
+        margin-left: -6px !important;
+        border: 2px solid #fff !important;
+      }
+      .moveable-bold {
+        display: none !important;
+      }
+      .decoai-widget-card {
+        background-color: var(--decoai-widget-bg) !important;
+        opacity: 0.8;
+        transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .decoai-widget-card,
+      .decoai-widget-card *:not(.moveable-control):not(.moveable-line) {
+        color: var(--decoai-widget-text) !important;
+      }
+      .decoai-widget-card:hover {
+        opacity: 1;
+      }
+      .decoai-widget-card:hover .decoai-widget-card__actions {
+        opacity: 1;
+        transform: scale(1);
+      }
+      .decoai-widget-card__action {
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border: none;
+        border-radius: 999px;
+        color: #fff !important;
+        background-color: #0000004D;
+        cursor: pointer;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .decoai-widget-card__action:hover {
+        background-color: #1976d2;
+      }
+      .decoai-widget-card__delete:hover {
+        background-color: #d32f2f;
+      }
+    </style>
+  `
+  appendToBody(root)
+  const mount = document.createElement("div")
+  root.appendChild(mount)
+  createRoot(mount).render(createElement(WidgetOverlayApp))
+  widgetMounted = true
+}
+
 const setRouteScopedUiVisibility = (
   site: SiteType | null = detectCurrentSite()
 ) => {
-  const shouldShow = Boolean(site && whiteListUrl(site))
+  const shouldShow = Boolean(site && isAllowedRoute(site))
   const fabRoot = document.getElementById(FAB_ROOT_ID)
+  const widgetRoot = document.getElementById(WIDGET_ROOT_ID)
 
   if (fabRoot) fabRoot.style.display = shouldShow ? "flex" : "none"
+  if (widgetRoot) widgetRoot.style.display = shouldShow ? "block" : "none"
   if (!shouldShow && fabOpen) closeFabDock()
 
   return shouldShow
 }
 
-const setThemeVisibility = async () => {
+const syncFabVisibility = async () => {
   const root = document.getElementById(FAB_ROOT_ID)
   if (!root) return
   if (!setRouteScopedUiVisibility()) return
   const themeButton = root.querySelector<HTMLElement>(`.${FAB_THEME_BTN_CLASS}`)
   const themeAction = themeButton?.closest<HTMLElement>(`.${FAB_ACTION_CLASS}`)
-  const isHidden =
+  const widgetButton = root.querySelector<HTMLElement>(
+    `.${FAB_WIDGET_BTN_CLASS}`
+  )
+  const widgetAction = widgetButton?.closest<HTMLElement>(
+    `.${FAB_ACTION_CLASS}`
+  )
+  const isThemeHidden =
     (await storage.get<boolean>(THEME_HIDDEN_STORAGE_KEY)) === true
-  if (themeAction) themeAction.style.display = isHidden ? "none" : "flex"
-  if (isHidden && fabOpen) closeFabDock()
+  const isWidgetHidden =
+    (await storage.get<boolean>(WIDGET_HIDDEN_STORAGE_KEY)) === true
+  if (themeAction) themeAction.style.display = isThemeHidden ? "none" : "flex"
+  if (widgetAction)
+    widgetAction.style.display = isWidgetHidden ? "none" : "flex"
+  if (
+    fabOpen &&
+    ((isThemeHidden && fabPanelView === "theme") ||
+      (isWidgetHidden && fabPanelView === "widget") ||
+      (isThemeHidden && isWidgetHidden))
+  ) {
+    closeFabDock()
+  }
 }
 
 const onOutsideFabClick = (event: MouseEvent) => {
@@ -606,9 +1179,11 @@ const onOutsideFabClick = (event: MouseEvent) => {
   if (!root) return
   const target = event.target as Node
   const panel = root.querySelector(`.${FAB_THEME_PANEL_CLASS}`)
-  const action =
-    target instanceof Element ? target.closest(`.${FAB_ACTION_CLASS}`) : null
-  if (panel?.contains(target) || action) return
+  const actionButton =
+    target instanceof Element
+      ? target.closest(`.${FAB_ACTION_CLASS} button`)
+      : null
+  if (panel?.contains(target) || actionButton) return
   closeFabDock()
 }
 
@@ -637,12 +1212,14 @@ const mountFab = async () => {
     buttonClass,
     ariaLabel,
     iconComponent,
-    tooltipText
+    tooltipText,
+    panelView
   }: {
     buttonClass: string
     ariaLabel: string
     iconComponent: React.ReactElement
     tooltipText: string
+    panelView: FabPanelView
   }) => {
     const button = document.createElement("button")
     button.type = "button"
@@ -652,12 +1229,15 @@ const mountFab = async () => {
     iconRoot.render(iconComponent)
     button.addEventListener("click", (event) => {
       event.stopPropagation()
-      if (fabOpen) {
+      if (fabOpen && fabPanelView === panelView) {
         closeFabDock()
       } else {
+        fabPanelView = panelView
         fabOpen = true
         root.classList.add(FAB_OPEN_CLASS)
-        window.dispatchEvent(new CustomEvent(FAB_OPEN_EVENT))
+        window.dispatchEvent(
+          new CustomEvent(FAB_OPEN_EVENT, { detail: { view: panelView } })
+        )
       }
     })
 
@@ -680,12 +1260,26 @@ const mountFab = async () => {
       height: 24,
       "aria-hidden": "true"
     }),
-    tooltipText: t("themeSettings")
+    tooltipText: t("themeSettings"),
+    panelView: "theme"
+  })
+
+  const widgetAction = createFabAction({
+    buttonClass: FAB_WIDGET_BTN_CLASS,
+    ariaLabel: "Widget Settings Button",
+    iconComponent: React.createElement(Icon, {
+      icon: "lucide:component",
+      height: 24,
+      "aria-hidden": "true"
+    }),
+    tooltipText: t("widgetSettings"),
+    panelView: "widget"
   })
 
   root.appendChild(panel)
+  root.appendChild(widgetAction)
   root.appendChild(themeAction)
-    ; (document.body || document.documentElement).appendChild(root)
+  appendToBody(root)
   document.addEventListener("click", onOutsideFabClick, { capture: true })
   const shadowRoot = panelHost.attachShadow({ mode: "open" })
   const shadowMount = document.createElement("div")
@@ -697,7 +1291,7 @@ const mountFab = async () => {
   fabThemeRoot.render(createElement(FabPanelApp))
 
   fabMounted = true
-  await setThemeVisibility()
+  await syncFabVisibility()
 }
 
 const mapSelectors = (
@@ -732,12 +1326,7 @@ const generateCSS = (
   const darkSelectors = mapSelectors(elements, { prefix: `${darkClass} ` })
   const hoverSelectors = mapSelectors(elements, { suffix: ":hover" })
 
-  const safeBgUrl = sanitizeCustomBgUrl(bgUrl)
-  const safeBgColor = sanitizeColor(bgColor)
-  const safeAccentColor = sanitizeColor(accentColor)
-  const safeLightTextColor = sanitizeColor(lightTextColor)
-  const safeDarkTextColor = sanitizeColor(darkTextColor)
-  const position = sanitizePosition(customBgOptions?.position)
+  const position = customBgOptions?.position || "50% 50%"
   const scaleX = customBgOptions?.scaleX === -1 ? -1 : 1
   const invert = clampNumber(customBgOptions?.invert, 0, 1, 0)
   const grayscale = clampNumber(customBgOptions?.grayscale, 0, 1, 0)
@@ -754,12 +1343,12 @@ const generateCSS = (
   `
 
   const getBgStyle = () =>
-    safeBgUrl || safeBgColor
+    bgUrl || bgColor
       ? `
     body::before {
       content: ""; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-      ${safeBgUrl ? `background-image: url("${safeBgUrl}") !important;` : "background-image: none !important;"}
-      ${safeBgColor ? `background-color: ${safeBgColor} !important;` : ""}
+      ${bgUrl ? `background-image: url("${bgUrl}") !important;` : "background-image: none !important;"}
+      ${bgColor ? `background-color: ${bgColor} !important;` : ""}
       background-position: ${position} !important;
       background-size: cover !important;
       background-repeat: no-repeat !important;
@@ -779,7 +1368,7 @@ const generateCSS = (
   const getElStyle = () => `
     ${elements} {
       background-color: rgba(255, 255, 255, ${opacity}) !important;
-      ${safeAccentColor ? `box-shadow: inset 0 2px 16px ${safeAccentColor}4D !important;` : ""}
+      ${accentColor ? `box-shadow: inset 0 2px 16px ${accentColor}4D !important;` : ""}
       border: none !important;
       backdrop-filter: blur(${glassBlur}px) saturate(140%) !important;
       opacity: 0.8 !important;
@@ -832,14 +1421,14 @@ const generateCSS = (
     `
       : ""
     }
-    ${safeAccentColor ? `::-webkit-scrollbar { width: auto !important; }::-webkit-scrollbar-thumb { background-color: ${safeAccentColor}4D !important; border-radius: 22px !important; }` : ""}
+    ${accentColor ? `::-webkit-scrollbar { width: auto !important; }::-webkit-scrollbar-thumb { background-color: ${accentColor}4D !important; border-radius: 22px !important; }` : ""}
   `
 
   const getTextStyle = () =>
-    safeLightTextColor && safeDarkTextColor
+    lightTextColor && darkTextColor
       ? `
-    *:not(pre *) { color: ${safeLightTextColor} !important; }
-    ${darkClass} *:not(pre *) { color: ${safeDarkTextColor} !important; }
+    *:not(pre *) { color: ${lightTextColor} !important; }
+    ${darkClass} *:not(pre *) { color: ${darkTextColor} !important; }
   `
       : ""
 
@@ -858,7 +1447,7 @@ const applyTheme = async (requestId: number) => {
   if (!currentSite) return
 
   const style = getThemeStyle()
-  if (!whiteListUrl(currentSite)) {
+  if (!isAllowedRoute(currentSite)) {
     style.textContent = ""
     setFabAccentColor("")
     setFabSurfaceOptions()
@@ -867,6 +1456,7 @@ const applyTheme = async (requestId: number) => {
   }
 
   await mountFab()
+  mountWidgetOverlay()
   setRouteScopedUiVisibility(currentSite)
 
   const [currentTheme, modelEnabled] = await Promise.all([
@@ -962,7 +1552,8 @@ storage.watch({
     scheduleApplyTheme()
   },
   [MODEL_ENABLED_STORAGE_KEY]: () => scheduleApplyTheme(),
-  [THEME_HIDDEN_STORAGE_KEY]: () => setThemeVisibility()
+  [THEME_HIDDEN_STORAGE_KEY]: () => syncFabVisibility(),
+  [WIDGET_HIDDEN_STORAGE_KEY]: () => syncFabVisibility()
 })
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
