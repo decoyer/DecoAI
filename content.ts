@@ -441,30 +441,36 @@ const normalizeCustomThemes = async (
   customThemes: CustomTheme[],
   selectedCustomThemeId: string
 ) => {
-  const retainedSource =
-    customThemes.find((theme) => theme.id === selectedCustomThemeId) ||
-    customThemes[0] ||
-    null
-  if (!retainedSource) return null
+  const source = customThemes.find(({ id }) => id === selectedCustomThemeId) ?? customThemes[0]
+  if (!source) return null
+  const theme = clearAnimatedBgUrl(source)
 
-  const retainedTheme = clearAnimatedBgUrl(retainedSource)
-  let changed = false
-  if (customThemes.length !== 1 || customThemes[0]?.id !== retainedTheme.id) {
-    changed = true
+  if (customThemes.length !== 1 || customThemes[0]?.id !== theme.id || theme !== source) {
+    await localStorageInstance.set(CUSTOM_THEMES_STORAGE_KEY, [theme])
   }
-  if (retainedTheme !== retainedSource) changed = true
-
-  if (changed) {
-    await localStorageInstance.set(CUSTOM_THEMES_STORAGE_KEY, [retainedTheme])
-  }
-  if (selectedCustomThemeId !== retainedTheme.id) {
-    await localStorageInstance.set(
-      SELECTED_CUSTOM_THEME_ID_STORAGE_KEY,
-      retainedTheme.id
-    )
+  if (selectedCustomThemeId !== theme.id) {
+    await localStorageInstance.set(SELECTED_CUSTOM_THEME_ID_STORAGE_KEY, theme.id)
   }
 
-  return retainedTheme
+  return theme
+}
+
+const hasDuplicateWidgets = (widgetItems: WidgetInstance[]) => {
+  const retainedTypes = new Set<WidgetKey>()
+  return widgetItems.some((item) => {
+    if (retainedTypes.has(item.type)) return true
+    retainedTypes.add(item.type)
+    return false
+  })
+}
+
+const normalizeCustomWidgets = (widgetItems: WidgetInstance[]) => {
+  const retainedTypes = new Set<WidgetKey>()
+  return widgetItems.filter((item) => {
+    if (retainedTypes.has(item.type)) return false
+    retainedTypes.add(item.type)
+    return true
+  })
 }
 
 const restorePremiumThemes = async (backup: PremiumThemeBackup) => {
@@ -1055,6 +1061,17 @@ function WidgetOverlayApp() {
   const selectedTarget = editingWidgetId
     ? widgetRefs.current[editingWidgetId] || null
     : null
+
+  React.useEffect(() => {
+    const items = widgetItems || DEFAULT_WIDGET_INSTANCES
+    if (!hasDuplicateWidgets(items)) return
+
+    void (async () => {
+      const premiumStatus = await getPremiumStatus({ forceRefresh: true })
+      if (premiumStatus.isPremium) return
+      setWidgetItems(normalizeCustomWidgets(items))
+    })()
+  }, [setWidgetItems, widgetItems])
 
   React.useEffect(() => {
     const onWidgetLayoutPreview = (event: Event) => {

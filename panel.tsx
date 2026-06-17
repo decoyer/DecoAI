@@ -637,13 +637,7 @@ export function FabPanelApp() {
   const backupPremiumThemes = () => {
     const nextSelectedThemeId =
       selectedCustomThemeId || customThemes[0]?.id || ""
-    if (
-      premiumThemeBackup ||
-      !nextSelectedThemeId ||
-      !hasPremiumLockedThemes(customThemes)
-    ) {
-      return
-    }
+    if (premiumThemeBackup || !nextSelectedThemeId || !hasPremiumLockedThemes(customThemes)) return
 
     void setPremiumThemeBackup({
       customThemes,
@@ -663,49 +657,72 @@ export function FabPanelApp() {
   }
 
   const normalizeCustomThemes = () => {
-    if (!customThemes.length) return
+    if (!customThemes.length) return false
 
-    const retainedSource = selectedCustomTheme || customThemes[0]
-    const retainedTheme = clearAnimatedBgUrl(retainedSource)
-    const nextThemes = [retainedTheme]
-    const changed =
-      customThemes.length !== 1 || retainedTheme !== retainedSource
+    const source = selectedCustomTheme ?? customThemes[0]
+    const theme = clearAnimatedBgUrl(source)
+    const themes = [theme]
+    const changed = customThemes.length !== 1 || theme !== source
 
-    if (changed) setCustomThemes(nextThemes)
-    if (selectedCustomThemeId !== retainedTheme.id)
-      setSelectedCustomThemeId(retainedTheme.id)
-    if (
-      editingCustomThemeId &&
-      !nextThemes.some((item) => item.id === editingCustomThemeId)
-    ) {
+    if (changed) setCustomThemes(themes)
+    if (selectedCustomThemeId !== theme.id) setSelectedCustomThemeId(theme.id)
+    if (editingCustomThemeId && editingCustomThemeId !== theme.id) {
       setEditingCustomThemeId("")
       setView("themes")
     }
-    if (draftBackgroundImageUrl) {
-      if (isAnimatedBgUrl(draftBackgroundImageUrl)) {
-        setDraftBackgroundImageUrl("")
-      }
-    }
+    if (draftBackgroundImageUrl && isAnimatedBgUrl(draftBackgroundImageUrl)) setDraftBackgroundImageUrl("")
+
+    return changed
+  }
+
+  const hasPremiumLockedWidgets = (items: WidgetInstance[]) => {
+    const retainedTypes = new Set<WidgetKey>()
+    return items.some((item) => {
+      if (retainedTypes.has(item.type)) return true
+      retainedTypes.add(item.type)
+      return false
+    })
+  }
+
+  const normalizeCustomWidgets = () => {
+    const items = widgetItems || DEFAULT_WIDGET_INSTANCES
+    const retainedTypes = new Set<WidgetKey>()
+    const nextItems = items.filter((item) => {
+      if (retainedTypes.has(item.type)) return false
+      retainedTypes.add(item.type)
+      return true
+    })
+    const changed = nextItems.length !== items.length
+
+    if (changed) setWidgetItems(nextItems)
+
+    return changed
   }
 
   useEffect(() => {
-    if (!customThemes.length) return
     if (!isPremiumChecked) return
-
     if (isPremiumUser) {
       restorePremiumThemes()
       return
     }
 
-    if (isFreeUser && hasPremiumLockedThemes(customThemes)) {
-      backupPremiumThemes()
-      normalizeCustomThemes()
+    const hasLockedThemes = customThemes.length > 0 && hasPremiumLockedThemes(customThemes)
+    const hasLockedWidgets = hasPremiumLockedWidgets(widgetItems || DEFAULT_WIDGET_INSTANCES)
+
+    if (isFreeUser && (hasLockedThemes || hasLockedWidgets)) {
+      if (hasLockedThemes) {
+        backupPremiumThemes()
+        normalizeCustomThemes()
+        toast.error(t("pro_themeLimit"), { toastId: "normalizeTheme" })
+      }
+      if (hasLockedWidgets) {
+        normalizeCustomWidgets()
+        toast.error(t("pro_widgetLimit"), { toastId: "normalizeWidget" })
+      }
       return
     }
 
-    if (isFreeUser && premiumThemeBackup) {
-      void setPremiumThemeBackup(null)
-    }
+    if (isFreeUser && premiumThemeBackup) void setPremiumThemeBackup(null)
   }, [
     draftBackgroundImageUrl,
     customThemes,
@@ -714,7 +731,8 @@ export function FabPanelApp() {
     isPremiumChecked,
     isPremiumUser,
     premiumThemeBackup,
-    selectedCustomThemeId
+    selectedCustomThemeId,
+    widgetItems
   ])
 
   useEffect(() => {
