@@ -25,7 +25,7 @@ export type SiteType = "chatgpt" | "gemini" | "claude" | "grok"
 
 export type ModelEnabledMap = Record<SiteType, boolean>
 
-export type WidgetKey = "note" | "todo" | "timer"
+export type WidgetKey = "note" | "todo" | "timer" | "stopwatch"
 
 export type WidgetInstance = {
   id: string
@@ -41,6 +41,19 @@ export type WidgetLayoutOptions = {
   accentColor: string
   opacity: number
   glassBlur: number
+}
+
+export type TimerWidgetState = {
+  timerDurationSeconds: number
+  timerRemainingSeconds: number
+  timerEndAt: number | null
+  timerRunning: boolean
+}
+
+export type StopwatchWidgetState = {
+  stopwatchElapsedMilliseconds: number
+  stopwatchStartedAt: number | null
+  stopwatchRunning: boolean
 }
 
 export type WidgetFrame = {
@@ -75,6 +88,8 @@ export const WIDGET_ENABLED_STORAGE_KEY = "widget-enabled-map"
 export const WIDGET_LAYOUT_STORAGE_KEY = "widget-layout"
 export const WIDGET_FRAME_STORAGE_KEY = "widget-frame-map"
 export const WIDGET_INSTANCES_STORAGE_KEY = "widget-instances"
+export const TIMER_WIDGET_STATE_STORAGE_KEY = "timer-widget-state"
+export const STOPWATCH_WIDGET_STATE_STORAGE_KEY = "stopwatch-widget-state"
 export const CUSTOM_THEME_LAYOUT_STORAGE_KEY = "custom-theme-layout-map"
 export const THEME_LOADING_EVENT = "decoai:theme-loading"
 export const FAB_OPEN_EVENT = "decoai:fab-open"
@@ -109,13 +124,15 @@ export const DEFAULT_MODEL_ENABLED: ModelEnabledMap = {
 export const DEFAULT_WIDGET_INSTANCES: WidgetInstance[] = [
   { id: "note", type: "note" },
   { id: "todo", type: "todo" },
-  { id: "timer", type: "timer" }
+  { id: "timer", type: "timer" },
+  { id: "stopwatch", type: "stopwatch" }
 ]
 
 export const DEFAULT_WIDGET_ENABLED: WidgetEnabledMap = {
   note: true,
   todo: true,
-  timer: true
+  timer: true,
+  stopwatch: true
 }
 
 export const DEFAULT_WIDGET_LAYOUT: WidgetLayoutOptions = {
@@ -124,6 +141,19 @@ export const DEFAULT_WIDGET_LAYOUT: WidgetLayoutOptions = {
   accentColor: "",
   opacity: DEFAULT_CUSTOM_BG_OPTIONS.opacity,
   glassBlur: DEFAULT_CUSTOM_BG_OPTIONS.glassBlur
+}
+
+export const DEFAULT_TIMER_WIDGET_STATE: TimerWidgetState = {
+  timerDurationSeconds: 300,
+  timerRemainingSeconds: 300,
+  timerEndAt: null,
+  timerRunning: false
+}
+
+export const DEFAULT_STOPWATCH_WIDGET_STATE: StopwatchWidgetState = {
+  stopwatchElapsedMilliseconds: 0,
+  stopwatchStartedAt: null,
+  stopwatchRunning: false
 }
 
 export const DEFAULT_WIDGET_MIN_SIZE: WidgetSize = {

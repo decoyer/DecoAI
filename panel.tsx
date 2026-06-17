@@ -106,9 +106,10 @@ type PremiumThemeBackup = {
 }
 
 const WIDGET_LIST: Array<{ key: WidgetKey; labelKey: string; icon: string }> = [
-  { key: "note", labelKey: "noteWidget", icon: "sticky-note" },
+  { key: "note", labelKey: "noteWidget", icon: "notepad-text" },
   { key: "todo", labelKey: "todoWidget", icon: "list-checks" },
-  { key: "timer", labelKey: "timerWidget", icon: "timer" }
+  { key: "timer", labelKey: "timerWidget", icon: "clock" },
+  { key: "stopwatch", labelKey: "stopwatchWidget", icon: "timer-reset" }
 ]
 
 const isSameWidgetLayout = (
@@ -279,7 +280,6 @@ const downloadCustomTheme = (themeData: CustomTheme) => {
 const disabledControlStyle = (enabled: boolean) =>
   ({
     opacity: enabled ? 1 : 0.5,
-    cursor: enabled ? "pointer" : "not-allowed",
     pointerEvents: enabled ? "auto" : "none"
   }) as const
 
@@ -1295,6 +1295,7 @@ export function FabPanelApp() {
                         <CheckboxCard
                           key={item.key}
                           label={t(item.labelKey)}
+                          icon={item.icon}
                           checked={
                             (widgetEnabled?.[item.key] ??
                               DEFAULT_WIDGET_ENABLED[item.key]) &&
@@ -1731,35 +1732,33 @@ export function FabPanelApp() {
               padding: "10px 20px",
               gap: 8
             }}>
-            {panelMode === "theme" &&
-              themeTab === "custom" &&
-              view !== "custom" && (
-                <div style={{ ...rowStyle, gap: 8 }}>
-                  <FooterButton
-                    onClick={onExportClick}
-                    disabled={theme !== "custom"}
-                    style={{
-                      ...footerButtonStyle,
-                      ...disabledControlStyle(theme === "custom")
-                    }}
-                    icon="upload"
-                    label={t("exportTheme")}
-                  />
-                  <FooterButton
-                    onClick={onImportClick}
-                    style={footerButtonStyle}
-                    icon="download"
-                    label={t("importTheme")}
-                  />
-                  <input
-                    ref={importFileRef}
-                    type="file"
-                    accept="application/json"
-                    onChange={(e) => onImportFile(e.target.files?.[0])}
-                    style={{ display: "none" }}
-                  />
-                </div>
-              )}
+            {panelMode === "theme" && themeTab === "custom" && view !== "custom" && (
+              <div style={{ ...rowStyle, gap: 8 }}>
+                <FooterButton
+                  onClick={onExportClick}
+                  disabled={theme !== "custom"}
+                  style={{
+                    ...footerButtonStyle,
+                    ...disabledControlStyle(theme === "custom")
+                  }}
+                  icon="upload"
+                  label={t("exportTheme")}
+                />
+                <FooterButton
+                  onClick={onImportClick}
+                  style={footerButtonStyle}
+                  icon="download"
+                  label={t("importTheme")}
+                />
+                <input
+                  ref={importFileRef}
+                  type="file"
+                  accept="application/json"
+                  onChange={(e) => onImportFile(e.target.files?.[0])}
+                  style={{ display: "none" }}
+                />
+              </div>
+            )}
             {panelMode === "theme" && view === "custom" && (
               <div style={{ ...rowStyle, gap: 8 }}>
                 <FooterButton
@@ -1800,7 +1799,7 @@ export function FabPanelApp() {
                     display: "flex",
                     justifyContent: "center"
                   }}
-                  icon="assets/gem_stone.gif"
+                  icon="assets/pro.gif"
                   label={t("upgradePro")}
                 />
               )}
@@ -1898,9 +1897,7 @@ function ThemeCard({
         className="preset-theme-card__bg"
         style={{ background: themeCardBg(color) }}
       />
-      <span className="preset-theme-card__emoji" aria-hidden="true">
-        {emoji}
-      </span>
+      <span className="preset-theme-card__emoji">{emoji}</span>
       <span className="preset-theme-card__label">{label}</span>
     </button>
   )
@@ -2060,12 +2057,16 @@ type RangeControlProps = {
 function CheckboxControl({
   label,
   checked,
+  icon,
   disabled = false,
   onChange
 }: CheckboxControlProps) {
   return (
     <label style={rowStyle}>
-      <span style={fieldLabelStyle}>{label}</span>
+      <div style={{ ...rowStyle, gap: 8 }}>
+        {icon && (<Icon icon={`lucide:${icon}`} height={16} aria-hidden="true" />)}
+        <span style={fieldLabelStyle}>{label}</span>
+      </div>
       <input
         type="checkbox"
         checked={checked}
@@ -2085,6 +2086,7 @@ function CheckboxControl({
 type CheckboxControlProps = {
   label: string
   checked: boolean
+  icon?: string
   disabled?: boolean
   onChange: (checked: boolean) => void
 }

@@ -10,6 +10,7 @@ import React, {
 } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import Moveable from "react-moveable"
+import { useStopwatch, useTimer } from "react-timer-hook"
 import { toast, ToastContainer } from "react-toastify"
 
 import { Storage } from "@plasmohq/storage"
@@ -22,6 +23,8 @@ import {
   clearAnimatedBgUrl,
   CUSTOM_THEME_PREVIEW_EVENT,
   CUSTOM_THEMES_STORAGE_KEY,
+  DEFAULT_STOPWATCH_WIDGET_STATE,
+  DEFAULT_TIMER_WIDGET_STATE,
   DEFAULT_WIDGET_ENABLED,
   DEFAULT_WIDGET_INSTANCES,
   DEFAULT_WIDGET_LAYOUT,
@@ -36,8 +39,10 @@ import {
   sanitizeCustomBgUrl,
   SELECTED_CUSTOM_THEME_ID_STORAGE_KEY,
   SELECTED_THEME_STORAGE_KEY,
+  STOPWATCH_WIDGET_STATE_STORAGE_KEY,
   THEME_HIDDEN_STORAGE_KEY,
   THEME_LOADING_EVENT,
+  TIMER_WIDGET_STATE_STORAGE_KEY,
   WIDGET_ENABLED_STORAGE_KEY,
   WIDGET_FRAME_STORAGE_KEY,
   WIDGET_HIDDEN_STORAGE_KEY,
@@ -48,6 +53,8 @@ import {
   type CustomTheme,
   type ModelEnabledMap,
   type SiteType,
+  type StopwatchWidgetState,
+  type TimerWidgetState,
   type WidgetFrame,
   type WidgetFrameMap,
   type WidgetInstance,
@@ -198,9 +205,10 @@ const WIDGET_LIST: Array<{
   labelKey: string
   icon: string
 }> = [
-    { key: "note", labelKey: "noteWidget", icon: "lucide:notepad-text" },
-    { key: "todo", labelKey: "todoWidget", icon: "lucide:list-checks" },
-    { key: "timer", labelKey: "timerWidget", icon: "lucide:clock" }
+    { key: "note", labelKey: "noteWidget", icon: "notepad-text" },
+    { key: "todo", labelKey: "todoWidget", icon: "list-checks" },
+    { key: "timer", labelKey: "timerWidget", icon: "clock" },
+    { key: "stopwatch", labelKey: "stopwatchWidget", icon: "timer-reset" }
   ]
 
 const appendToPage = (element: HTMLElement) => {
@@ -669,6 +677,330 @@ const isWidgetDarkMode = () => {
   return document.querySelector(SITE_SELECTORS[currentSite].darkClass) !== null
 }
 
+const getSyncedTimerSeconds = (state: TimerWidgetState) => {
+  if (!state.timerRunning || !state.timerEndAt) {
+    return Math.max(0, state.timerRemainingSeconds)
+  }
+
+  return Math.max(0, Math.ceil((state.timerEndAt - Date.now()) / 1000))
+}
+
+const getSyncedStopwatchMilliseconds = (state: StopwatchWidgetState) => {
+  if (!state.stopwatchRunning || !state.stopwatchStartedAt) {
+    return Math.max(0, state.stopwatchElapsedMilliseconds)
+  }
+
+  return Math.max(0, state.stopwatchElapsedMilliseconds + Date.now() - state.stopwatchStartedAt)
+}
+
+const offsetTimestamp = (milliseconds: number) => {
+  const timestamp = new Date()
+  timestamp.setMilliseconds(timestamp.getMilliseconds() + Math.max(0, milliseconds))
+  return timestamp
+}
+
+const expiryTimestamp = (seconds: number) => {
+  const timestamp = new Date()
+  timestamp.setSeconds(timestamp.getSeconds() + Math.max(0, seconds))
+  return timestamp
+}
+
+const getTimerDisplayParts = (timer: ReturnType<typeof useTimer>) => {
+  const totalSeconds = Math.max(0, Math.floor(timer.totalMilliseconds / 1000))
+
+  return {
+    hours: Math.floor(totalSeconds / 3600),
+    minutes: Math.floor((totalSeconds % 3600) / 60),
+    seconds: totalSeconds % 60
+  }
+}
+
+const getStopwatchMilliseconds = (
+  stopwatch: ReturnType<typeof useStopwatch>
+) => stopwatch.totalSeconds * 1000 + stopwatch.milliseconds
+
+const controlButton = (
+  icon: string,
+  onClick: () => void,
+  disabled = false
+) =>
+  createElement(
+    "button",
+    {
+      type: "button",
+      className: "decoai-time-control",
+      disabled,
+      onPointerDown: (e) => e.stopPropagation(),
+      onPointerUp: (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        onClick()
+      },
+      onClick: (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+    },
+    createElement(Icon, {
+      icon,
+      height: 24,
+      "aria-hidden": "true"
+    })
+  )
+
+function TimerWidgetContent({ widgetId }: { widgetId: string }) {
+  const [state, setState] = useStorage<TimerWidgetState>(
+    `${TIMER_WIDGET_STATE_STORAGE_KEY}:${widgetId}`,
+    DEFAULT_TIMER_WIDGET_STATE
+  )
+  const timerState = { ...DEFAULT_TIMER_WIDGET_STATE, ...state }
+  const savedTimerRemaining = getSyncedTimerSeconds(timerState)
+  const timer = useTimer({
+    expiryTimestamp: expiryTimestamp(savedTimerRemaining),
+    autoStart: timerState.timerRunning && savedTimerRemaining > 0,
+    interval: 10,
+    onExpire: () =>
+      setState((prev) => ({
+        ...DEFAULT_TIMER_WIDGET_STATE,
+        ...prev,
+        timerEndAt: null,
+        timerRemainingSeconds: 0,
+        timerRunning: false
+      }))
+  })
+
+  React.useEffect(() => {
+    const nextRemaining = getSyncedTimerSeconds(timerState)
+    timer.restart(
+      expiryTimestamp(nextRemaining),
+      timerState.timerRunning && nextRemaining > 0
+    )
+  }, [
+    timerState.timerEndAt,
+    timerState.timerRemainingSeconds,
+    timerState.timerRunning
+  ])
+
+  const timerDisplay = getTimerDisplayParts(timer)
+
+  const setTimerTimePart = (
+    part: "hours" | "minutes" | "seconds",
+    value: string
+  ) => {
+    const nextParts = {
+      ...timerDisplay,
+      [part]: clampNumber(value, 0, 59, timer[part])
+    }
+    const nextSeconds = nextParts.hours * 3600 + nextParts.minutes * 60 + nextParts.seconds
+    const shouldRun = Boolean(timer.isRunning && nextSeconds > 0)
+
+    timer.restart(expiryTimestamp(nextSeconds), shouldRun)
+    setState((prev) => ({
+      ...DEFAULT_TIMER_WIDGET_STATE,
+      ...prev,
+      timerDurationSeconds: nextSeconds,
+      timerRemainingSeconds: nextSeconds,
+      timerEndAt: shouldRun ? Date.now() + nextSeconds * 1000 : null,
+      timerRunning: shouldRun
+    }))
+  }
+
+  const startTimer = () => {
+    const seconds = timer.totalSeconds || timerState.timerDurationSeconds
+    if (seconds <= 0) return
+
+    timer.restart(expiryTimestamp(seconds), true)
+    setState((prev) => ({
+      ...DEFAULT_TIMER_WIDGET_STATE,
+      ...prev,
+      timerRemainingSeconds: seconds,
+      timerEndAt: Date.now() + seconds * 1000,
+      timerRunning: true
+    }))
+  }
+
+  const pauseTimer = () => {
+    timer.pause()
+    setState((prev) => ({
+      ...DEFAULT_TIMER_WIDGET_STATE,
+      ...prev,
+      timerEndAt: null,
+      timerRemainingSeconds: timer.totalSeconds,
+      timerRunning: false
+    }))
+  }
+
+  const resetTimer = () => {
+    const durationSeconds = timerState.timerDurationSeconds || DEFAULT_TIMER_WIDGET_STATE.timerDurationSeconds
+
+    timer.restart(expiryTimestamp(durationSeconds), false)
+    setState((prev) => ({
+      ...DEFAULT_TIMER_WIDGET_STATE,
+      ...prev,
+      timerEndAt: null,
+      timerRemainingSeconds: durationSeconds,
+      timerRunning: false
+    }))
+  }
+
+  const changeTimerTimePart = (
+    part: "hours" | "minutes" | "seconds",
+    delta: number
+  ) => {
+    const currentValue = timerDisplay[part]
+    const nextValue = (currentValue + delta + 60) % 60
+
+    setTimerTimePart(part, String(nextValue))
+  }
+
+  const timeInput = (
+    part: "hours" | "minutes" | "seconds",
+    value: number
+  ) =>
+    createElement("input", {
+      className: "decoai-time-input",
+      type: "number",
+      min: 0,
+      max: 59,
+      value: String(value).padStart(2, "0"),
+      disabled: timer.isRunning,
+      onChange: (e) => setTimerTimePart(part, e.target.value),
+      onWheel: (e) => {
+        e.preventDefault()
+        changeTimerTimePart(part, e.deltaY > 0 ? -1 : 1)
+      },
+      onClick: (e) => e.currentTarget.select()
+    })
+
+  return createElement(
+    "div",
+    {
+      className: "decoai-time-widget",
+      onPointerDown: (e) => e.stopPropagation()
+    },
+    createElement(
+      "div",
+      { className: "decoai-time-row" },
+      createElement(
+        "div",
+        { className: "decoai-time-display" },
+        timeInput("hours", timerDisplay.hours),
+        createElement("span", null, ":"),
+        timeInput("minutes", timerDisplay.minutes),
+        createElement("span", null, ":"),
+        timeInput("seconds", timerDisplay.seconds)
+      ),
+      createElement(
+        "div",
+        { className: "decoai-time-controls" },
+        timer.isRunning
+          ? controlButton("lucide:pause", pauseTimer)
+          : controlButton("lucide:play", startTimer, timer.totalSeconds <= 0),
+        controlButton("lucide:rotate-ccw", resetTimer)
+      )
+    )
+  )
+}
+
+function StopwatchWidgetContent({ widgetId }: { widgetId: string }) {
+  const [state, setState] = useStorage<StopwatchWidgetState>(
+    `${STOPWATCH_WIDGET_STATE_STORAGE_KEY}:${widgetId}`,
+    DEFAULT_STOPWATCH_WIDGET_STATE
+  )
+  const stopwatchState = { ...DEFAULT_STOPWATCH_WIDGET_STATE, ...state }
+  const savedElapsedMilliseconds = getSyncedStopwatchMilliseconds(stopwatchState)
+  const stopwatch = useStopwatch({
+    autoStart: stopwatchState.stopwatchRunning,
+    interval: 10,
+    offsetTimestamp: offsetTimestamp(savedElapsedMilliseconds)
+  })
+
+  React.useEffect(() => {
+    stopwatch.reset(
+      offsetTimestamp(getSyncedStopwatchMilliseconds(stopwatchState)),
+      stopwatchState.stopwatchRunning
+    )
+  }, [
+    stopwatchState.stopwatchElapsedMilliseconds,
+    stopwatchState.stopwatchRunning,
+    stopwatchState.stopwatchStartedAt
+  ])
+
+  const startStopwatch = () => {
+    const elapsedMilliseconds = getStopwatchMilliseconds(stopwatch)
+
+    stopwatch.start()
+    setState((prev) => ({
+      ...DEFAULT_STOPWATCH_WIDGET_STATE,
+      ...prev,
+      stopwatchElapsedMilliseconds: elapsedMilliseconds,
+      stopwatchStartedAt: Date.now(),
+      stopwatchRunning: true
+    }))
+  }
+
+  const pauseStopwatch = () => {
+    const elapsedMilliseconds = getStopwatchMilliseconds(stopwatch)
+
+    stopwatch.pause()
+    setState((prev) => ({
+      ...DEFAULT_STOPWATCH_WIDGET_STATE,
+      ...prev,
+      stopwatchElapsedMilliseconds: elapsedMilliseconds,
+      stopwatchStartedAt: null,
+      stopwatchRunning: false
+    }))
+  }
+
+  const resetStopwatch = () => {
+    stopwatch.reset(offsetTimestamp(0), false)
+    setState((prev) => ({
+      ...DEFAULT_STOPWATCH_WIDGET_STATE,
+      ...prev,
+      stopwatchElapsedMilliseconds: 0,
+      stopwatchStartedAt: null,
+      stopwatchRunning: false
+    }))
+  }
+
+  const timeInput = (value: number) =>
+    createElement("input", {
+      className: "decoai-time-input",
+      type: "number",
+      value: String(value).padStart(2, "0"),
+      disabled: true
+    })
+
+  return createElement(
+    "div",
+    {
+      className: "decoai-time-widget",
+      onPointerDown: (e) => e.stopPropagation()
+    },
+    createElement(
+      "div",
+      { className: "decoai-time-row" },
+      createElement(
+        "div",
+        { className: "decoai-time-display" },
+        timeInput(Math.floor(stopwatch.totalSeconds / 60)),
+        createElement("span", null, ":"),
+        timeInput(stopwatch.seconds),
+        createElement("span", null, "."),
+        timeInput(Math.floor(stopwatch.milliseconds / 10))
+      ),
+      createElement(
+        "div",
+        { className: "decoai-time-controls" },
+        stopwatch.isRunning
+          ? controlButton("lucide:pause", pauseStopwatch)
+          : controlButton("lucide:play", startStopwatch),
+        controlButton("lucide:rotate-ccw", resetStopwatch)
+      )
+    )
+  )
+}
+
 function WidgetOverlayApp() {
   const [previewLayout, setPreviewLayout] =
     useState<WidgetLayoutOptions | null>(null)
@@ -887,9 +1219,7 @@ function WidgetOverlayApp() {
             "button",
             {
               type: "button",
-              className:
-                "decoai-widget-card__action decoai-widget-card__duplicate",
-              "aria-hidden": "true",
+              className: "decoai-widget-card__action decoai-widget-card__duplicate",
               onClick: (e) => {
                 e.preventDefault()
                 e.stopPropagation()
@@ -906,9 +1236,7 @@ function WidgetOverlayApp() {
             "button",
             {
               type: "button",
-              className:
-                "decoai-widget-card__action decoai-widget-card__delete",
-              "aria-hidden": "true",
+              className: "decoai-widget-card__action decoai-widget-card__delete",
               onClick: (e) => {
                 e.preventDefault()
                 e.stopPropagation()
@@ -934,7 +1262,7 @@ function WidgetOverlayApp() {
             }
           },
           createElement(Icon, {
-            icon: widgetMeta.icon,
+            icon: `lucide:${widgetMeta.icon}`,
             height: 16,
             "aria-hidden": "true"
           }),
@@ -961,7 +1289,9 @@ function WidgetOverlayApp() {
               whiteSpace: "nowrap"
             }
           })
-        )
+        ),
+        item.type === "timer" ? createElement(TimerWidgetContent, { widgetId: item.id }) : null,
+        item.type === "stopwatch" ? createElement(StopwatchWidgetContent, { widgetId: item.id }) : null
       )
     }),
     createElement(Moveable, {
@@ -989,16 +1319,11 @@ function WidgetOverlayApp() {
       hideDefaultLines: false,
       renderDirections: ["nw", "n", "ne", "w", "e", "sw", "s", "se"],
       throttleDrag: 0,
-      throttleResize: 0,
-      onDragStart: () => {
-        interactionStartFrameRef.current = editingWidgetId
-          ? frames[editingWidgetId]
-          : null
-      },
+      throttleResize: 1,
+      onDragStart: () => interactionStartFrameRef.current = editingWidgetId ? frames[editingWidgetId] : null,
       onDrag: (event) => {
         if (!editingWidgetId) return
-        const frame =
-          interactionStartFrameRef.current || frames[editingWidgetId]
+        const frame = interactionStartFrameRef.current || frames[editingWidgetId]
         const [deltaX, deltaY] = event.beforeDist
         const nextFrame = clampWidgetFrameToViewport(
           {
@@ -1015,15 +1340,19 @@ function WidgetOverlayApp() {
         persistLiveFrame(editingWidgetId)
         interactionStartFrameRef.current = null
       },
-      onResizeStart: () => {
-        interactionStartFrameRef.current = editingWidgetId
-          ? frames[editingWidgetId]
-          : null
+      onResizeStart: (event) => {
+        interactionStartFrameRef.current = editingWidgetId ? frames[editingWidgetId] : null
+        const viewportWidth = Math.max(document.documentElement.clientWidth, 320)
+        const viewportHeight = Math.max(document.documentElement.clientHeight, 240)
+        event.setMin([
+          Math.min(DEFAULT_WIDGET_MIN_SIZE.width, viewportWidth),
+          Math.min(DEFAULT_WIDGET_MIN_SIZE.height, viewportHeight)
+        ])
+        event.setMax([viewportWidth, viewportHeight])
       },
       onResize: (event) => {
         if (!editingWidgetId) return
-        const frame =
-          interactionStartFrameRef.current || frames[editingWidgetId]
+        const frame = interactionStartFrameRef.current || frames[editingWidgetId]
         const [deltaX, deltaY] = event.drag.beforeDist
         const nextFrame = clampWidgetFrameToViewport(
           {
@@ -1122,6 +1451,75 @@ const mountWidgetOverlay = () => {
       .decoai-widget-card__delete:hover {
         background-color: #d32f2f;
       }
+      .decoai-time-widget {
+        height: calc(100% - 32px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 10px 10px;
+        pointer-events: auto;
+      }
+      .decoai-time-row {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        font-size: 2rem;
+      }
+      .decoai-time-controls {
+        position: relative;
+        z-index: 5;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .decoai-time-control {
+        position: relative;
+        z-index: 6;
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: none;
+        border-radius: 999px;
+        padding: 0;
+        background-color: transparent;
+        color: inherit !important;
+        cursor: pointer;
+        touch-action: manipulation;
+        user-select: none;
+      }
+      .decoai-time-control:hover {
+        background-color: #0000004D;
+      }
+      .decoai-time-control:disabled {
+        opacity: 0.5;
+        pointer-events: none;
+      }
+      .decoai-time-display {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+      }
+      .decoai-time-input {
+        width: 100%;
+        border: none;
+        border-radius: 8px;
+        padding: 2px 0;
+        color: inherit !important;
+        background-color: transparent;
+        text-align: center;
+        outline: none; 
+        font-size: 2rem;
+      }
+      input::-webkit-outer-spin-button,
+      input::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
     </style>
   `
   appendToBody(root)
@@ -1151,12 +1549,8 @@ const syncFabVisibility = async () => {
   if (!setRouteScopedUiVisibility()) return
   const themeButton = root.querySelector<HTMLElement>(`.${FAB_THEME_BTN_CLASS}`)
   const themeAction = themeButton?.closest<HTMLElement>(`.${FAB_ACTION_CLASS}`)
-  const widgetButton = root.querySelector<HTMLElement>(
-    `.${FAB_WIDGET_BTN_CLASS}`
-  )
-  const widgetAction = widgetButton?.closest<HTMLElement>(
-    `.${FAB_ACTION_CLASS}`
-  )
+  const widgetButton = root.querySelector<HTMLElement>(`.${FAB_WIDGET_BTN_CLASS}`)
+  const widgetAction = widgetButton?.closest<HTMLElement>(`.${FAB_ACTION_CLASS}`)
   const isThemeHidden =
     (await storage.get<boolean>(THEME_HIDDEN_STORAGE_KEY)) === true
   const isWidgetHidden =
@@ -1210,13 +1604,11 @@ const mountFab = async () => {
 
   const createFabAction = ({
     buttonClass,
-    ariaLabel,
     iconComponent,
     tooltipText,
     panelView
   }: {
     buttonClass: string
-    ariaLabel: string
     iconComponent: React.ReactElement
     tooltipText: string
     panelView: FabPanelView
@@ -1224,7 +1616,6 @@ const mountFab = async () => {
     const button = document.createElement("button")
     button.type = "button"
     button.className = buttonClass
-    button.setAttribute("aria-label", ariaLabel)
     const iconRoot = createRoot(button)
     iconRoot.render(iconComponent)
     button.addEventListener("click", (event) => {
@@ -1235,9 +1626,7 @@ const mountFab = async () => {
         fabPanelView = panelView
         fabOpen = true
         root.classList.add(FAB_OPEN_CLASS)
-        window.dispatchEvent(
-          new CustomEvent(FAB_OPEN_EVENT, { detail: { view: panelView } })
-        )
+        window.dispatchEvent(new CustomEvent(FAB_OPEN_EVENT, { detail: { view: panelView } }))
       }
     })
 
@@ -1254,7 +1643,6 @@ const mountFab = async () => {
 
   const themeAction = createFabAction({
     buttonClass: FAB_THEME_BTN_CLASS,
-    ariaLabel: "Theme Settings Button",
     iconComponent: React.createElement(Icon, {
       icon: "lucide:wallpaper",
       height: 24,
@@ -1266,7 +1654,6 @@ const mountFab = async () => {
 
   const widgetAction = createFabAction({
     buttonClass: FAB_WIDGET_BTN_CLASS,
-    ariaLabel: "Widget Settings Button",
     iconComponent: React.createElement(Icon, {
       icon: "lucide:component",
       height: 24,
@@ -1503,9 +1890,8 @@ const flushApplyTheme = async () => {
 
 const scheduleApplyTheme = () => {
   applyThemeQueued = true
-  requestAnimationFrame(() => {
-    void flushApplyTheme()
-  })
+  requestAnimationFrame(() => void flushApplyTheme())
+  window.setTimeout(() => scheduleApplyTheme(), 250)
 }
 
 const scheduleApplyThemeOnLocationChange = () => {
@@ -1543,7 +1929,6 @@ const watchLocationChange = () => {
   }
 
   window.addEventListener("popstate", scheduleApplyThemeOnLocationChange)
-  window.setInterval(scheduleApplyThemeOnLocationChange, 250)
 }
 
 storage.watch({
@@ -1567,10 +1952,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 })
 
 window.addEventListener(CUSTOM_THEME_PREVIEW_EVENT, (event) => {
-  const customEvent = event as CustomEvent<{
-    themeId: string
-    theme: CustomTheme
-  } | null>
+  const customEvent = event as CustomEvent<{ themeId: string; theme: CustomTheme } | null>
   customThemePreview = customEvent.detail
   void (async () => {
     if (!(await isCustomThemeSelected())) return

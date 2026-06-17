@@ -93,9 +93,7 @@ function IndexPopup() {
     }
   }
 
-  const onSubscriptionClick = () => {
-    window.open("https://polar.sh/kstm/portal")
-  }
+  const onSubscriptionClick = () => window.open("https://polar.sh/kstm/portal")
 
   return (
     <>
@@ -177,12 +175,7 @@ function IndexPopup() {
 
               <label style={rowStyle}>
                 <div style={itemLabelStyle}>
-                  <Icon
-                    icon="lucide:wallpaper"
-                    color="#66cdaa"
-                    height={16}
-                    aria-hidden="true"
-                  />
+                  <Icon icon="lucide:wallpaper" color="#66cdaa" height={16} aria-hidden="true" />
                   <span style={{ lineHeight: 1 }}>{t("themeSettings")}</span>
                 </div>
                 <ToggleSwitch
@@ -193,12 +186,7 @@ function IndexPopup() {
 
               <label style={rowStyle}>
                 <div style={itemLabelStyle}>
-                  <Icon
-                    icon="lucide:component"
-                    color="#66cdaa"
-                    height={16}
-                    aria-hidden="true"
-                  />
+                  <Icon icon="lucide:component" color="#66cdaa" height={16} aria-hidden="true" />
                   <span style={{ lineHeight: 1 }}>{t("widgetSettings")}</span>
                 </div>
                 <ToggleSwitch
@@ -231,11 +219,7 @@ function IndexPopup() {
             <>
               <div style={sectionWrapperStyle}>
                 <div style={sectionHeaderStyle}>
-                  <Icon
-                    icon="lucide:circle-user-round"
-                    height={24}
-                    aria-hidden="true"
-                  />
+                  <Icon icon="lucide:circle-user-round" height={24} aria-hidden="true" />
                   <h3>{t("profile")}</h3>
                 </div>
                 <button
@@ -243,12 +227,7 @@ function IndexPopup() {
                   onClick={onSignInClick}
                   disabled={isLoading}
                   style={actionButtonStyle}>
-                  <Icon
-                    icon="lucide:refresh-ccw"
-                    color="#66cdaa"
-                    height={24}
-                    aria-hidden="true"
-                  />
+                  <Icon icon="lucide:refresh-ccw" color="#66cdaa" height={24} aria-hidden="true" />
                 </button>
               </div>
 
@@ -275,12 +254,7 @@ function IndexPopup() {
                   type="button"
                   onClick={onSubscriptionClick}
                   style={actionButtonStyle}>
-                  <Icon
-                    icon="lucide:repeat"
-                    color="#66cdaa"
-                    height={24}
-                    aria-hidden="true"
-                  />
+                  <Icon icon="lucide:repeat" color="#66cdaa" height={24} aria-hidden="true" />
                 </button>
               </div>
 
@@ -317,12 +291,7 @@ function IndexPopup() {
               zIndex: 10,
               pointerEvents: "auto"
             }}>
-            <Icon
-              icon="line-md:loading-twotone-loop"
-              height={48}
-              color="#66cdaa"
-              aria-hidden="true"
-            />
+            <Icon icon="line-md:loading-twotone-loop" height={48} color="#66cdaa" aria-hidden="true" />
           </div>
         )}
       </div>

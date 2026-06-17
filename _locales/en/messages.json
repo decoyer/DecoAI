@@ -59,6 +59,9 @@
   "timerWidget": {
     "message": "Timer"
   },
+  "stopwatchWidget": {
+    "message": "Stopwatch"
+  },
   "profile": {
     "message": "Profile"
   },
