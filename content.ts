@@ -655,7 +655,6 @@ const clampWidgetFrameToViewport = (
 }
 
 const getInitialWidgetFrame = (index: number): WidgetFrame => {
-  const offset = index * 32
   const viewportWidth = Math.max(document.documentElement.clientWidth, 320)
   const viewportHeight = Math.max(document.documentElement.clientHeight, 240)
   const width = Math.min(DEFAULT_WIDGET_MIN_SIZE.width, viewportWidth)
@@ -663,7 +662,7 @@ const getInitialWidgetFrame = (index: number): WidgetFrame => {
   const maxX = Math.max(0, viewportWidth - width)
   const maxY = Math.max(0, viewportHeight - height)
   const x = Math.min(maxX, 300)
-  const y = Math.min(maxY, 20 + offset)
+  const y = Math.min(maxY, index * 50 + 25)
 
   return { x, y, width, height }
 }
