@@ -740,7 +740,7 @@ const controlButton = (
     },
     createElement(Icon, {
       icon,
-      height: 24,
+      height: "50%",
       "aria-hidden": "true"
     })
   )
@@ -1111,11 +1111,9 @@ function WidgetOverlayApp() {
     const opacity = clampNumber(layout.opacity, 0, 1, 0.8)
     const textColor = layout.textColor
     const accentColor = layout.accentColor
-    const backgroundColor =
-      layout.backgroundColor ||
-      (isDarkMode
-        ? `rgba(24, 24, 24, ${opacity})`
-        : `rgba(255, 255, 255, ${opacity})`)
+    const backgroundColor = layout.backgroundColor || (
+      isDarkMode ? `rgba(24, 24, 24, ${opacity})` : `rgba(255, 255, 255, ${opacity})`
+    )
 
     return {
       position: "absolute",
@@ -1535,14 +1533,15 @@ const mountWidgetOverlay = () => {
         justify-content: center;
         padding: 0 10px 10px;
         pointer-events: auto;
+        container-type: size;
       }
       .decoai-time-row {
         flex: 1;
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 8px;
-        font-size: 2rem;
+        gap: max(8px, 4cqw);
+        font-size: max(32px, 16cqmin);
       }
       .decoai-time-controls {
         position: relative;
@@ -1554,8 +1553,8 @@ const mountWidgetOverlay = () => {
       .decoai-time-control {
         position: relative;
         z-index: 6;
-        width: 48px;
-        height: 48px;
+        width: max(48px, 24cqmin);
+        height: max(48px, 24cqmin);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -1579,7 +1578,7 @@ const mountWidgetOverlay = () => {
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 4px;
+        gap: max(4px, 2cqw);
       }
       .decoai-time-input {
         width: 100%;
@@ -1589,8 +1588,8 @@ const mountWidgetOverlay = () => {
         color: inherit !important;
         background-color: transparent;
         text-align: center;
-        outline: none; 
-        font-size: 2rem;
+        outline: none;
+        font-size: inherit;
       }
       input::-webkit-outer-spin-button,
       input::-webkit-inner-spin-button {
