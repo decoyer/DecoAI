@@ -122,16 +122,11 @@ const isSameWidgetLayout = (
   left.opacity === right.opacity &&
   left.glassBlur === right.glassBlur
 
-const createWidgetInstance = (
-  key: WidgetKey,
-  currentItems: WidgetInstance[]
-): WidgetInstance => {
+const createWidgetInstance = (key: WidgetKey): WidgetInstance => {
   const widgetMeta = WIDGET_LIST.find((widget) => widget.key === key)
 
   return {
-    id: currentItems.some((item) => item.id === key)
-      ? `${key}-${crypto.randomUUID()}`
-      : key,
+    id: key,
     type: key,
     name: t(widgetMeta?.labelKey || "noteWidget")
   }
@@ -536,7 +531,7 @@ export function FabPanelApp() {
 
     const timeoutId = window.setTimeout(() => {
       setWidgetLayout(draftWidgetLayout)
-    }, 250)
+    }, 1000)
 
     return () => window.clearTimeout(timeoutId)
   }, [draftWidgetLayout, panelMode, setWidgetLayout, widgetLayout])
@@ -1090,18 +1085,14 @@ export function FabPanelApp() {
   }
 
   const updateWidgetEnabled = (key: WidgetKey, checked: boolean) => {
+    const items = widgetItems || DEFAULT_WIDGET_INSTANCES
     setWidgetEnabled({
       ...DEFAULT_WIDGET_ENABLED,
       ...widgetEnabled,
       [key]: checked
     })
-    if (!checked) return
-
-    setWidgetItems((prev) => {
-      const nextItems = [...(prev || DEFAULT_WIDGET_INSTANCES)]
-      if (nextItems.some((widget) => widget.type === key)) return nextItems
-      return [...nextItems, createWidgetInstance(key, nextItems)]
-    })
+    if (!checked || items.some((widget) => widget.type === key)) return
+    setWidgetItems([...items, createWidgetInstance(key)])
   }
 
   const updateWidgetLayout = (

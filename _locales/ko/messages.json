@@ -51,7 +51,7 @@
     "message": "삭제"
   },
   "noteWidget": {
-    "message": "메모장"
+    "message": "메모"
   },
   "todoWidget": {
     "message": "체크리스트"
@@ -70,9 +70,6 @@
   },
   "email": {
     "message": "이메일"
-  },
-  "signinRequired": {
-    "message": "Sign-in required"
   },
   "subscription": {
     "message": "구독"
@@ -172,6 +169,9 @@
   },
   "default": {
     "message": "기본"
+  },
+  "alert_TimerExpired": {
+    "message": "설정한 타이머가 종료되었습니다."
   },
   "error_fileNotSelected": {
     "message": "먼저 파일을 선택해 주세요."

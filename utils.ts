@@ -129,10 +129,10 @@ export const DEFAULT_WIDGET_INSTANCES: WidgetInstance[] = [
 ]
 
 export const DEFAULT_WIDGET_ENABLED: WidgetEnabledMap = {
-  note: true,
-  todo: true,
-  timer: true,
-  stopwatch: true
+  note: false,
+  todo: false,
+  timer: false,
+  stopwatch: false
 }
 
 export const DEFAULT_WIDGET_LAYOUT: WidgetLayoutOptions = {

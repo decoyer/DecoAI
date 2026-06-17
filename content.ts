@@ -655,18 +655,15 @@ const clampWidgetFrameToViewport = (
 }
 
 const getInitialWidgetFrame = (index: number): WidgetFrame => {
-  const gap = 20
-  const itemsPerColumn = 5
+  const offset = index * 32
   const viewportWidth = Math.max(document.documentElement.clientWidth, 320)
   const viewportHeight = Math.max(document.documentElement.clientHeight, 240)
   const width = Math.min(DEFAULT_WIDGET_MIN_SIZE.width, viewportWidth)
   const height = Math.min(DEFAULT_WIDGET_MIN_SIZE.height, viewportHeight)
   const maxX = Math.max(0, viewportWidth - width)
   const maxY = Math.max(0, viewportHeight - height)
-  const column = Math.floor(index / itemsPerColumn)
-  const row = index % itemsPerColumn
-  const x = Math.min(maxX, 300 + column * (width + gap))
-  const y = Math.min(maxY, gap + row * (height + gap))
+  const x = Math.min(maxX, 300)
+  const y = Math.min(maxY, 20 + offset)
 
   return { x, y, width, height }
 }
@@ -759,7 +756,7 @@ function TimerWidgetContent({ widgetId }: { widgetId: string }) {
     expiryTimestamp: expiryTimestamp(savedTimerRemaining),
     autoStart: timerState.timerRunning && savedTimerRemaining > 0,
     interval: 10,
-    onExpire: () =>
+    onExpire: () => {
       setState((prev) => ({
         ...DEFAULT_TIMER_WIDGET_STATE,
         ...prev,
@@ -767,6 +764,11 @@ function TimerWidgetContent({ widgetId }: { widgetId: string }) {
         timerRemainingSeconds: 0,
         timerRunning: false
       }))
+      chrome.runtime.sendMessage({
+        type: "TIMER_EXPIRED",
+        widgetId
+      })
+    }
   })
 
   React.useEffect(() => {
@@ -865,10 +867,7 @@ function TimerWidgetContent({ widgetId }: { widgetId: string }) {
       value: String(value).padStart(2, "0"),
       disabled: timer.isRunning,
       onChange: (e) => setTimerTimePart(part, e.target.value),
-      onWheel: (e) => {
-        e.preventDefault()
-        changeTimerTimePart(part, e.deltaY > 0 ? -1 : 1)
-      },
+      onWheel: (e) => changeTimerTimePart(part, e.deltaY > 0 ? -1 : 1),
       onClick: (e) => e.currentTarget.select()
     })
 
@@ -1002,8 +1001,7 @@ function StopwatchWidgetContent({ widgetId }: { widgetId: string }) {
 }
 
 function WidgetOverlayApp() {
-  const [previewLayout, setPreviewLayout] =
-    useState<WidgetLayoutOptions | null>(null)
+  const [previewLayout, setPreviewLayout] = useState<WidgetLayoutOptions | null>(null)
   const [isDarkMode, setIsDarkMode] = useState(isWidgetDarkMode)
   const [widgetItems, setWidgetItems] = useStorage<WidgetInstance[]>(
     WIDGET_INSTANCES_STORAGE_KEY,
@@ -1022,6 +1020,8 @@ function WidgetOverlayApp() {
     {}
   )
   const [editingWidgetId, setEditingWidgetId] = useState<string | null>(null)
+  const [titleEditingWidgetId, setTitleEditingWidgetId] = useState<string | null>(null)
+  const [editingTitle, setEditingTitle] = useState("")
   const widgetRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const liveFrameRef = useRef<Partial<WidgetFrameMap>>({})
   const interactionStartFrameRef = useRef<WidgetFrame | null>(null)
@@ -1029,9 +1029,18 @@ function WidgetOverlayApp() {
     ...DEFAULT_WIDGET_LAYOUT,
     ...(previewLayout || layoutOptions)
   }
+  const visibleWidgetItems = useMemo(
+    () =>
+      (widgetItems || DEFAULT_WIDGET_INSTANCES).filter(
+        (item) =>
+          (enabledMap?.[item.type] ?? DEFAULT_WIDGET_ENABLED[item.type]) !==
+          false
+      ),
+    [enabledMap, widgetItems]
+  )
   const frames = useMemo(
     () =>
-      (widgetItems || DEFAULT_WIDGET_INSTANCES).reduce(
+      visibleWidgetItems.reduce(
         (nextFrames, item, index) => {
           const fallback = getInitialWidgetFrame(index)
           nextFrames[item.id] = clampWidgetFrameToViewport(
@@ -1042,7 +1051,7 @@ function WidgetOverlayApp() {
         },
         {} as WidgetFrameMap
       ),
-    [frameMap, widgetItems]
+    [frameMap, visibleWidgetItems]
   )
   const selectedTarget = editingWidgetId
     ? widgetRefs.current[editingWidgetId] || null
@@ -1146,27 +1155,27 @@ function WidgetOverlayApp() {
       return
     }
 
-    const sourceFrame = frames[item.id]
     const copiedId = `${item.type}-${crypto.randomUUID()}`
-    setWidgetItems((prev) => {
-      const nextItems = [...(prev || DEFAULT_WIDGET_INSTANCES)]
-      const sourceIndex = nextItems.findIndex((widget) => widget.id === item.id)
-      const widgetMeta = WIDGET_LIST.find((widget) => widget.key === item.type)
-      nextItems.splice(sourceIndex + 1, 0, {
+    const sourceFrame = frames[item.id]
+    const widgetMeta = WIDGET_LIST.find((widget) => widget.key === item.type)
+    setWidgetItems((prev) => [
+      ...(prev || DEFAULT_WIDGET_INSTANCES),
+      {
         id: copiedId,
         type: item.type,
-        name: t(widgetMeta?.labelKey || "noteWidget")
-      })
-      return nextItems
-    })
-    setFrameMap((prev) => ({
-      ...prev,
-      [copiedId]: {
-        ...sourceFrame,
-        x: sourceFrame.x + 50,
-        y: sourceFrame.y + 50
+        name: t(widgetMeta?.labelKey)
       }
-    }))
+    ])
+    if (sourceFrame) {
+      setFrameMap((prev) => ({
+        ...(prev || {}),
+        [copiedId]: {
+          ...sourceFrame,
+          x: sourceFrame.x + 32,
+          y: sourceFrame.y + 32
+        }
+      }))
+    }
   }
 
   const deleteWidget = (item: WidgetInstance) => {
@@ -1175,13 +1184,39 @@ function WidgetOverlayApp() {
         (widget) => widget.id !== item.id
       )
     )
+    setFrameMap((prev) => {
+      const { [item.id]: _removed, ...nextFrameMap } = prev || {}
+      return nextFrameMap
+    })
+    const stateKey =
+      item.type === "timer"
+        ? `${TIMER_WIDGET_STATE_STORAGE_KEY}:${item.id}`
+        : item.type === "stopwatch"
+          ? `${STOPWATCH_WIDGET_STATE_STORAGE_KEY}:${item.id}`
+          : ""
+    if (stateKey) void storage.remove(stateKey)
     if (editingWidgetId === item.id) setEditingWidgetId(null)
+    if (titleEditingWidgetId === item.id) setTitleEditingWidgetId(null)
   }
 
   const updateWidgetName = (id: string, name: string) => {
     setWidgetItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, name } : item))
+      (prev || DEFAULT_WIDGET_INSTANCES).map((item) =>
+        item.id === id ? { ...item, name } : item
+      )
     )
+  }
+
+  const startTitleEditing = (item: WidgetInstance) => {
+    const widgetMeta = WIDGET_LIST.find((widget) => widget.key === item.type)
+    setEditingWidgetId(item.id)
+    setEditingTitle(item.name || t(widgetMeta?.labelKey))
+    setTitleEditingWidgetId(item.id)
+  }
+
+  const finishTitleEditing = (item: WidgetInstance) => {
+    updateWidgetName(item.id, editingTitle)
+    setTitleEditingWidgetId(null)
   }
 
   return createElement(
@@ -1194,10 +1229,10 @@ function WidgetOverlayApp() {
         pointerEvents: "none"
       } as CSSProperties
     },
-    (widgetItems || DEFAULT_WIDGET_INSTANCES).map((item) => {
+    visibleWidgetItems.map((item) => {
       const widgetMeta = WIDGET_LIST.find((widget) => widget.key === item.type)
       if (!widgetMeta) return null
-      if (enabledMap?.[item.type] === false) return null
+      const isTitleEditing = titleEditingWidgetId === item.id
       return createElement(
         "div",
         {
@@ -1214,45 +1249,8 @@ function WidgetOverlayApp() {
         },
         createElement(
           "div",
-          { className: "decoai-widget-card__actions" },
-          createElement(
-            "button",
-            {
-              type: "button",
-              className: "decoai-widget-card__action decoai-widget-card__duplicate",
-              onClick: (e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                void duplicateWidget(item)
-              }
-            },
-            createElement(Icon, {
-              icon: "lucide:copy-plus",
-              height: 16,
-              "aria-hidden": "true"
-            })
-          ),
-          createElement(
-            "button",
-            {
-              type: "button",
-              className: "decoai-widget-card__action decoai-widget-card__delete",
-              onClick: (e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                deleteWidget(item)
-              }
-            },
-            createElement(Icon, {
-              icon: "lucide:trash-2",
-              height: 16,
-              "aria-hidden": "true"
-            })
-          )
-        ),
-        createElement(
-          "div",
           {
+            className: "decoai-widget-card__header",
             style: {
               height: 32,
               display: "flex",
@@ -1266,29 +1264,107 @@ function WidgetOverlayApp() {
             height: 16,
             "aria-hidden": "true"
           }),
-          createElement("input", {
-            type: "text",
-            defaultValue: item.name,
-            maxLength: 20,
-            spellCheck: false,
-            autoComplete: "off",
-            onChange: (e) =>
-              updateWidgetName(item.id, e.target.value.slice(0, 20)),
-            onKeyDown: (e) => e.stopPropagation(),
-            onKeyUp: (e) => e.stopPropagation(),
-            style: {
-              width: 160,
-              padding: 0,
-              border: "none",
-              outline: "none",
-              background: "transparent",
-              font: "inherit",
-              color: "inherit",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap"
-            }
-          })
+          isTitleEditing
+            ? createElement("input", {
+              autoFocus: true,
+              type: "text",
+              value: editingTitle,
+              maxLength: 20,
+              spellCheck: false,
+              autoComplete: "off",
+              onChange: (e) => setEditingTitle(e.target.value.slice(0, 20)),
+              onBlur: () => finishTitleEditing(item),
+              onPointerDown: (e) => e.stopPropagation(),
+              onKeyDown: (e) => {
+                e.stopPropagation()
+                if (e.key === "Enter" || e.key === "Escape") finishTitleEditing(item)
+              },
+              onKeyUp: (e) => e.stopPropagation(),
+              style: {
+                flex: 1,
+                width: 0,
+                minWidth: 0,
+                padding: 0,
+                border: "none",
+                outline: "none",
+                background: "transparent",
+                font: "inherit",
+                color: "inherit",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap"
+              }
+            })
+            : createElement(
+              "div",
+              {
+                style: {
+                  flex: 1,
+                  minWidth: 0,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  userSelect: "none"
+                }
+              },
+              item.name || t(widgetMeta.labelKey)
+            ),
+          createElement(
+            "div",
+            { className: "decoai-widget-card__actions" },
+            createElement(
+              "button",
+              {
+                type: "button",
+                className: "decoai-widget-card__action decoai-widget-card__edit",
+                onClick: (e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  startTitleEditing(item)
+                }
+              },
+              createElement(Icon, {
+                icon: "lucide:pencil",
+                height: 16,
+                "aria-hidden": "true"
+              })
+            ),
+            createElement(
+              "button",
+              {
+                type: "button",
+                className:
+                  "decoai-widget-card__action decoai-widget-card__duplicate",
+                onClick: (e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  void duplicateWidget(item)
+                }
+              },
+              createElement(Icon, {
+                icon: "lucide:copy-plus",
+                height: 16,
+                "aria-hidden": "true"
+              })
+            ),
+            createElement(
+              "button",
+              {
+                type: "button",
+                className: "decoai-widget-card__action decoai-widget-card__delete",
+                onClick: (e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  deleteWidget(item)
+                }
+              },
+              createElement(Icon, {
+                icon: "lucide:trash-2",
+                height: 16,
+                "aria-hidden": "true"
+              })
+            )
+          )
         ),
         item.type === "timer" ? createElement(TimerWidgetContent, { widgetId: item.id }) : null,
         item.type === "stopwatch" ? createElement(StopwatchWidgetContent, { widgetId: item.id }) : null
@@ -1389,11 +1465,9 @@ const mountWidgetOverlay = () => {
   root.innerHTML = `
     <style>
       .decoai-widget-card__actions {
-        position: absolute;
-        top: 6px;
-        right: 6px;
         z-index: 3;
         display: flex;
+        flex: 0 0 auto;
         gap: 2px;
         opacity: 0;
         transform: scale(0.9);
@@ -1445,7 +1519,10 @@ const mountWidgetOverlay = () => {
         cursor: pointer;
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       }
-      .decoai-widget-card__action:hover {
+      .decoai-widget-card__edit:hover {
+        background-color: #198754;
+      }
+      .decoai-widget-card__duplicate:hover {
         background-color: #1976d2;
       }
       .decoai-widget-card__delete:hover {

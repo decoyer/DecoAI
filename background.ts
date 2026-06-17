@@ -2,6 +2,7 @@ import { IMAGE_SOURCE_URLS, MAX_FILE_BYTES } from "./utils"
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 const GOOGLE_AUTH_SCOPES = ["openid", "email", "profile"]
+const t = (key: string) => chrome.i18n.getMessage(key)
 
 type ExtensionManifest = chrome.runtime.Manifest & {
   oauth2?: {
@@ -240,6 +241,17 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
 
   if (message.type === "OPEN_CHECKOUT") {
     void openCheckout(message.idToken, sendResponse)
+    return true
+  }
+
+  if (message.type === "TIMER_EXPIRED") {
+    chrome.notifications.create(`timer-expired:${message.widgetId}:${Date.now()}`, {
+      type: "basic",
+      iconUrl: chrome.runtime.getURL("assets/icon.png"),
+      title: "DecoAI",
+      message: t("alert_TimerExpired")
+    })
+
     return true
   }
 })

@@ -36,7 +36,8 @@
   "manifest": {
     "default_locale": "en",
     "permissions": [
-      "identity"
+      "identity",
+      "notifications"
     ],
     "oauth2": {
       "client_id": "466788298507-nueigph6mfbnmma529d0o5mjk9msj3t4.apps.googleusercontent.com",

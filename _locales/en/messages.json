@@ -51,7 +51,7 @@
     "message": "Delete"
   },
   "noteWidget": {
-    "message": "Notepad"
+    "message": "Notes"
   },
   "todoWidget": {
     "message": "To-do List"
@@ -70,9 +70,6 @@
   },
   "email": {
     "message": "Email"
-  },
-  "signinRequired": {
-    "message": "Sign-in required"
   },
   "subscription": {
     "message": "Subscription"
@@ -172,6 +169,9 @@
   },
   "default": {
     "message": "Default"
+  },
+  "alert_TimerExpired": {
+    "message": "Your timer has finished."
   },
   "error_fileNotSelected": {
     "message": "Please select a file first."
