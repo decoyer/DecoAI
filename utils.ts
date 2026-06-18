@@ -243,32 +243,12 @@ export const sanitizeCustomBgOptions = (
 ): CustomBgOptions => ({
   scaleX: options?.scaleX === -1 ? -1 : 1,
   invert: clampNumber(options?.invert, 0, 1, DEFAULT_CUSTOM_BG_OPTIONS.invert),
-  grayscale: clampNumber(
-    options?.grayscale,
-    0,
-    1,
-    DEFAULT_CUSTOM_BG_OPTIONS.grayscale
-  ),
+  grayscale: clampNumber(options?.grayscale, 0, 1, DEFAULT_CUSTOM_BG_OPTIONS.grayscale),
   blur: clampNumber(options?.blur, 0, 50, DEFAULT_CUSTOM_BG_OPTIONS.blur),
-  brightness: clampNumber(
-    options?.brightness,
-    0,
-    5,
-    DEFAULT_CUSTOM_BG_OPTIONS.brightness
-  ),
+  brightness: clampNumber(options?.brightness, 0, 5, DEFAULT_CUSTOM_BG_OPTIONS.brightness),
   position: sanitizePosition(options?.position),
-  glassBlur: clampNumber(
-    options?.glassBlur,
-    0,
-    50,
-    DEFAULT_CUSTOM_BG_OPTIONS.glassBlur
-  ),
-  opacity: clampNumber(
-    options?.opacity,
-    0,
-    1,
-    DEFAULT_CUSTOM_BG_OPTIONS.opacity
-  ),
+  glassBlur: clampNumber(options?.glassBlur, 0, 50, DEFAULT_CUSTOM_BG_OPTIONS.glassBlur),
+  opacity: clampNumber(options?.opacity, 0, 1, DEFAULT_CUSTOM_BG_OPTIONS.opacity),
   hideHeader: options?.hideHeader === true,
   hideFooter: options?.hideFooter === true
 })
@@ -319,7 +299,6 @@ export const renderImageToCanvas = async (
 
 export const normalizeCustomTheme = (
   themeData: Partial<CustomTheme>,
-  index: number,
   fallbackName: string
 ): CustomTheme => ({
   id: crypto.randomUUID(),
@@ -346,14 +325,12 @@ export const parseImportedThemes = (
   getFallbackName: (index: number) => string
 ) => {
   const data = JSON.parse(text) as ThemeImportData
-  if (data.app !== THEME_FILE_APP_ID || data.version !== THEME_FILE_VERSION) {
-    return []
-  }
+  if (data.app !== THEME_FILE_APP_ID || data.version !== THEME_FILE_VERSION) return []
 
   const themes = Array.isArray(data.customThemes) ? data.customThemes : []
 
   return themes.map((theme, index) =>
-    normalizeCustomTheme(theme, index, getFallbackName(index))
+    normalizeCustomTheme(theme, getFallbackName(index))
   )
 }
 
@@ -366,34 +343,30 @@ export const createThemeExportBlob = (themeData: CustomTheme) =>
           version: THEME_FILE_VERSION,
           exportedAt: new Date().toISOString(),
           customThemes: [themeData]
-        },
-        null,
-        2
+        }
       )
     ],
     { type: "application/json" }
   )
 
+const decoder = new TextDecoder("latin1")
+const GIF_SIGNATURE = [0x47, 0x49, 0x46] as const
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47] as const
+const ANIMATED_MARKERS = ["avis", "msf1", "aseq"] as const
+const startsWith = (bytes: Uint8Array, signature: readonly number[]) =>
+  signature.every((byte, i) => bytes[i] === byte)
+
 export const isAnimatedBytes = (bytes: Uint8Array) => {
-  const text = new TextDecoder("latin1").decode(bytes)
-  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) {
-    return text.includes("NETSCAPE2.0")
-  }
-  if (
-    bytes[0] === 0x89 &&
-    bytes[1] === 0x50 &&
-    bytes[2] === 0x4e &&
-    bytes[3] === 0x47
-  ) {
-    return text.includes("acTL")
-  }
+  const text = decoder.decode(bytes)
+
+  if (startsWith(bytes, GIF_SIGNATURE)) return text.includes("NETSCAPE2.0")
+  if (startsWith(bytes, PNG_SIGNATURE)) return text.includes("acTL")
   if (text.includes("WEBP")) return text.includes("ANIM")
-  if (text.includes("ftypavif") || text.includes("ftypavis")) {
-    return (
-      text.includes("avis") || text.includes("msf1") || text.includes("aseq")
-    )
-  }
-  return false
+
+  return (
+    (text.includes("ftypavif") || text.includes("ftypavis")) &&
+    ANIMATED_MARKERS.some((marker) => text.includes(marker))
+  )
 }
 
 export const isAnimatedImage = async (file: File) => {
@@ -407,30 +380,33 @@ export const getAlignedBase64Chunk = (text: string) => {
 }
 
 export const isAnimatedDataUrl = (dataUrl: string) => {
-  if (!dataUrl.startsWith("data:image/")) return false
-
-  const commaIndex = dataUrl.indexOf(",")
-  if (commaIndex < 0) return false
-
-  const metadata = dataUrl.slice(0, commaIndex)
-  const payload = dataUrl.slice(commaIndex + 1)
-  const raw = metadata.includes(";base64")
-    ? atob(getAlignedBase64Chunk(payload))
-    : decodeURIComponent(payload.slice(0, DATA_URL_SAMPLE_CHARS))
-  const bytes = new Uint8Array(Math.min(raw.length, IMAGE_HEADER_BYTES))
-  for (let index = 0; index < bytes.length; index += 1) {
-    bytes[index] = raw.charCodeAt(index)
-  }
-  return isAnimatedBytes(bytes)
-}
-
-export const isAnimatedBgUrl = (value: string) => {
   try {
-    return Boolean(value && isAnimatedDataUrl(value))
+    if (!dataUrl.startsWith("data:image/")) return false
+
+    const commaIndex = dataUrl.indexOf(",")
+    if (commaIndex < 0) return false
+
+    const metadata = dataUrl.slice(0, commaIndex)
+    const payload = dataUrl.slice(commaIndex + 1)
+
+    const raw = metadata.includes(";base64")
+      ? atob(getAlignedBase64Chunk(payload))
+      : decodeURIComponent(payload.slice(0, DATA_URL_SAMPLE_CHARS))
+
+    const bytes = new Uint8Array(Math.min(raw.length, IMAGE_HEADER_BYTES))
+
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = raw.charCodeAt(index)
+    }
+
+    return isAnimatedBytes(bytes)
   } catch {
     return false
   }
 }
+
+export const isAnimatedBgUrl = (value: string) =>
+  value ? isAnimatedDataUrl(value) : false
 
 export const hasAnimatedBackground = (themes: CustomTheme[]) =>
   themes.some((theme) => isAnimatedBgUrl(theme.bgUrl))

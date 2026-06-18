@@ -97,35 +97,29 @@ const SITE_SELECTORS = {
   chatgpt: {
     container: "body",
     header: "header",
-    footer:
-      "#thread-bottom-container > div:is(.mt-auto, .-mt-4) > div > div > div > div, .leading-none",
-    elements:
-      '[data-testid="use-case-prompt-chips"] button, .btn-secondary, .agent-turn, .user-message-bubble-color, .shadow-short-composer',
+    footer: "#thread-bottom-container > div:is(.mt-auto, .-mt-4) > div > div > div > div, .leading-none",
+    elements: '[data-testid="use-case-prompt-chips"] button, .btn-secondary, .agent-turn, .user-message-bubble-color, .shadow-short-composer',
     darkClass: "html.dark"
   },
   gemini: {
     container: "body",
     header: "top-bar-actions",
     footer: ".capabilities-disclaimer p",
-    elements:
-      "model-response, .dual-response-panel, .user-query-bubble-with-background, .input-box-shadow",
+    elements: "model-response, .dual-response-panel, .user-query-bubble-with-background, .input-box-shadow",
     darkClass: "body.dark-theme"
   },
   claude: {
     container: "body",
-    header:
-      'header, #main-content > div > div > main > div:first-child, .z-header, [data-testid="wiggle-controls-actions"]',
+    header: 'header, #main-content > div > div > main > div:first-child, .z-header, [data-testid="wiggle-controls-actions"]',
     footer: 'div[data-disclaimer="true"]',
-    elements:
-      'li.inline-block button, .font-claude-response, div[data-user-message-bubble="true"], .\\!box-content',
+    elements: 'li.inline-block button, .font-claude-response, div[data-user-message-bubble="true"], .\\!box-content',
     darkClass: 'html[data-mode="dark"]'
   },
   grok: {
     container: "body",
     header: ".from-surface-base",
     footer: "",
-    elements:
-      '[data-testid="assistant-message"], [data-testid="user-message"], .query-bar',
+    elements: '[data-testid="assistant-message"], [data-testid="user-message"], .query-bar',
     darkClass: "html.dark"
   }
 }
@@ -187,10 +181,7 @@ const FAB_THEME_MOUNT_ID = "decoai-fab-theme-mount"
 const WIDGET_ROOT_ID = "decoai-widget-root"
 const TOAST_STYLE_ID = "decoai-toastify-style"
 const TOAST_ROOT_ID = "decoai-toast-root"
-const CUSTOM_THEME_WATCH_STORAGE_KEYS = [
-  CUSTOM_THEMES_STORAGE_KEY,
-  SELECTED_CUSTOM_THEME_ID_STORAGE_KEY
-]
+const CUSTOM_THEME_WATCH_STORAGE_KEYS = [CUSTOM_THEMES_STORAGE_KEY, SELECTED_CUSTOM_THEME_ID_STORAGE_KEY]
 const PREMIUM_CACHE_MS = 5 * 60 * 1000
 let premiumCache: { checkedAt: number; value: boolean } | null = null
 type PremiumThemeBackup = {
@@ -230,9 +221,7 @@ const getOrCreateStyle = (id: string) => {
 }
 
 const emitThemeLoading = (loading: boolean) => {
-  window.dispatchEvent(
-    new CustomEvent(THEME_LOADING_EVENT, { detail: { loading } })
-  )
+  window.dispatchEvent(new CustomEvent(THEME_LOADING_EVENT, { detail: { loading } }))
 }
 
 const getPremiumStatus = async ({ forceRefresh = false } = {}) => {
@@ -475,10 +464,7 @@ const normalizeCustomWidgets = (widgetItems: WidgetInstance[]) => {
 
 const restorePremiumThemes = async (backup: PremiumThemeBackup) => {
   await localStorageInstance.set(CUSTOM_THEMES_STORAGE_KEY, backup.customThemes)
-  await localStorageInstance.set(
-    SELECTED_CUSTOM_THEME_ID_STORAGE_KEY,
-    backup.selectedCustomThemeId
-  )
+  await localStorageInstance.set(SELECTED_CUSTOM_THEME_ID_STORAGE_KEY, backup.selectedCustomThemeId)
 }
 
 const getSelectedCustomTheme = async (): Promise<{
@@ -505,15 +491,11 @@ const getSelectedCustomTheme = async (): Promise<{
     return { isPremium: false, theme: null }
   }
 
-  if (
-    customThemePreview &&
-    customThemePreview.themeId === selectedCustomThemeId
-  ) {
+  if (customThemePreview && customThemePreview.themeId === selectedCustomThemeId) {
     return { isPremium: false, theme: customThemePreview.theme }
   }
 
-  const selectedTheme =
-    customThemes.find((item) => item.id === selectedCustomThemeId) || null
+  const selectedTheme = customThemes.find((item) => item.id === selectedCustomThemeId) || null
   const hasAnimatedTheme = customThemes.some(isAnimatedCustomTheme)
   const needsPremium = customThemes.length > 1 || hasAnimatedTheme
   const premiumStatus = needsPremium
@@ -528,9 +510,7 @@ const getSelectedCustomTheme = async (): Promise<{
       const restoredTheme =
         premiumThemeBackup.customThemes.find(
           (item) => item.id === premiumThemeBackup.selectedCustomThemeId
-        ) ||
-        premiumThemeBackup.customThemes[0] ||
-        null
+        ) || premiumThemeBackup.customThemes[0] || null
 
       return { isPremium: true, theme: restoredTheme }
     }
@@ -539,8 +519,7 @@ const getSelectedCustomTheme = async (): Promise<{
   }
 
   if (needsPremium) {
-    const nextSelectedThemeId =
-      selectedCustomThemeId || customThemes[0]?.id || ""
+    const nextSelectedThemeId = selectedCustomThemeId || customThemes[0]?.id || ""
     if (!premiumThemeBackup) {
       await localStorageInstance.set(PREMIUM_THEME_BACKUP_STORAGE_KEY, {
         customThemes,
@@ -548,14 +527,8 @@ const getSelectedCustomTheme = async (): Promise<{
       })
     }
 
-    const normalizedTheme = await normalizeCustomThemes(
-      customThemes,
-      selectedCustomThemeId
-    )
-
-    if (premiumStatus.isChecked) {
-      await localStorageInstance.set(PREMIUM_THEME_BACKUP_STORAGE_KEY, null)
-    }
+    const normalizedTheme = await normalizeCustomThemes(customThemes, selectedCustomThemeId)
+    if (premiumStatus.isChecked) await localStorageInstance.set(PREMIUM_THEME_BACKUP_STORAGE_KEY, null)
 
     return {
       isPremium: false,
@@ -584,13 +557,8 @@ const getCustomThemeData = async (): Promise<ThemeConfig> => {
 }
 
 const getThemeData = async (theme: string): Promise<ThemeConfig> => {
-  if (theme === "custom") {
-    return getCustomThemeData()
-  }
-
-  if (cachedThemeKey === theme && cachedThemeData) {
-    return cachedThemeData
-  }
+  if (theme === "custom") return getCustomThemeData()
+  if (cachedThemeKey === theme && cachedThemeData) return cachedThemeData
 
   let nextThemeData: ThemeConfig
 
@@ -794,10 +762,7 @@ function TimerWidgetContent({ widgetId }: { widgetId: string }) {
     part: "hours" | "minutes" | "seconds",
     value: string
   ) => {
-    const nextParts = {
-      ...timerDisplay,
-      [part]: clampNumber(value, 0, 59, timer[part])
-    }
+    const nextParts = { ...timerDisplay, [part]: clampNumber(value, 0, 59, timer[part]) }
     const nextSeconds = nextParts.hours * 3600 + nextParts.minutes * 60 + nextParts.seconds
     const shouldRun = Boolean(timer.isRunning && nextSeconds > 0)
 
@@ -1030,10 +995,7 @@ function WidgetOverlayApp() {
   const widgetRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const liveFrameRef = useRef<Partial<WidgetFrameMap>>({})
   const interactionStartFrameRef = useRef<WidgetFrame | null>(null)
-  const layout = {
-    ...DEFAULT_WIDGET_LAYOUT,
-    ...(previewLayout || layoutOptions)
-  }
+  const layout = { ...DEFAULT_WIDGET_LAYOUT, ...(previewLayout || layoutOptions) }
   const visibleWidgetItems = useMemo(
     () =>
       (widgetItems || DEFAULT_WIDGET_INSTANCES).filter(
@@ -1058,9 +1020,7 @@ function WidgetOverlayApp() {
       ),
     [frameMap, visibleWidgetItems]
   )
-  const selectedTarget = editingWidgetId
-    ? widgetRefs.current[editingWidgetId] || null
-    : null
+  const selectedTarget = editingWidgetId ? widgetRefs.current[editingWidgetId] ?? null : null
 
   React.useEffect(() => {
     const items = widgetItems || DEFAULT_WIDGET_INSTANCES
@@ -1080,10 +1040,7 @@ function WidgetOverlayApp() {
     }
     window.addEventListener(WIDGET_LAYOUT_PREVIEW_EVENT, onWidgetLayoutPreview)
     return () =>
-      window.removeEventListener(
-        WIDGET_LAYOUT_PREVIEW_EVENT,
-        onWidgetLayoutPreview
-      )
+      window.removeEventListener(WIDGET_LAYOUT_PREVIEW_EVENT, onWidgetLayoutPreview)
   }, [])
 
   React.useEffect(() => {
@@ -1115,9 +1072,7 @@ function WidgetOverlayApp() {
       }
       setEditingWidgetId(null)
     }
-    document.addEventListener("pointerdown", onDocumentPointerDown, {
-      capture: true
-    })
+    document.addEventListener("pointerdown", onDocumentPointerDown, { capture: true })
     return () =>
       document.removeEventListener("pointerdown", onDocumentPointerDown, true)
   }, [editingWidgetId])
@@ -1193,11 +1148,7 @@ function WidgetOverlayApp() {
   }
 
   const deleteWidget = (item: WidgetInstance) => {
-    setWidgetItems((prev) =>
-      (prev || DEFAULT_WIDGET_INSTANCES).filter(
-        (widget) => widget.id !== item.id
-      )
-    )
+    setWidgetItems((prev) => (prev || DEFAULT_WIDGET_INSTANCES).filter((widget) => widget.id !== item.id))
     setFrameMap((prev) => {
       const { [item.id]: _removed, ...nextFrameMap } = prev || {}
       return nextFrameMap
@@ -1214,10 +1165,8 @@ function WidgetOverlayApp() {
   }
 
   const updateWidgetName = (id: string, name: string) => {
-    setWidgetItems((prev) =>
-      (prev || DEFAULT_WIDGET_INSTANCES).map((item) =>
-        item.id === id ? { ...item, name } : item
-      )
+    setWidgetItems((prev) => (prev || DEFAULT_WIDGET_INSTANCES).map((item) =>
+      item.id === id ? { ...item, name } : item)
     )
   }
 
@@ -1251,9 +1200,7 @@ function WidgetOverlayApp() {
         "div",
         {
           key: item.id,
-          ref: (node: HTMLDivElement | null) => {
-            widgetRefs.current[item.id] = node
-          },
+          ref: (node: HTMLDivElement | null) => widgetRefs.current[item.id] = node,
           className: "decoai-widget-card",
           onClick: (e) => {
             e.stopPropagation()
@@ -1321,7 +1268,7 @@ function WidgetOverlayApp() {
                   userSelect: "none"
                 }
               },
-              item.name || t(widgetMeta.labelKey)
+              item.name ?? t(widgetMeta.labelKey)
             ),
           createElement(
             "div",
@@ -1347,8 +1294,7 @@ function WidgetOverlayApp() {
               "button",
               {
                 type: "button",
-                className:
-                  "decoai-widget-card__action decoai-widget-card__duplicate",
+                className: "decoai-widget-card__action decoai-widget-card__duplicate",
                 onClick: (e) => {
                   e.preventDefault()
                   e.stopPropagation()
@@ -1643,13 +1589,10 @@ const syncFabVisibility = async () => {
   const themeAction = themeButton?.closest<HTMLElement>(`.${FAB_ACTION_CLASS}`)
   const widgetButton = root.querySelector<HTMLElement>(`.${FAB_WIDGET_BTN_CLASS}`)
   const widgetAction = widgetButton?.closest<HTMLElement>(`.${FAB_ACTION_CLASS}`)
-  const isThemeHidden =
-    (await storage.get<boolean>(THEME_HIDDEN_STORAGE_KEY)) === true
-  const isWidgetHidden =
-    (await storage.get<boolean>(WIDGET_HIDDEN_STORAGE_KEY)) === true
+  const isThemeHidden = (await storage.get<boolean>(THEME_HIDDEN_STORAGE_KEY)) === true
+  const isWidgetHidden = (await storage.get<boolean>(WIDGET_HIDDEN_STORAGE_KEY)) === true
   if (themeAction) themeAction.style.display = isThemeHidden ? "none" : "flex"
-  if (widgetAction)
-    widgetAction.style.display = isWidgetHidden ? "none" : "flex"
+  if (widgetAction) widgetAction.style.display = isWidgetHidden ? "none" : "flex"
   if (
     fabOpen &&
     ((isThemeHidden && fabPanelView === "theme") ||
@@ -1665,10 +1608,7 @@ const onOutsideFabClick = (event: MouseEvent) => {
   if (!root) return
   const target = event.target as Node
   const panel = root.querySelector(`.${FAB_THEME_PANEL_CLASS}`)
-  const actionButton =
-    target instanceof Element
-      ? target.closest(`.${FAB_ACTION_CLASS} button`)
-      : null
+  const actionButton = target instanceof Element ? target.closest(`.${FAB_ACTION_CLASS} button`) : null
   if (panel?.contains(target) || actionButton) return
   closeFabDock()
 }
@@ -1824,25 +1764,24 @@ const generateCSS = (
   const getBgStyle = () =>
     bgUrl || bgColor
       ? `
-    body::before {
-      content: ""; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-      ${bgUrl ? `background-image: url("${bgUrl}") !important;` : "background-image: none !important;"}
-      ${bgColor ? `background-color: ${bgColor} !important;` : ""}
-      background-position: ${position} !important;
-      background-size: cover !important;
-      background-repeat: no-repeat !important;
-      z-index: 0 !important;
-      transform: scaleX(${scaleX}) translateZ(0) !important;
-      transform-origin: center center !important;
-      filter: invert(${invert}) grayscale(${grayscale}) blur(${blur}px) brightness(${brightness}) !important;
-    }
-    ${container} { background-color: transparent !important; }
-    ${site === "chatgpt" ? "#page-header, div::after { background-color: transparent !important; }" : ""}
-    ${site === "gemini" ? ".input-gradient { background-color: transparent !important; } .input-gradient::before { content: none !important; }" : ""}
-    ${site === "claude" ? 'header { background-color: transparent !important; } header > div:first-of-type { display: none !important } div[role="note"][data-disclaimer="true"] { background-color: transparent !important; }' : ""}
-    ${site === "grok" ? "main > div > div { background-image: none !important; } .chat-input-backdrop { background-color: transparent !important; }" : ""}
-  `
-      : ""
+      body::before {
+        content: ""; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        ${bgUrl ? `background-image: url("${bgUrl}") !important;` : "background-image: none !important;"}
+        ${bgColor ? `background-color: ${bgColor} !important;` : ""}
+        background-position: ${position} !important;
+        background-size: cover !important;
+        background-repeat: no-repeat !important;
+        z-index: 0 !important;
+        transform: scaleX(${scaleX}) translateZ(0) !important;
+        transform-origin: center center !important;
+        filter: invert(${invert}) grayscale(${grayscale}) blur(${blur}px) brightness(${brightness}) !important;
+      }
+      ${container} { background-color: transparent !important; }
+      ${site === "chatgpt" ? "#page-header, div::after { background-color: transparent !important; }" : ""}
+      ${site === "gemini" ? ".input-gradient { background-color: transparent !important; } .input-gradient::before { content: none !important; }" : ""}
+      ${site === "claude" ? 'header { background-color: transparent !important; } header > div:first-of-type { display: none !important } div[role="note"][data-disclaimer="true"] { background-color: transparent !important; }' : ""}
+      ${site === "grok" ? "main > div > div { background-image: none !important; } .chat-input-backdrop { background-color: transparent !important; }" : ""}
+    ` : ""
 
   const getElStyle = () => `
     ${elements} {
@@ -1867,9 +1806,7 @@ const generateCSS = (
         padding: 10px 16px !important;
         border-radius: 22px !important;
       }
-    `
-      : ""
-    }
+    ` : ""}
     ${site === "gemini"
       ? `
       .show-lm-background::before {
@@ -1879,37 +1816,30 @@ const generateCSS = (
         padding: 20px 28px !important;
         border-radius: 40px !important;
       }
-    `
-      : ""
-    }
+    ` : ""}
     ${site === "claude"
       ? `
       .font-claude-response {
         padding: 10px 16px !important;
         border-radius: 12px !important;
       }
-    `
-      : ""
-    }
+    ` : ""}
     ${site === "grok"
       ? `
       [data-testid="assistant-message"] {
         padding: 8px 16px !important;
         border-radius: 24px !important;
       }
-    `
-      : ""
-    }
+    ` : ""}
     ${accentColor ? `::-webkit-scrollbar { width: auto !important; }::-webkit-scrollbar-thumb { background-color: ${accentColor}4D !important; border-radius: 22px !important; }` : ""}
   `
 
   const getTextStyle = () =>
     lightTextColor && darkTextColor
       ? `
-    *:not(pre *) { color: ${lightTextColor} !important; }
-    ${darkClass} *:not(pre *) { color: ${darkTextColor} !important; }
-  `
-      : ""
+      *:not(pre *) { color: ${lightTextColor} !important; }
+      ${darkClass} *:not(pre *) { color: ${darkTextColor} !important; }
+    ` : ""
 
   return [
     getBgStyle(),
@@ -1955,9 +1885,7 @@ const applyTheme = async (requestId: number) => {
 
   const [themeData, customBgOptions] = await Promise.all([
     getThemeData(currentTheme),
-    currentTheme === "custom"
-      ? getCustomBgOptions()
-      : Promise.resolve(undefined)
+    currentTheme === "custom" ? getCustomBgOptions() : Promise.resolve(undefined)
   ])
 
   if (requestId !== applyThemeRequestId) return

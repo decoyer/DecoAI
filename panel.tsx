@@ -273,10 +273,7 @@ const downloadCustomTheme = (themeData: CustomTheme) => {
 }
 
 const disabledControlStyle = (enabled: boolean) =>
-  ({
-    opacity: enabled ? 1 : 0.5,
-    pointerEvents: enabled ? "auto" : "none"
-  }) as const
+  ({ opacity: enabled ? 1 : 0.5, pointerEvents: enabled ? "auto" : "none" }) as const
 
 const clearFileInput = (input: HTMLInputElement | null) => {
   if (input) input.value = ""
@@ -284,15 +281,11 @@ const clearFileInput = (input: HTMLInputElement | null) => {
 
 const isCurrentPageDarkMode = () => {
   const currentSite = detectCurrentSite()
-  return currentSite
-    ? document.querySelector(SITE_DARK_SELECTORS[currentSite]) !== null
-    : false
+  return currentSite ? document.querySelector(SITE_DARK_SELECTORS[currentSite]) !== null : false
 }
 
 const wait = (ms: number) =>
-  new Promise<void>((resolve) => {
-    window.setTimeout(resolve, ms)
-  })
+  new Promise<void>((resolve) => { window.setTimeout(resolve, ms) })
 
 const restrictToParentElement: Modifier = ({
   transform,
@@ -440,27 +433,20 @@ export function FabPanelApp() {
     {
       key: SELECTED_CUSTOM_THEME_ID_STORAGE_KEY,
       instance: localStorageInstance
-    },
-    ""
-  )
-  const [premiumThemeBackup, setPremiumThemeBackup] =
-    useStorage<PremiumThemeBackup | null>(
-      {
-        key: PREMIUM_THEME_BACKUP_STORAGE_KEY,
-        instance: localStorageInstance
-      },
-      null
-    )
+    }, "")
+  const [premiumThemeBackup, setPremiumThemeBackup] = useStorage<PremiumThemeBackup | null>(
+    {
+      key: PREMIUM_THEME_BACKUP_STORAGE_KEY,
+      instance: localStorageInstance
+    }, null)
   const [editingCustomThemeId, setEditingCustomThemeId] = useState("")
   const [premiumStatus, setPremiumStatus] = useState<PremiumStatus>("unknown")
-  const [draftBackgroundOptions, setDraftBackgroundOptions] =
-    useState<CustomBgOptions>(DEFAULT_CUSTOM_BG_OPTIONS)
+  const [draftBackgroundOptions, setDraftBackgroundOptions] = useState<CustomBgOptions>(DEFAULT_CUSTOM_BG_OPTIONS)
   const [draftTextColor, setDraftTextColor] = useState("")
   const [draftAccentColor, setDraftAccentColor] = useState("")
   const [draftCustomThemeName, setDraftCustomThemeName] = useState("")
   const [draftBackgroundColor, setDraftBackgroundColor] = useState("")
-  const [draftWidgetLayout, setDraftWidgetLayout] =
-    useState<WidgetLayoutOptions>(DEFAULT_WIDGET_LAYOUT)
+  const [draftWidgetLayout, setDraftWidgetLayout] = useState<WidgetLayoutOptions>(DEFAULT_WIDGET_LAYOUT)
   const [isLoading, setIsLoading] = useState(false)
   const [draggingCustomThemeId, setDraggingCustomThemeId] = useState("")
   const suppressCustomThemeClickIdRef = useRef("")
@@ -470,9 +456,7 @@ export function FabPanelApp() {
   const isPremiumChecked = premiumStatus !== "unknown"
   const isPremiumUser = premiumStatus === "premium"
   const isFreeUser = premiumStatus === "free"
-  const selectedCustomTheme = customThemes.find(
-    (item) => item.id === selectedCustomThemeId
-  )
+  const selectedCustomTheme = customThemes.find((item) => item.id === selectedCustomThemeId)
   const customThemeIds = useMemo(
     () => customThemes.map((item) => item.id),
     [customThemes]
@@ -483,9 +467,7 @@ export function FabPanelApp() {
     })
   )
   const hasWidgetType = (key: WidgetKey) =>
-    (widgetItems || DEFAULT_WIDGET_INSTANCES).some(
-      (widget) => widget.type === key
-    )
+    (widgetItems || DEFAULT_WIDGET_INSTANCES).some((widget) => widget.type === key)
 
   useEffect(() => {
     if (!customThemes.length && selectedCustomThemeId)
@@ -635,8 +617,7 @@ export function FabPanelApp() {
     themes.length > 1 || themes.some((item) => isAnimatedBgUrl(item.bgUrl))
 
   const backupPremiumThemes = () => {
-    const nextSelectedThemeId =
-      selectedCustomThemeId || customThemes[0]?.id || ""
+    const nextSelectedThemeId = selectedCustomThemeId || customThemes[0]?.id || ""
     if (premiumThemeBackup || !nextSelectedThemeId || !hasPremiumLockedThemes(customThemes)) return
 
     void setPremiumThemeBackup({
@@ -858,10 +839,7 @@ export function FabPanelApp() {
     }
 
     const text = await file.text()
-    const imported = parseImportedThemes(
-      text,
-      (index) => `${t("custom")} ${index + 1}`
-    )
+    const imported = parseImportedThemes(text, (index) => `${t("custom")} ${index + 1}`)
 
     if (!imported.length) {
       toast.error(t("error_fileInvalid"))
@@ -984,8 +962,7 @@ export function FabPanelApp() {
       suppressCustomThemeClickIdRef.current = ""
       return
     }
-    const isSelected =
-      theme === "custom" && selectedCustomThemeId === customThemeItem.id
+    const isSelected = theme === "custom" && selectedCustomThemeId === customThemeItem.id
     if (isSelected) {
       setEditingCustomThemeId(customThemeItem.id)
       setCustomEditTab("general")
@@ -1077,21 +1054,14 @@ export function FabPanelApp() {
     event.preventDefault()
     event.stopPropagation()
 
-    if (
-      customThemes.length > 0 &&
-      !(await requirePremiumAccess("pro_themeLimit"))
-    ) {
-      return
-    }
+    if (customThemes.length > 0 && !(await requirePremiumAccess("pro_themeLimit"))) return
 
     const copiedTheme = {
       ...customThemeItem,
       id: crypto.randomUUID(),
       name: String(customThemeItem.name || t("custom")).slice(0, 10)
     }
-    const sourceIndex = customThemes.findIndex(
-      (item) => item.id === customThemeItem.id
-    )
+    const sourceIndex = customThemes.findIndex((item) => item.id === customThemeItem.id)
 
     setCustomThemes((prev) => {
       const nextThemes = [...prev]
@@ -1117,17 +1087,11 @@ export function FabPanelApp() {
     key: keyof WidgetLayoutOptions,
     value: string | number
   ) => {
-    setDraftWidgetLayout((prev) => ({
-      ...prev,
-      [key]: value
-    }))
+    setDraftWidgetLayout((prev) => ({ ...prev, [key]: value }))
   }
 
   const resetWidgetLayout = (key: keyof WidgetLayoutOptions) => {
-    setDraftWidgetLayout((prev) => ({
-      ...prev,
-      [key]: DEFAULT_WIDGET_LAYOUT[key]
-    }))
+    setDraftWidgetLayout((prev) => ({ ...prev, [key]: DEFAULT_WIDGET_LAYOUT[key] }))
   }
 
   const resetEditingThemeDraft = () => {
@@ -1138,9 +1102,7 @@ export function FabPanelApp() {
     setDraftBackgroundOptions(DEFAULT_CUSTOM_BG_OPTIONS)
   }
 
-  const resetWidgetLayoutDraft = () => {
-    setDraftWidgetLayout(DEFAULT_WIDGET_LAYOUT)
-  }
+  const resetWidgetLayoutDraft = () => setDraftWidgetLayout(DEFAULT_WIDGET_LAYOUT)
 
   return (
     <>
@@ -1306,13 +1268,9 @@ export function FabPanelApp() {
                           label={t(item.labelKey)}
                           icon={item.icon}
                           checked={
-                            (widgetEnabled?.[item.key] ??
-                              DEFAULT_WIDGET_ENABLED[item.key]) &&
-                            hasWidgetType(item.key)
+                            (widgetEnabled?.[item.key] ?? DEFAULT_WIDGET_ENABLED[item.key]) && hasWidgetType(item.key)
                           }
-                          onChange={(checked) =>
-                            updateWidgetEnabled(item.key, checked)
-                          }
+                          onChange={(checked) => updateWidgetEnabled(item.key, checked)}
                         />
                       ))}
                     </>
@@ -1322,38 +1280,23 @@ export function FabPanelApp() {
                       <ColorSettingCard
                         label={t("backgroundColor")}
                         value={draftWidgetLayout.backgroundColor}
-                        onChange={(value) =>
-                          updateWidgetLayout("backgroundColor", value)
-                        }
+                        onChange={(value) => updateWidgetLayout("backgroundColor", value)}
                         onReset={() => resetWidgetLayout("backgroundColor")}
-                        canReset={
-                          draftWidgetLayout.backgroundColor !==
-                          DEFAULT_WIDGET_LAYOUT.backgroundColor
-                        }
+                        canReset={draftWidgetLayout.backgroundColor !== DEFAULT_WIDGET_LAYOUT.backgroundColor}
                       />
                       <ColorSettingCard
                         label={t("text")}
                         value={draftWidgetLayout.textColor}
-                        onChange={(value) =>
-                          updateWidgetLayout("textColor", value)
-                        }
+                        onChange={(value) => updateWidgetLayout("textColor", value)}
                         onReset={() => resetWidgetLayout("textColor")}
-                        canReset={
-                          draftWidgetLayout.textColor !==
-                          DEFAULT_WIDGET_LAYOUT.textColor
-                        }
+                        canReset={draftWidgetLayout.textColor !== DEFAULT_WIDGET_LAYOUT.textColor}
                       />
                       <ColorSettingCard
                         label={t("accent")}
                         value={draftWidgetLayout.accentColor}
-                        onChange={(value) =>
-                          updateWidgetLayout("accentColor", value)
-                        }
+                        onChange={(value) => updateWidgetLayout("accentColor", value)}
                         onReset={() => resetWidgetLayout("accentColor")}
-                        canReset={
-                          draftWidgetLayout.accentColor !==
-                          DEFAULT_WIDGET_LAYOUT.accentColor
-                        }
+                        canReset={draftWidgetLayout.accentColor !== DEFAULT_WIDGET_LAYOUT.accentColor}
                       />
                       <RangeCard
                         label={t("opacity")}
@@ -1361,9 +1304,7 @@ export function FabPanelApp() {
                         max={1}
                         step={0.1}
                         value={draftWidgetLayout.opacity}
-                        onChange={(value) =>
-                          updateWidgetLayout("opacity", Number(value))
-                        }
+                        onChange={(value) => updateWidgetLayout("opacity", Number(value))}
                         onReset={() => resetWidgetLayout("opacity")}
                       />
                       <RangeCard
@@ -1372,9 +1313,7 @@ export function FabPanelApp() {
                         max={50}
                         step={1}
                         value={draftWidgetLayout.glassBlur}
-                        onChange={(value) =>
-                          updateWidgetLayout("glassBlur", Number(value))
-                        }
+                        onChange={(value) => updateWidgetLayout("glassBlur", Number(value))}
                         onReset={() => resetWidgetLayout("glassBlur")}
                       />
                     </>
@@ -1435,12 +1374,8 @@ export function FabPanelApp() {
                                 selectedCustomThemeId={selectedCustomThemeId}
                                 draggingCustomThemeId={draggingCustomThemeId}
                                 onCustomCardClick={onCustomCardClick}
-                                onCustomCardDuplicateClick={
-                                  onCustomCardDuplicateClick
-                                }
-                                onCustomCardDeleteClick={
-                                  onCustomCardDeleteClick
-                                }
+                                onCustomCardDuplicateClick={onCustomCardDuplicateClick}
+                                onCustomCardDeleteClick={onCustomCardDeleteClick}
                               />
                             ))}
                           </SortableContext>
@@ -1487,11 +1422,7 @@ export function FabPanelApp() {
                             value={draftCustomThemeName}
                             spellCheck={false}
                             autoComplete="off"
-                            onChange={(e) =>
-                              setDraftCustomThemeName(
-                                e.target.value.slice(0, 10)
-                              )
-                            }
+                            onChange={(e) => setDraftCustomThemeName(e.target.value.slice(0, 10))}
                             onKeyDown={(e) => e.stopPropagation()}
                             onKeyUp={(e) => e.stopPropagation()}
                             style={{
@@ -1533,9 +1464,7 @@ export function FabPanelApp() {
                               ref={bgUploadRef}
                               type="file"
                               accept="image/*"
-                              onChange={(e) =>
-                                onUploadCustomBg(e.target.files?.[0])
-                              }
+                              onChange={(e) => onUploadCustomBg(e.target.files?.[0])}
                               style={{ display: "none" }}
                             />
                             <button
@@ -1568,9 +1497,7 @@ export function FabPanelApp() {
                                 min={0}
                                 max={100}
                                 step={1}
-                                value={getPositionXPercent(
-                                  draftBackgroundOptions.position
-                                )}
+                                value={getPositionXPercent(draftBackgroundOptions.position)}
                                 onChange={(v) =>
                                   updateCustomBgOption(
                                     "position",
@@ -1593,9 +1520,7 @@ export function FabPanelApp() {
                                 min={0}
                                 max={100}
                                 step={1}
-                                value={getPositionYPercent(
-                                  draftBackgroundOptions.position
-                                )}
+                                value={getPositionYPercent(draftBackgroundOptions.position)}
                                 onChange={(v) =>
                                   updateCustomBgOption(
                                     "position",
@@ -1618,9 +1543,7 @@ export function FabPanelApp() {
                           <CheckboxCard
                             label={t("scaleX")}
                             checked={draftBackgroundOptions.scaleX === -1}
-                            onChange={(c) =>
-                              updateCustomBgOption("scaleX", c ? -1 : 1)
-                            }
+                            onChange={(c) => updateCustomBgOption("scaleX", c ? -1 : 1)}
                           />
                           <RangeCard
                             label={t("brightness")}
@@ -1628,12 +1551,8 @@ export function FabPanelApp() {
                             max={5}
                             step={0.1}
                             value={draftBackgroundOptions.brightness}
-                            onChange={(v) =>
-                              updateCustomBgOption("brightness", Number(v))
-                            }
-                            onReset={() =>
-                              updateCustomBgOption("brightness", 1)
-                            }
+                            onChange={(v) => updateCustomBgOption("brightness", Number(v))}
+                            onReset={() => updateCustomBgOption("brightness", 1)}
                           />
                           <RangeCard
                             label={t("blur")}
@@ -1641,24 +1560,18 @@ export function FabPanelApp() {
                             max={50}
                             step={1}
                             value={draftBackgroundOptions.blur}
-                            onChange={(v) =>
-                              updateCustomBgOption("blur", Number(v))
-                            }
+                            onChange={(v) => updateCustomBgOption("blur", Number(v))}
                             onReset={() => updateCustomBgOption("blur", 0)}
                           />
                           <CheckboxCard
                             label={t("invert")}
                             checked={draftBackgroundOptions.invert === 1}
-                            onChange={(c) =>
-                              updateCustomBgOption("invert", c ? 1 : 0)
-                            }
+                            onChange={(c) => updateCustomBgOption("invert", c ? 1 : 0)}
                           />
                           <CheckboxCard
                             label={t("grayscale")}
                             checked={draftBackgroundOptions.grayscale === 1}
-                            onChange={(c) =>
-                              updateCustomBgOption("grayscale", c ? 1 : 0)
-                            }
+                            onChange={(c) => updateCustomBgOption("grayscale", c ? 1 : 0)}
                           />
                         </>
                       )}
@@ -1711,9 +1624,7 @@ export function FabPanelApp() {
                         max={1}
                         step={0.1}
                         value={draftBackgroundOptions.opacity}
-                        onChange={(v) =>
-                          updateCustomBgOption("opacity", Number(v))
-                        }
+                        onChange={(v) => updateCustomBgOption("opacity", Number(v))}
                         onReset={() => updateCustomBgOption("opacity", 0.8)}
                       />
                       <RangeCard
@@ -1722,9 +1633,7 @@ export function FabPanelApp() {
                         max={50}
                         step={1}
                         value={draftBackgroundOptions.glassBlur}
-                        onChange={(v) =>
-                          updateCustomBgOption("glassBlur", Number(v))
-                        }
+                        onChange={(v) => updateCustomBgOption("glassBlur", Number(v))}
                         onReset={() => updateCustomBgOption("glassBlur", 10)}
                       />
                     </>
@@ -1847,9 +1756,7 @@ const themeCardStyle = (color: string, active: boolean) => ({
   border: "none",
   borderRadius: "12px",
   cursor: "pointer",
-  boxShadow: active
-    ? "inset 2px 2px 5px rgba(0, 0, 0, 0.2), 0 0 0 3px #66cdaa"
-    : "none",
+  boxShadow: active ? "inset 2px 2px 5px rgba(0, 0, 0, 0.2), 0 0 0 3px #66cdaa" : "none",
   transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
 })
 

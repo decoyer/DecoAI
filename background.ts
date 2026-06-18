@@ -4,11 +4,7 @@ const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 const GOOGLE_AUTH_SCOPES = ["openid", "email", "profile"]
 const t = (key: string) => chrome.i18n.getMessage(key)
 
-type ExtensionManifest = chrome.runtime.Manifest & {
-  oauth2?: {
-    client_id?: string
-  }
-}
+type ExtensionManifest = chrome.runtime.Manifest & { oauth2?: { client_id?: string } }
 
 const isHttpsUrl = (value: unknown) => {
   if (typeof value !== "string") return false
@@ -19,8 +15,7 @@ const isHttpsUrl = (value: unknown) => {
   }
 }
 
-const isImageSource = (value: unknown) =>
-  typeof value === "string" && IMAGE_SOURCE_URLS.has(value)
+const isImageSource = (value: unknown) => typeof value === "string" && IMAGE_SOURCE_URLS.has(value)
 
 const getContentLength = (response: Response) => {
   const value = Number(response.headers.get("content-length") || 0)
@@ -205,8 +200,7 @@ const openCheckout = async (
     }
 
     const data = await response.json()
-    const checkoutUrl =
-      typeof data?.checkoutUrl === "string" ? data.checkoutUrl : ""
+    const checkoutUrl = typeof data?.checkoutUrl === "string" ? data.checkoutUrl : ""
 
     if (!checkoutUrl || !isHttpsUrl(checkoutUrl)) {
       sendResponse({ success: false, error: "Checkout URL missing" })

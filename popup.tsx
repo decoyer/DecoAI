@@ -48,9 +48,7 @@ function IndexPopup() {
     DEFAULT_MODEL_ENABLED
   )
   const [isLoading, setIsLoading] = useState(false)
-  const [authSession, setAuthSession] = useState<AuthSessionSnapshot | null>(
-    null
-  )
+  const [authSession, setAuthSession] = useState<AuthSessionSnapshot | null>(null)
   const [premiumStatus, setPremiumStatus] = useState<PremiumStatus>("unknown")
   const [activeTab, setActiveTab] = useState<PopupTab>("settings")
   const version = chrome.runtime.getManifest().version

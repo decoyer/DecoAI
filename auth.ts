@@ -38,9 +38,7 @@ export const requestGoogleAccessToken = (interactive: boolean) =>
         }
 
         if (!response?.success || !response.token) {
-          reject(
-            new Error(response?.error || "Failed to get Google access token")
-          )
+          reject(new Error(response?.error || "Failed to get Google access token"))
           return
         }
 
@@ -93,9 +91,7 @@ export const signInAndSaveAuthSession = async (interactive: boolean) => {
   return saveAuthSessionSnapshot(user, premiumStatus, googleAccessToken)
 }
 
-export const clearAuthSessionSnapshot = async () => {
-  await chrome.storage.local.remove(AUTH_SESSION_STORAGE_KEY)
-}
+export const clearAuthSessionSnapshot = async () => await chrome.storage.local.remove(AUTH_SESSION_STORAGE_KEY)
 
 export const getAuthSessionSnapshot = async () => {
   const result = await chrome.storage.local.get(AUTH_SESSION_STORAGE_KEY)
