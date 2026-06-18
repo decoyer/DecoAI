@@ -1,6 +1,8 @@
 import {
   getAuth,
   GoogleAuthProvider,
+  onAuthStateChanged,
+  signOut,
   signInWithCredential,
   type User
 } from "firebase/auth"
@@ -15,10 +17,13 @@ export type AuthSessionSnapshot = {
   checkedAt: number
   displayName: string
   email: string
-  googleAccessToken: string
-  idToken: string
   premiumStatus: PremiumStatus
   uid: string
+}
+
+type AuthSessionValidationOptions = {
+  refreshPremiumStatus?: boolean
+  verifyGoogleGrant?: boolean
 }
 
 type GoogleAccessTokenResponse = {
@@ -26,6 +31,9 @@ type GoogleAccessTokenResponse = {
   token?: string
   error?: string
 }
+
+const GOOGLE_GRANT_CHECK_MS = 5 * 60 * 1000
+let verifiedGoogleGrant: { checkedAt: number; uid: string } | null = null
 
 export const requestGoogleAccessToken = (interactive: boolean) =>
   new Promise<string>((resolve, reject) => {
@@ -48,11 +56,12 @@ export const requestGoogleAccessToken = (interactive: boolean) =>
   })
 
 export const getPremiumStatusForUser = async (
-  user: User | null
+  user: User | null,
+  forceRefresh = false
 ): Promise<PremiumStatus> => {
   if (!user) return "unknown"
 
-  const tokenResult = await user.getIdTokenResult(true)
+  const tokenResult = await user.getIdTokenResult(forceRefresh)
   return tokenResult.claims.premium === true ? "premium" : "free"
 }
 
@@ -65,16 +74,12 @@ export const signInWithGoogleAccessToken = async (accessToken: string) => {
 
 export const saveAuthSessionSnapshot = async (
   user: User,
-  premiumStatus: PremiumStatus,
-  googleAccessToken: string
+  premiumStatus: PremiumStatus
 ) => {
-  const idToken = await user.getIdToken(true)
   const snapshot: AuthSessionSnapshot = {
     checkedAt: Date.now(),
     displayName: user.displayName || "",
     email: user.email || "",
-    googleAccessToken,
-    idToken,
     premiumStatus,
     uid: user.uid
   }
@@ -86,12 +91,15 @@ export const saveAuthSessionSnapshot = async (
 export const signInAndSaveAuthSession = async (interactive: boolean) => {
   const googleAccessToken = await requestGoogleAccessToken(interactive)
   const user = await signInWithGoogleAccessToken(googleAccessToken)
-  const premiumStatus = await getPremiumStatusForUser(user)
+  const premiumStatus = await getPremiumStatusForUser(user, true)
 
-  return saveAuthSessionSnapshot(user, premiumStatus, googleAccessToken)
+  return saveAuthSessionSnapshot(user, premiumStatus)
 }
 
-export const clearAuthSessionSnapshot = async () => await chrome.storage.local.remove(AUTH_SESSION_STORAGE_KEY)
+export const clearAuthSessionSnapshot = async () => {
+  await chrome.storage.local.remove(AUTH_SESSION_STORAGE_KEY)
+  await signOut(getAuth(app))
+}
 
 export const getAuthSessionSnapshot = async () => {
   const result = await chrome.storage.local.get(AUTH_SESSION_STORAGE_KEY)
@@ -101,41 +109,94 @@ export const getAuthSessionSnapshot = async () => {
     !snapshot ||
     typeof snapshot !== "object" ||
     typeof snapshot.displayName !== "string" ||
-    typeof snapshot.googleAccessToken !== "string" ||
-    typeof snapshot.idToken !== "string" ||
     typeof snapshot.uid !== "string" ||
     typeof snapshot.premiumStatus !== "string"
   ) {
     return null
   }
 
-  return snapshot as AuthSessionSnapshot
+  const authSessionSnapshot: AuthSessionSnapshot = {
+    checkedAt: typeof snapshot.checkedAt === "number" ? snapshot.checkedAt : 0,
+    displayName: snapshot.displayName,
+    email: typeof snapshot.email === "string" ? snapshot.email : "",
+    premiumStatus: snapshot.premiumStatus as PremiumStatus,
+    uid: snapshot.uid
+  }
+
+  if (
+    typeof snapshot.googleAccessToken === "string" ||
+    typeof snapshot.idToken === "string"
+  ) {
+    await chrome.storage.local.set({ [AUTH_SESSION_STORAGE_KEY]: authSessionSnapshot })
+  }
+
+  return authSessionSnapshot
 }
 
-export const isGoogleAccessTokenValid = (accessToken: string) =>
-  new Promise<boolean>((resolve) => {
-    chrome.runtime.sendMessage(
-      { type: "VALIDATE_GOOGLE_ACCESS_TOKEN", accessToken },
-      (response?: { success?: boolean; valid?: boolean }) => {
-        if (chrome.runtime.lastError || !response?.success) {
-          resolve(false)
-          return
-        }
+const getCurrentUser = () => {
+  const auth = getAuth(app)
+  if (auth.currentUser) return Promise.resolve(auth.currentUser)
 
-        resolve(response.valid === true)
-      }
-    )
+  return new Promise<User | null>((resolve) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      unsubscribe()
+      resolve(user)
+    })
   })
+}
 
-export const getValidAuthSessionSnapshot = async () => {
+const verifyGoogleGrantForUser = async (expectedUid: string) => {
+  if (
+    verifiedGoogleGrant?.uid === expectedUid &&
+    Date.now() - verifiedGoogleGrant.checkedAt < GOOGLE_GRANT_CHECK_MS
+  ) {
+    return getCurrentUser()
+  }
+
+  try {
+    const googleAccessToken = await requestGoogleAccessToken(false)
+    const user = await signInWithGoogleAccessToken(googleAccessToken)
+    if (user.uid !== expectedUid) return null
+
+    verifiedGoogleGrant = { checkedAt: Date.now(), uid: expectedUid }
+    return user
+  } catch {
+    return null
+  }
+}
+
+export const getValidAuthSessionSnapshot = async ({
+  refreshPremiumStatus = false,
+  verifyGoogleGrant = false
+}: AuthSessionValidationOptions = {}) => {
   const snapshot = await getAuthSessionSnapshot()
   if (!snapshot) return null
 
-  const valid = await isGoogleAccessTokenValid(snapshot.googleAccessToken)
-  if (!valid) {
+  let user = await getCurrentUser()
+  if (!user || user.uid !== snapshot.uid) {
     await clearAuthSessionSnapshot()
     return null
   }
 
+  if (verifyGoogleGrant) {
+    user = await verifyGoogleGrantForUser(snapshot.uid)
+    if (!user) {
+      await clearAuthSessionSnapshot()
+      return null
+    }
+  }
+
+  const premiumStatus = await getPremiumStatusForUser(user, refreshPremiumStatus)
+  if (premiumStatus !== snapshot.premiumStatus) {
+    return saveAuthSessionSnapshot(user, premiumStatus)
+  }
+
   return snapshot
+}
+
+export const getCurrentUserIdToken = async () => {
+  const user = await getCurrentUser()
+  if (!user) return ""
+
+  return user.getIdToken(true)
 }

@@ -94,29 +94,6 @@ const sendWebAuthToken = (
   )
 }
 
-const validateGoogleAccessToken = async (
-  accessToken: unknown,
-  sendResponse: (response?: unknown) => void
-) => {
-  try {
-    if (typeof accessToken !== "string" || !accessToken) {
-      sendResponse({ success: true, valid: false })
-      return
-    }
-
-    const response = await fetch(
-      "https://www.googleapis.com/oauth2/v3/userinfo",
-      {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      }
-    )
-
-    sendResponse({ success: true, valid: response.ok })
-  } catch {
-    sendResponse({ success: false, valid: false })
-  }
-}
-
 const fetchImageAsDataUrl = async (
   imageSourceUrl: string,
   sendResponse: (response?: unknown) => void
@@ -165,14 +142,7 @@ const fetchImageAsDataUrl = async (
   }
 
   const reader = new FileReader()
-
-  reader.onloadend = () => {
-    sendResponse({
-      success: true,
-      dataUrl: reader.result
-    })
-  }
-
+  reader.onloadend = () => sendResponse({ success: true, dataUrl: reader.result })
   reader.readAsDataURL(blob)
 }
 
@@ -220,11 +190,6 @@ const openCheckout = async (
 chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
   if (message.type === "GET_GOOGLE_ACCESS_TOKEN") {
     sendWebAuthToken(sendResponse, message.interactive !== false)
-    return true
-  }
-
-  if (message.type === "VALIDATE_GOOGLE_ACCESS_TOKEN") {
-    void validateGoogleAccessToken(message.accessToken, sendResponse)
     return true
   }
 

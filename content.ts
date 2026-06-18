@@ -230,14 +230,13 @@ const getPremiumStatus = async ({ forceRefresh = false } = {}) => {
     premiumCache &&
     Date.now() - premiumCache.checkedAt < PREMIUM_CACHE_MS
   ) {
-    return {
-      isPremium: premiumCache.value,
-      isChecked: true
-    }
+    return { isPremium: premiumCache.value, isChecked: true }
   }
 
   try {
-    const authSession = await getValidAuthSessionSnapshot()
+    const authSession = await getValidAuthSessionSnapshot({
+      verifyGoogleGrant: true
+    })
 
     if (authSession) {
       const isPremium = authSession.premiumStatus === "premium"
@@ -1104,6 +1103,7 @@ function WidgetOverlayApp() {
       overflow: "hidden",
       pointerEvents: "auto",
       touchAction: "none",
+      zIndex: editingWidgetId === id ? 2 : 1,
       willChange: "transform, width, height"
     } as CSSProperties
   }
@@ -1202,6 +1202,7 @@ function WidgetOverlayApp() {
           key: item.id,
           ref: (node: HTMLDivElement | null) => widgetRefs.current[item.id] = node,
           className: "decoai-widget-card",
+          onPointerDown: () => setEditingWidgetId(item.id),
           onClick: (e) => {
             e.stopPropagation()
             setEditingWidgetId(item.id)

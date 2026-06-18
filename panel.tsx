@@ -32,6 +32,7 @@ import { useStorage } from "@plasmohq/storage/hook"
 
 import {
   AUTH_SESSION_STORAGE_KEY,
+  getCurrentUserIdToken,
   getValidAuthSessionSnapshot,
   signInAndSaveAuthSession,
   type PremiumStatus
@@ -762,7 +763,9 @@ export function FabPanelApp() {
   }
 
   const refreshPremiumStatus = async () => {
-    const authSession = await getValidAuthSessionSnapshot()
+    const authSession = await getValidAuthSessionSnapshot({
+      verifyGoogleGrant: true
+    })
 
     if (authSession) {
       setPremiumStatus(authSession.premiumStatus)
@@ -789,19 +792,25 @@ export function FabPanelApp() {
   const onProClick = async () => {
     setIsLoading(true)
     try {
-      const authSession = await getValidAuthSessionSnapshot()
+      const authSession = await getValidAuthSessionSnapshot({
+        verifyGoogleGrant: true
+      })
 
       if (authSession) {
         setPremiumStatus(authSession.premiumStatus)
         if (authSession.premiumStatus === "premium") return
-        await openCheckout(authSession.idToken)
+        const idToken = await getCurrentUserIdToken()
+        if (!idToken) return
+        await openCheckout(idToken)
         return
       }
 
       const nextAuthSession = await signInAndSaveAuthSession(true)
       setPremiumStatus(nextAuthSession.premiumStatus)
       if (nextAuthSession.premiumStatus === "premium") return
-      await openCheckout(nextAuthSession.idToken)
+      const idToken = await getCurrentUserIdToken()
+      if (!idToken) return
+      await openCheckout(idToken)
     } catch (e) {
       if (e?.message === "The user did not approve access.") return
       toast.error(t("error_checkoutFail"))
