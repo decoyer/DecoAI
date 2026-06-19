@@ -170,7 +170,13 @@
   "default": {
     "message": "Default"
   },
-  "alert_TimerExpired": {
+  "place_noteWidget": {
+    "message": "Write a note..."
+  },
+  "place_todoWidget": {
+    "message": "Add a new task..."
+  },
+  "alert_timerExpired": {
     "message": "Your timer has finished."
   },
   "error_fileNotSelected": {

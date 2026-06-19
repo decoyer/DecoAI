@@ -170,7 +170,13 @@
   "default": {
     "message": "기본"
   },
-  "alert_TimerExpired": {
+  "place_noteWidget": {
+    "message": "메모를 작성하세요..."
+  },
+  "place_todoWidget": {
+    "message": "할 일을 입력하세요..."
+  },
+  "alert_timerExpired": {
     "message": "설정한 타이머가 종료되었습니다."
   },
   "error_fileNotSelected": {

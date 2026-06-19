@@ -31,10 +31,13 @@ import { Storage } from "@plasmohq/storage"
 import { useStorage } from "@plasmohq/storage/hook"
 
 import {
+  AUTH_REFRESH_MS,
   AUTH_SESSION_STORAGE_KEY,
   getCurrentUserIdToken,
   getValidAuthSessionSnapshot,
+  getVerifiedPremiumStatus,
   signInAndSaveAuthSession,
+  type AuthSessionSnapshot,
   type PremiumStatus
 } from "./auth"
 import {
@@ -56,7 +59,6 @@ import {
   isAnimatedImage,
   MAX_FILE_BYTES,
   parseImportedThemes,
-  PREMIUM_THEME_BACKUP_STORAGE_KEY,
   renderImageToCanvas,
   sanitizeCustomBgUrl,
   SELECTED_CUSTOM_THEME_ID_STORAGE_KEY,
@@ -101,10 +103,6 @@ type PanelMode = "theme" | "widget"
 type ThemeTab = "preset" | "custom"
 type WidgetTab = "visibility" | "layout"
 type CustomEditTab = "general" | "background" | "layout"
-type PremiumThemeBackup = {
-  customThemes: CustomTheme[]
-  selectedCustomThemeId: string
-}
 
 const WIDGET_LIST: Array<{ key: WidgetKey; labelKey: string; icon: string }> = [
   { key: "note", labelKey: "noteWidget", icon: "notepad-text" },
@@ -435,11 +433,6 @@ export function FabPanelApp() {
       key: SELECTED_CUSTOM_THEME_ID_STORAGE_KEY,
       instance: localStorageInstance
     }, "")
-  const [premiumThemeBackup, setPremiumThemeBackup] = useStorage<PremiumThemeBackup | null>(
-    {
-      key: PREMIUM_THEME_BACKUP_STORAGE_KEY,
-      instance: localStorageInstance
-    }, null)
   const [editingCustomThemeId, setEditingCustomThemeId] = useState("")
   const [premiumStatus, setPremiumStatus] = useState<PremiumStatus>("unknown")
   const [draftBackgroundOptions, setDraftBackgroundOptions] = useState<CustomBgOptions>(DEFAULT_CUSTOM_BG_OPTIONS)
@@ -520,11 +513,11 @@ export function FabPanelApp() {
   }, [draftWidgetLayout, panelMode, setWidgetLayout, widgetLayout])
 
   useEffect(() => {
-    void syncGoogleSession()
+    void syncGoogleSession(true)
 
     const intervalId = window.setInterval(() => {
-      void syncGoogleSession()
-    }, 30_000)
+      void syncGoogleSession(true)
+    }, AUTH_REFRESH_MS)
 
     return () => window.clearInterval(intervalId)
   }, [])
@@ -617,27 +610,6 @@ export function FabPanelApp() {
   const hasPremiumLockedThemes = (themes: CustomTheme[]) =>
     themes.length > 1 || themes.some((item) => isAnimatedBgUrl(item.bgUrl))
 
-  const backupPremiumThemes = () => {
-    const nextSelectedThemeId = selectedCustomThemeId || customThemes[0]?.id || ""
-    if (premiumThemeBackup || !nextSelectedThemeId || !hasPremiumLockedThemes(customThemes)) return
-
-    void setPremiumThemeBackup({
-      customThemes,
-      selectedCustomThemeId: nextSelectedThemeId
-    })
-  }
-
-  const restorePremiumThemes = () => {
-    if (!premiumThemeBackup?.customThemes.length) return
-
-    setCustomThemes(premiumThemeBackup.customThemes)
-    if (premiumThemeBackup.selectedCustomThemeId) {
-      setSelectedCustomThemeId(premiumThemeBackup.selectedCustomThemeId)
-      if (theme === "custom") setTheme("custom")
-    }
-    void setPremiumThemeBackup(null)
-  }
-
   const normalizeCustomThemes = () => {
     if (!customThemes.length) return false
 
@@ -674,7 +646,9 @@ export function FabPanelApp() {
       retainedTypes.add(item.type)
       return true
     })
-    const changed = nextItems.length !== items.length
+    const changed =
+      nextItems.length !== items.length ||
+      nextItems.some((item, index) => item.id !== items[index]?.id)
 
     if (changed) setWidgetItems(nextItems)
 
@@ -683,17 +657,13 @@ export function FabPanelApp() {
 
   useEffect(() => {
     if (!isPremiumChecked) return
-    if (isPremiumUser) {
-      restorePremiumThemes()
-      return
-    }
+    if (isPremiumUser) return
 
     const hasLockedThemes = customThemes.length > 0 && hasPremiumLockedThemes(customThemes)
     const hasLockedWidgets = hasPremiumLockedWidgets(widgetItems || DEFAULT_WIDGET_INSTANCES)
 
     if (isFreeUser && (hasLockedThemes || hasLockedWidgets)) {
       if (hasLockedThemes) {
-        backupPremiumThemes()
         normalizeCustomThemes()
         toast.error(t("pro_themeLimit"), { toastId: "normalizeTheme" })
       }
@@ -703,8 +673,6 @@ export function FabPanelApp() {
       }
       return
     }
-
-    if (isFreeUser && premiumThemeBackup) void setPremiumThemeBackup(null)
   }, [
     draftBackgroundImageUrl,
     customThemes,
@@ -712,7 +680,6 @@ export function FabPanelApp() {
     isFreeUser,
     isPremiumChecked,
     isPremiumUser,
-    premiumThemeBackup,
     selectedCustomThemeId,
     widgetItems
   ])
@@ -750,30 +717,36 @@ export function FabPanelApp() {
     })
   }
 
-  const syncGoogleSession = async () => {
-    const authSession = await getValidAuthSessionSnapshot()
+  const syncGoogleSession = async (verifyGrant = false) => {
+    let authSession: AuthSessionSnapshot | null = null
+    try {
+      authSession = await getValidAuthSessionSnapshot(
+        verifyGrant
+          ? { refreshPremiumStatus: true, verifyGoogleGrant: true }
+          : undefined
+      )
+    } catch {
+      authSession = null
+    }
 
     if (authSession) {
       setPremiumStatus(authSession.premiumStatus)
       return authSession
     }
 
-    setPremiumStatus("free")
+    setPremiumStatus(verifyGrant ? "unknown" : "free")
     return null
   }
 
   const refreshPremiumStatus = async () => {
-    const authSession = await getValidAuthSessionSnapshot({
-      verifyGoogleGrant: true
-    })
-
-    if (authSession) {
-      setPremiumStatus(authSession.premiumStatus)
-      return authSession.premiumStatus === "premium"
+    let isPremium = false
+    try {
+      isPremium = await getVerifiedPremiumStatus(false, false)
+    } catch {
+      isPremium = false
     }
-
-    setPremiumStatus("free")
-    return false
+    setPremiumStatus(isPremium ? "premium" : "free")
+    return isPremium
   }
 
   const requirePremiumAccess = async (
@@ -793,15 +766,37 @@ export function FabPanelApp() {
     setIsLoading(true)
     try {
       const authSession = await getValidAuthSessionSnapshot({
-        verifyGoogleGrant: true
+        refreshPremiumStatus: true
       })
 
       if (authSession) {
         setPremiumStatus(authSession.premiumStatus)
         if (authSession.premiumStatus === "premium") return
         const idToken = await getCurrentUserIdToken()
-        if (!idToken) return
-        await openCheckout(idToken)
+        if (idToken) {
+          await openCheckout(idToken)
+          return
+        }
+
+        try {
+          const nextAuthSession = await signInAndSaveAuthSession(false)
+          setPremiumStatus(nextAuthSession.premiumStatus)
+          if (nextAuthSession.premiumStatus === "premium") return
+          const nextIdToken = await getCurrentUserIdToken()
+          if (nextIdToken) {
+            await openCheckout(nextIdToken)
+            return
+          }
+        } catch {
+          // Fall through to an interactive sign-in only if silent recovery failed.
+        }
+
+        const nextAuthSession = await signInAndSaveAuthSession(true)
+        setPremiumStatus(nextAuthSession.premiumStatus)
+        if (nextAuthSession.premiumStatus === "premium") return
+        const nextIdToken = await getCurrentUserIdToken()
+        if (!nextIdToken) return
+        await openCheckout(nextIdToken)
         return
       }
 
@@ -1117,8 +1112,7 @@ export function FabPanelApp() {
     <>
       <style>{`
         * { margin: 0; box-sizing: border-box; user-select: none; -webkit-user-select: none; }
-        .content-scroll { -ms-overflow-style: none; scrollbar-width: none; }
-        .content-scroll::-webkit-scrollbar { display: none; }
+        .content-scroll { scrollbar-width: none; }
         input.color-picker::-webkit-color-swatch-wrapper { padding: 0; }
         input.color-picker::-webkit-color-swatch { border: none; border-radius: 6px; }
         .preset-theme-card {

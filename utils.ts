@@ -78,7 +78,6 @@ type ThemeImportData = {
 
 export const CUSTOM_THEMES_STORAGE_KEY = "custom-themes"
 export const SELECTED_CUSTOM_THEME_ID_STORAGE_KEY = "selected-custom-theme-id"
-export const PREMIUM_THEME_BACKUP_STORAGE_KEY = "premium-theme-backup"
 export const SELECTED_THEME_STORAGE_KEY = "selected-theme"
 export const FAB_HIDDEN_STORAGE_KEY = "fab-hidden"
 export const THEME_HIDDEN_STORAGE_KEY = "theme-hidden"

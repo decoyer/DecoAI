@@ -1,4 +1,8 @@
 import { Icon } from "@iconify/react"
+import { ListKit } from "@tiptap/extension-list"
+import { Placeholder } from "@tiptap/extensions"
+import { EditorContent, useEditor, type JSONContent } from "@tiptap/react"
+import StarterKit from "@tiptap/starter-kit"
 import { Vibrant } from "node-vibrant/browser"
 import type { PlasmoCSConfig } from "plasmo"
 import React, {
@@ -16,7 +20,11 @@ import { toast, ToastContainer } from "react-toastify"
 import { Storage } from "@plasmohq/storage"
 import { useStorage } from "@plasmohq/storage/hook"
 
-import { getValidAuthSessionSnapshot } from "./auth"
+import {
+  AUTH_SESSION_STORAGE_KEY,
+  getAuthSessionSnapshot,
+  getVerifiedPremiumStatus
+} from "./auth"
 import { FabPanelApp } from "./panel"
 import {
   clampNumber,
@@ -33,7 +41,6 @@ import {
   FAB_OPEN_EVENT,
   isAnimatedCustomTheme,
   MODEL_ENABLED_STORAGE_KEY,
-  PREMIUM_THEME_BACKUP_STORAGE_KEY,
   sanitizeColor,
   sanitizeCustomBgOptions,
   sanitizeCustomBgUrl,
@@ -181,13 +188,10 @@ const FAB_THEME_MOUNT_ID = "decoai-fab-theme-mount"
 const WIDGET_ROOT_ID = "decoai-widget-root"
 const TOAST_STYLE_ID = "decoai-toastify-style"
 const TOAST_ROOT_ID = "decoai-toast-root"
+const TEXT_WIDGET_STATE_STORAGE_KEY = "text-widget-state"
 const CUSTOM_THEME_WATCH_STORAGE_KEYS = [CUSTOM_THEMES_STORAGE_KEY, SELECTED_CUSTOM_THEME_ID_STORAGE_KEY]
-const PREMIUM_CACHE_MS = 5 * 60 * 1000
+const PREMIUM_REFRESH_MS = 5 * 60 * 1000
 let premiumCache: { checkedAt: number; value: boolean } | null = null
-type PremiumThemeBackup = {
-  customThemes: CustomTheme[]
-  selectedCustomThemeId: string
-}
 
 type FabPanelView = "theme" | "widget"
 
@@ -224,29 +228,41 @@ const emitThemeLoading = (loading: boolean) => {
   window.dispatchEvent(new CustomEvent(THEME_LOADING_EVENT, { detail: { loading } }))
 }
 
-const getPremiumStatus = async ({ forceRefresh = false } = {}) => {
+const getPremiumStatus = async ({
+  forceRefresh = false,
+  interactiveFallback = false
+} = {}) => {
   if (
     !forceRefresh &&
     premiumCache &&
-    Date.now() - premiumCache.checkedAt < PREMIUM_CACHE_MS
+    Date.now() - premiumCache.checkedAt < PREMIUM_REFRESH_MS
   ) {
     return { isPremium: premiumCache.value, isChecked: true }
   }
 
+  const snapshot = await getAuthSessionSnapshot()
+
   try {
-    const authSession = await getValidAuthSessionSnapshot({
-      verifyGoogleGrant: true
-    })
+    const isPremium = await getVerifiedPremiumStatus(
+      forceRefresh,
+      interactiveFallback
+    )
+    const nextSnapshot = await getAuthSessionSnapshot()
+    const hasVerifiedNewStatus =
+      Boolean(nextSnapshot?.checkedAt) &&
+      nextSnapshot?.checkedAt !== snapshot?.checkedAt
 
-    if (authSession) {
-      const isPremium = authSession.premiumStatus === "premium"
-      premiumCache = { checkedAt: Date.now(), value: isPremium }
-
-      return { isPremium, isChecked: authSession.premiumStatus !== "unknown" }
+    if (
+      !isPremium &&
+      snapshot?.premiumStatus === "premium" &&
+      nextSnapshot &&
+      !hasVerifiedNewStatus
+    ) {
+      return { isPremium: false, isChecked: false }
     }
 
-    premiumCache = { checkedAt: Date.now(), value: false }
-    return { isPremium: false, isChecked: true }
+    premiumCache = { checkedAt: Date.now(), value: isPremium }
+    return { isPremium, isChecked: true }
   } catch {
     return { isPremium: false, isChecked: false }
   }
@@ -316,7 +332,6 @@ const getFABStyle = () => {
 
       .${FAB_ACTION_CLASS} {
         position: relative;
-        z-index: 2;
         display: flex;
         flex-direction: row-reverse;
         align-items: center;
@@ -345,11 +360,10 @@ const getFABStyle = () => {
 
       .${FAB_THEME_PANEL_CLASS} {
         position: relative;
-        z-index: 2;
         display: block;
         overflow: hidden;
         background-color: rgba(24, 24, 24, var(--decoai-surface-opacity, 0.8));
-        border-radius: 14px;
+        border-radius: 16px;
         backdrop-filter: blur(var(--decoai-glass-blur, 10px)) saturate(140%);
         box-shadow: var(--decoai-accent-shadow, none);
         opacity: 0;
@@ -443,7 +457,7 @@ const normalizeCustomThemes = async (
   return theme
 }
 
-const hasDuplicateWidgets = (widgetItems: WidgetInstance[]) => {
+const hasMultipleWidgets = (widgetItems: WidgetInstance[]) => {
   const retainedTypes = new Set<WidgetKey>()
   return widgetItems.some((item) => {
     if (retainedTypes.has(item.type)) return true
@@ -461,26 +475,16 @@ const normalizeCustomWidgets = (widgetItems: WidgetInstance[]) => {
   })
 }
 
-const restorePremiumThemes = async (backup: PremiumThemeBackup) => {
-  await localStorageInstance.set(CUSTOM_THEMES_STORAGE_KEY, backup.customThemes)
-  await localStorageInstance.set(SELECTED_CUSTOM_THEME_ID_STORAGE_KEY, backup.selectedCustomThemeId)
-}
-
 const getSelectedCustomTheme = async (): Promise<{
   isPremium: boolean
   theme: CustomTheme | null
 }> => {
   const customData = await localStorageInstance.getMany([
     CUSTOM_THEMES_STORAGE_KEY,
-    PREMIUM_THEME_BACKUP_STORAGE_KEY,
     SELECTED_CUSTOM_THEME_ID_STORAGE_KEY
   ])
   const customThemes = customData[CUSTOM_THEMES_STORAGE_KEY] as
     | CustomTheme[]
-    | undefined
-  const premiumThemeBackup = customData[PREMIUM_THEME_BACKUP_STORAGE_KEY] as
-    | PremiumThemeBackup
-    | null
     | undefined
   const selectedCustomThemeId = customData[
     SELECTED_CUSTOM_THEME_ID_STORAGE_KEY
@@ -498,45 +502,22 @@ const getSelectedCustomTheme = async (): Promise<{
   const hasAnimatedTheme = customThemes.some(isAnimatedCustomTheme)
   const needsPremium = customThemes.length > 1 || hasAnimatedTheme
   const premiumStatus = needsPremium
-    ? await getPremiumStatus({ forceRefresh: true })
+    ? await getPremiumStatus()
     : { isPremium: false, isChecked: false }
 
-  if (premiumStatus.isPremium) {
-    if (premiumThemeBackup?.customThemes.length) {
-      await restorePremiumThemes(premiumThemeBackup)
-      await localStorageInstance.set(PREMIUM_THEME_BACKUP_STORAGE_KEY, null)
-
-      const restoredTheme =
-        premiumThemeBackup.customThemes.find(
-          (item) => item.id === premiumThemeBackup.selectedCustomThemeId
-        ) || premiumThemeBackup.customThemes[0] || null
-
-      return { isPremium: true, theme: restoredTheme }
-    }
-
-    return { isPremium: true, theme: selectedTheme }
-  }
+  if (premiumStatus.isPremium) return { isPremium: true, theme: selectedTheme }
 
   if (needsPremium) {
-    const nextSelectedThemeId = selectedCustomThemeId || customThemes[0]?.id || ""
-    if (!premiumThemeBackup) {
-      await localStorageInstance.set(PREMIUM_THEME_BACKUP_STORAGE_KEY, {
-        customThemes,
-        selectedCustomThemeId: nextSelectedThemeId
-      })
+    if (!premiumStatus.isChecked) {
+      return { isPremium: false, theme: selectedTheme }
     }
 
     const normalizedTheme = await normalizeCustomThemes(customThemes, selectedCustomThemeId)
-    if (premiumStatus.isChecked) await localStorageInstance.set(PREMIUM_THEME_BACKUP_STORAGE_KEY, null)
 
     return {
       isPremium: false,
       theme: normalizedTheme
     }
-  }
-
-  if (premiumStatus.isChecked && premiumThemeBackup) {
-    await localStorageInstance.set(PREMIUM_THEME_BACKUP_STORAGE_KEY, null)
   }
 
   return { isPremium: premiumStatus.isPremium, theme: selectedTheme }
@@ -635,7 +616,7 @@ const getInitialWidgetFrame = (index: number): WidgetFrame => {
   const maxX = Math.max(0, viewportWidth - width)
   const maxY = Math.max(0, viewportHeight - height)
   const x = Math.min(maxX, 300)
-  const y = Math.min(maxY, index * 50 + 25)
+  const y = Math.min(maxY, index * 100 + 25)
 
   return { x, y, width, height }
 }
@@ -700,22 +681,262 @@ const controlButton = (
       className: "decoai-time-control",
       disabled,
       onPointerDown: (e) => e.stopPropagation(),
-      onPointerUp: (e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        onClick()
-      },
+      onPointerUp: (e) => e.stopPropagation(),
       onClick: (e) => {
         e.preventDefault()
         e.stopPropagation()
+        onClick()
       }
     },
-    createElement(Icon, {
-      icon,
-      height: "50%",
-      "aria-hidden": "true"
-    })
+    createElement(Icon, { icon, height: "50%", "aria-hidden": "true" })
   )
+
+const EMPTY_DOC: JSONContent = {
+  type: "doc",
+  content: [{ type: "paragraph" }]
+}
+
+const EMPTY_TASK_DOC: JSONContent = {
+  type: "doc",
+  content: [{ type: "paragraph" }]
+}
+
+type TodoItem = {
+  checked: boolean
+  text: string
+}
+
+const getTodoItems = (content?: JSONContent): TodoItem[] =>
+  (content?.content || [])
+    .flatMap((node) => node.type === "taskList" ? node.content || [] : [])
+    .map((node) => ({
+      checked: node.attrs?.checked === true,
+      text: node.content?.[0]?.content?.[0]?.text || ""
+    }))
+
+const createTodoDoc = (items: TodoItem[]): JSONContent => ({
+  type: "doc",
+  content: items.length
+    ? [
+      {
+        type: "taskList",
+        content: items.map((item) => ({
+          type: "taskItem",
+          attrs: { checked: item.checked },
+          content: [
+            {
+              type: "paragraph",
+              content: item.text ? [{ type: "text", text: item.text }] : []
+            }
+          ]
+        }))
+      }
+    ]
+    : EMPTY_TASK_DOC.content
+})
+
+const textWidgetButton = (
+  icon: string,
+  onClick: () => void,
+  active = false
+) =>
+  createElement(
+    "button",
+    {
+      type: "button",
+      className: `decoai-text-tool${active ? " is-active" : ""}`,
+      onPointerDown: (e) => e.stopPropagation(),
+      onClick: (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        onClick()
+      }
+    },
+    createElement(Icon, { icon, height: "50%", "aria-hidden": "true" })
+  )
+
+function NoteWidgetContent({ widgetId }: { widgetId: string }) {
+  const [content, setContent] = useStorage<JSONContent>(
+    `${TEXT_WIDGET_STATE_STORAGE_KEY}:${widgetId}`,
+    EMPTY_DOC
+  )
+  const pendingContentRef = useRef<JSONContent | null>(null)
+  const setContentRef = useRef(setContent)
+  const saveTimeoutRef = useRef<number | null>(null)
+  const scheduleSaveContent = (nextContent: JSONContent) => {
+    pendingContentRef.current = nextContent
+    if (saveTimeoutRef.current !== null) window.clearTimeout(saveTimeoutRef.current)
+    saveTimeoutRef.current = window.setTimeout(() => {
+      if (pendingContentRef.current) setContentRef.current(pendingContentRef.current)
+      pendingContentRef.current = null
+      saveTimeoutRef.current = null
+    }, 250)
+  }
+  const editor = useEditor({
+    extensions: [
+      StarterKit,
+      Placeholder.configure({ placeholder: t("place_noteWidget") })
+    ],
+    content: content || EMPTY_DOC,
+    shouldRerenderOnTransaction: true,
+    editorProps: { attributes: { class: "decoai-text-editor" } },
+    onUpdate: ({ editor }) => scheduleSaveContent(editor.getJSON())
+  })
+
+  React.useEffect(() => {
+    if (!editor || !content) return
+    if (JSON.stringify(editor.getJSON()) === JSON.stringify(content)) return
+
+    editor.commands.setContent(content)
+  }, [content, editor])
+
+  React.useEffect(() => {
+    setContentRef.current = setContent
+  }, [setContent])
+
+  React.useEffect(() => () => {
+    if (saveTimeoutRef.current !== null) window.clearTimeout(saveTimeoutRef.current)
+    if (pendingContentRef.current) setContentRef.current(pendingContentRef.current)
+  }, [])
+
+  return createElement(
+    "div",
+    {
+      className: "decoai-note-widget",
+      onPointerDown: (e) => e.stopPropagation()
+    },
+    createElement(EditorContent, { editor, className: "decoai-note-editor-wrap" }),
+    createElement(
+      "div",
+      { className: "decoai-note-toolbar" },
+      textWidgetButton("lucide:bold", () => editor?.chain().focus().toggleBold().run(), editor?.isActive("bold")),
+      textWidgetButton("lucide:italic", () => editor?.chain().focus().toggleItalic().run(), editor?.isActive("italic")),
+      textWidgetButton("lucide:underline", () => editor?.chain().focus().toggleUnderline().run(), editor?.isActive("underline")),
+      textWidgetButton("lucide:strikethrough", () => editor?.chain().focus().toggleStrike().run(), editor?.isActive("strike")),
+      textWidgetButton("lucide:list", () => editor?.chain().focus().toggleBulletList().run(), editor?.isActive("bulletList")),
+      textWidgetButton("lucide:list-ordered", () => editor?.chain().focus().toggleOrderedList().run(), editor?.isActive("orderedList"))
+    )
+  )
+}
+
+function TodoWidgetContent({ widgetId }: { widgetId: string }) {
+  const [inputValue, setInputValue] = useState("")
+  const [content, setContent] = useStorage<JSONContent>(
+    `${TEXT_WIDGET_STATE_STORAGE_KEY}:${widgetId}`,
+    EMPTY_TASK_DOC
+  )
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        bulletList: false,
+        orderedList: false,
+        listItem: false,
+        listKeymap: false
+      }),
+      ListKit.configure({
+        bulletList: false,
+        orderedList: false,
+        listItem: false,
+        listKeymap: false,
+        taskItem: { nested: true }
+      })
+    ],
+    content: content || EMPTY_TASK_DOC,
+    editable: false
+  })
+  const todoItems = getTodoItems(content)
+
+  const setTodoItems = (items: TodoItem[]) => {
+    const nextContent = createTodoDoc(items)
+    setContent(nextContent)
+    editor?.commands.setContent(nextContent)
+  }
+
+  const addTodo = () => {
+    const text = inputValue.trim()
+    if (!text) return
+    setTodoItems([...todoItems, { checked: false, text }])
+    setInputValue("")
+  }
+
+  return createElement(
+    "div",
+    {
+      className: "decoai-todo-widget",
+      onPointerDown: (e) => e.stopPropagation()
+    },
+    createElement(
+      "div",
+      { className: "decoai-todo-input-row" },
+      createElement("input", {
+        className: "decoai-todo-input",
+        value: inputValue,
+        placeholder: t("place_todoWidget"),
+        onChange: (e) => setInputValue(e.currentTarget.value),
+        onKeyDown: (e) => {
+          e.stopPropagation()
+          if (e.key === "Enter") addTodo()
+        },
+        onKeyUp: (e) => e.stopPropagation()
+      }),
+      createElement(
+        "button",
+        {
+          type: "button",
+          className: "decoai-todo-add",
+          disabled: inputValue.trim().length === 0,
+          onClick: (e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            addTodo()
+          }
+        },
+        createElement(Icon, { icon: "lucide:pencil", height: "50%", "aria-hidden": "true" })
+      )
+    ),
+    createElement(
+      "div",
+      { className: "decoai-todo-list" },
+      todoItems.map((item, index) =>
+        createElement(
+          "div",
+          { key: `${index}:${item.text}`, className: "decoai-todo-item" },
+          createElement("label",
+            { className: "decoai-todo-check-label" },
+            createElement("input", {
+              type: "checkbox",
+              className: "decoai-todo-checkbox",
+              checked: item.checked,
+              onChange: (e) => {
+                const nextItems = [...todoItems]
+                nextItems[index] = { ...item, checked: e.currentTarget.checked }
+                setTodoItems(nextItems)
+              }
+            }),
+            createElement(
+              "span",
+              { className: item.checked ? "is-done" : "" },
+              item.text
+            ),
+          ),
+          createElement(
+            "button",
+            {
+              type: "button",
+              className: "decoai-todo-delete",
+              onClick: (e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setTodoItems(todoItems.filter((_, itemIndex) => itemIndex !== index))
+              }
+            },
+            createElement(Icon, { icon: "lucide:eraser", height: "50%", "aria-hidden": "true" })
+          )
+        )
+      )
+    )
+  )
+}
 
 function TimerWidgetContent({ widgetId }: { widgetId: string }) {
   const [state, setState] = useStorage<TimerWidgetState>(
@@ -827,18 +1048,42 @@ function TimerWidgetContent({ widgetId }: { widgetId: string }) {
   const timeInput = (
     part: "hours" | "minutes" | "seconds",
     value: number
-  ) =>
-    createElement("input", {
-      className: "decoai-time-input",
-      type: "number",
-      min: 0,
-      max: 59,
-      value: String(value).padStart(2, "0"),
-      disabled: timer.isRunning,
-      onChange: (e) => setTimerTimePart(part, e.target.value),
-      onWheel: (e) => changeTimerTimePart(part, e.deltaY > 0 ? -1 : 1),
-      onClick: (e) => e.currentTarget.select()
-    })
+  ) => {
+    const stepButton = (icon: string, delta: number) =>
+      createElement(
+        "button",
+        {
+          type: "button",
+          className: "decoai-time-step",
+          disabled: timer.isRunning,
+          onPointerDown: (e) => e.stopPropagation(),
+          onPointerUp: (e) => e.stopPropagation(),
+          onClick: (e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            changeTimerTimePart(part, delta)
+          }
+        },
+        createElement(Icon, { icon, height: "50%", "aria-hidden": "true" })
+      )
+
+    return createElement(
+      "div",
+      { className: "decoai-time-stepper" },
+      stepButton("lucide:circle-plus", 1),
+      createElement("input", {
+        className: "decoai-time-input",
+        type: "text",
+        min: 0,
+        max: 59,
+        value: String(value).padStart(2, "0"),
+        disabled: timer.isRunning,
+        onChange: (e) => setTimerTimePart(part, e.target.value),
+        onClick: (e) => e.currentTarget.select()
+      }),
+      stepButton("lucide:circle-minus", -1)
+    )
+  }
 
   return createElement(
     "div",
@@ -998,9 +1243,7 @@ function WidgetOverlayApp() {
   const visibleWidgetItems = useMemo(
     () =>
       (widgetItems || DEFAULT_WIDGET_INSTANCES).filter(
-        (item) =>
-          (enabledMap?.[item.type] ?? DEFAULT_WIDGET_ENABLED[item.type]) !==
-          false
+        (item) => (enabledMap?.[item.type] ?? DEFAULT_WIDGET_ENABLED[item.type]) !== false
       ),
     [enabledMap, widgetItems]
   )
@@ -1023,11 +1266,12 @@ function WidgetOverlayApp() {
 
   React.useEffect(() => {
     const items = widgetItems || DEFAULT_WIDGET_INSTANCES
-    if (!hasDuplicateWidgets(items)) return
+    if (!hasMultipleWidgets(items)) return
 
     void (async () => {
-      const premiumStatus = await getPremiumStatus({ forceRefresh: true })
+      const premiumStatus = await getPremiumStatus()
       if (premiumStatus.isPremium) return
+      if (!premiumStatus.isChecked) return
       setWidgetItems(normalizeCustomWidgets(items))
     })()
   }, [setWidgetItems, widgetItems])
@@ -1117,24 +1361,26 @@ function WidgetOverlayApp() {
     }))
   }
 
-  const duplicateWidget = async (item: WidgetInstance) => {
-    const { isPremium } = await getPremiumStatus({ forceRefresh: true })
+  const addWidget = async (item: WidgetInstance) => {
+    const { isPremium, isChecked } = await getPremiumStatus()
     if (!isPremium) {
-      toast.error(t("pro_widgetLimit"))
+      if (isChecked) toast.error(t("pro_widgetLimit"))
       return
     }
 
     const copiedId = `${item.type}-${crypto.randomUUID()}`
     const sourceFrame = frames[item.id]
     const widgetMeta = WIDGET_LIST.find((widget) => widget.key === item.type)
-    setWidgetItems((prev) => [
-      ...(prev || DEFAULT_WIDGET_INSTANCES),
-      {
-        id: copiedId,
-        type: item.type,
-        name: t(widgetMeta?.labelKey)
-      }
-    ])
+    setWidgetItems((prev) =>
+      [
+        ...(prev || DEFAULT_WIDGET_INSTANCES),
+        {
+          id: copiedId,
+          type: item.type,
+          name: t(widgetMeta?.labelKey)
+        }
+      ]
+    )
     if (sourceFrame) {
       setFrameMap((prev) => ({
         ...(prev || {}),
@@ -1145,6 +1391,8 @@ function WidgetOverlayApp() {
         }
       }))
     }
+    setEditingWidgetId(copiedId)
+    setTitleEditingWidgetId(null)
   }
 
   const deleteWidget = (item: WidgetInstance) => {
@@ -1153,15 +1401,24 @@ function WidgetOverlayApp() {
       const { [item.id]: _removed, ...nextFrameMap } = prev || {}
       return nextFrameMap
     })
-    const stateKey =
-      item.type === "timer"
-        ? `${TIMER_WIDGET_STATE_STORAGE_KEY}:${item.id}`
-        : item.type === "stopwatch"
-          ? `${STOPWATCH_WIDGET_STATE_STORAGE_KEY}:${item.id}`
-          : ""
+    const stateKey = getWidgetStateKey(item)
     if (stateKey) void storage.remove(stateKey)
     if (editingWidgetId === item.id) setEditingWidgetId(null)
     if (titleEditingWidgetId === item.id) setTitleEditingWidgetId(null)
+  }
+
+  const getWidgetStateKey = (item: WidgetInstance) => {
+    switch (item.type) {
+      case "timer":
+        return `${TIMER_WIDGET_STATE_STORAGE_KEY}:${item.id}`
+      case "stopwatch":
+        return `${STOPWATCH_WIDGET_STATE_STORAGE_KEY}:${item.id}`
+      case "note":
+      case "todo":
+        return `${TEXT_WIDGET_STATE_STORAGE_KEY}:${item.id}`
+      default:
+        return null
+    }
   }
 
   const updateWidgetName = (id: string, name: string) => {
@@ -1173,7 +1430,7 @@ function WidgetOverlayApp() {
   const startTitleEditing = (item: WidgetInstance) => {
     const widgetMeta = WIDGET_LIST.find((widget) => widget.key === item.type)
     setEditingWidgetId(item.id)
-    setEditingTitle(item.name || t(widgetMeta?.labelKey))
+    setEditingTitle(item.name ?? t(widgetMeta?.labelKey))
     setTitleEditingWidgetId(item.id)
   }
 
@@ -1221,11 +1478,7 @@ function WidgetOverlayApp() {
               padding: "0 10px"
             }
           },
-          createElement(Icon, {
-            icon: `lucide:${widgetMeta.icon}`,
-            height: 16,
-            "aria-hidden": "true"
-          }),
+          createElement(Icon, { icon: `lucide:${widgetMeta.icon}`, height: 16, "aria-hidden": "true" }),
           isTitleEditing
             ? createElement("input", {
               autoFocus: true,
@@ -1239,7 +1492,7 @@ function WidgetOverlayApp() {
               onPointerDown: (e) => e.stopPropagation(),
               onKeyDown: (e) => {
                 e.stopPropagation()
-                if (e.key === "Enter" || e.key === "Escape") finishTitleEditing(item)
+                if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur()
               },
               onKeyUp: (e) => e.stopPropagation(),
               style: {
@@ -1279,54 +1532,50 @@ function WidgetOverlayApp() {
               {
                 type: "button",
                 className: "decoai-widget-card__action decoai-widget-card__edit",
+                onPointerDown: (e) => e.stopPropagation(),
+                onPointerUp: (e) => e.stopPropagation(),
                 onClick: (e) => {
                   e.preventDefault()
                   e.stopPropagation()
                   startTitleEditing(item)
                 }
               },
-              createElement(Icon, {
-                icon: "lucide:pencil",
-                height: 16,
-                "aria-hidden": "true"
-              })
+              createElement(Icon, { icon: "lucide:square-pen", height: 16, "aria-hidden": "true" })
             ),
             createElement(
               "button",
               {
                 type: "button",
-                className: "decoai-widget-card__action decoai-widget-card__duplicate",
+                className: "decoai-widget-card__action decoai-widget-card__add",
+                onPointerDown: (e) => e.stopPropagation(),
+                onPointerUp: (e) => e.stopPropagation(),
                 onClick: (e) => {
                   e.preventDefault()
                   e.stopPropagation()
-                  void duplicateWidget(item)
+                  void addWidget(item)
                 }
               },
-              createElement(Icon, {
-                icon: "lucide:copy-plus",
-                height: 16,
-                "aria-hidden": "true"
-              })
+              createElement(Icon, { icon: "lucide:square-plus", height: 16, "aria-hidden": "true" })
             ),
             createElement(
               "button",
               {
                 type: "button",
                 className: "decoai-widget-card__action decoai-widget-card__delete",
+                onPointerDown: (e) => e.stopPropagation(),
+                onPointerUp: (e) => e.stopPropagation(),
                 onClick: (e) => {
                   e.preventDefault()
                   e.stopPropagation()
                   deleteWidget(item)
                 }
               },
-              createElement(Icon, {
-                icon: "lucide:trash-2",
-                height: 16,
-                "aria-hidden": "true"
-              })
+              createElement(Icon, { icon: "lucide:trash-2", height: 16, "aria-hidden": "true" })
             )
           )
         ),
+        item.type === "note" ? createElement(NoteWidgetContent, { widgetId: item.id }) : null,
+        item.type === "todo" ? createElement(TodoWidgetContent, { widgetId: item.id }) : null,
         item.type === "timer" ? createElement(TimerWidgetContent, { widgetId: item.id }) : null,
         item.type === "stopwatch" ? createElement(StopwatchWidgetContent, { widgetId: item.id }) : null
       )
@@ -1337,26 +1586,17 @@ function WidgetOverlayApp() {
       resizable: true,
       checkInput: true,
       snappable: true,
-      snapDirections: true,
-      elementSnapDirections: true,
       elementGuidelines: Object.entries(widgetRefs.current)
         .filter(([id, node]) => id !== editingWidgetId && node)
         .map(([, node]) => node as HTMLDivElement),
-      snapGap: true,
       isDisplaySnapDigit: false,
       origin: false,
-      edge: false,
-      keepRatio: false,
       bounds: {
         left: 0,
         top: 0,
         right: Math.max(document.documentElement.clientWidth, 320),
         bottom: Math.max(document.documentElement.clientHeight, 240)
       },
-      hideDefaultLines: false,
-      renderDirections: ["nw", "n", "ne", "w", "e", "sw", "s", "se"],
-      throttleDrag: 0,
-      throttleResize: 1,
       onDragStart: () => interactionStartFrameRef.current = editingWidgetId ? frames[editingWidgetId] : null,
       onDrag: (event) => {
         if (!editingWidgetId) return
@@ -1483,11 +1723,183 @@ const mountWidgetOverlay = () => {
       .decoai-widget-card__edit:hover {
         background-color: #198754;
       }
-      .decoai-widget-card__duplicate:hover {
+      .decoai-widget-card__add:hover {
         background-color: #1976d2;
       }
       .decoai-widget-card__delete:hover {
         background-color: #d32f2f;
+      }
+      .decoai-note-widget,
+      .decoai-todo-widget {
+        height: calc(100% - 32px);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        pointer-events: auto;
+        container-type: size;
+      }
+      .decoai-note-editor-wrap {
+        flex: 1;
+        min-height: 0;
+        padding: 0 10px;
+        overflow: auto;
+      }
+      .decoai-text-editor {
+        min-height: 100%;
+        outline: none;
+        color: inherit !important;
+        font-size: max(16px, 8cqmin);
+        white-space: pre-wrap;
+        font-weight: 400;
+      }
+      .decoai-text-editor p {
+        margin: 0;
+      }
+      .decoai-text-editor p.is-editor-empty:first-child::before {
+        content: attr(data-placeholder);
+        float: left;
+        color: rgba(255, 255, 255, 0.35);
+        pointer-events: none;
+        height: 0;
+      }
+      .decoai-text-editor strong {
+        font-weight: 700 !important;
+      }
+      .decoai-text-editor em {
+        font-style: italic !important;
+      }
+      .decoai-text-editor ul,
+      .decoai-text-editor ol {
+        margin: 0;
+        padding-left: max(20px, 10cqmin);
+      }
+      .decoai-text-editor ul {
+        list-style: disc outside;
+      }
+      .decoai-text-editor ol {
+        list-style: decimal outside;
+      }
+      .decoai-text-editor li {
+        display: list-item;
+        padding-left: max(2px, 1cqmin);
+      }
+      .decoai-note-toolbar {
+        height: max(32px, 16cqmin);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 10px;
+        border-top: 1px solid #4b5563;
+        border-bottom: 1px solid transparent;
+      }
+      .decoai-text-tool,
+      .decoai-todo-add,
+      .decoai-todo-delete {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: none;
+        color: inherit !important;
+        background-color: transparent;
+        cursor: pointer;
+      }
+      .decoai-text-tool {
+        width: max(28px, 14cqmin);
+        height: max(28px, 14cqmin);
+        padding: 0;
+        border-radius: 8px;
+      }
+      .decoai-todo-widget {
+        padding: 0 10px 10px;
+      }
+      .decoai-todo-input-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .decoai-todo-input {
+        flex: 1;
+        min-width: 0;
+        min-height: 24px;
+        padding: max(4px, 2cqmin) max(8px, 4cqmin);
+        border: none;
+        border-radius: 8px;
+        outline: none;
+        font-size: max(16px, 8cqmin);
+        -webkit-text-fill-color: #fff !important;
+        background-color: #4b5563;
+      }
+      .decoai-todo-input::placeholder {
+        -webkit-text-fill-color: rgba(255, 255, 255, 0.35);
+      }
+      .decoai-todo-add,
+      .decoai-todo-delete {
+        width: max(32px, 16cqmin);
+        height: max(32px, 16cqmin);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: none;
+        border-radius: 999px;
+        padding: 0;
+      }
+      .decoai-todo-add:disabled {
+        opacity: 0.5;
+        pointer-events: none;
+      }
+      .decoai-todo-list {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        display: flex;
+        flex-direction: column;
+        scrollbar-width: none !important;
+      }
+      .decoai-todo-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: max(8px, 4cqmin) 0;
+        font-size: max(16px, 8cqmin);
+      }
+      .decoai-todo-item:not(:first-child) {
+        border-top: 1px solid #4b5563;
+      }
+      .decoai-todo-check-label {
+        display: flex;
+        align-items: center;
+        flex: 1;
+        min-width: 0;
+        height: 100%;
+        padding: max(4px, 2cqmin) max(8px, 4cqmin);
+        border-radius: 8px;
+        gap: max(8px, 4cqw);
+        cursor: pointer;
+      }
+      .decoai-todo-checkbox {
+        width: max(16px, 8cqmin);
+        height: max(16px, 8cqmin);
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .decoai-todo-checkbox:checked {
+        accent-color: #66cdaa;
+        background-color: #66cdaa;
+      }
+      .decoai-todo-item span {
+        flex: 1;
+        min-width: 0;
+      }
+      .decoai-todo-item span.is-done {
+        text-decoration: line-through;
+        opacity: 0.5;
+      } 
+      .decoai-text-tool:hover,
+      .decoai-text-tool.is-active,
+      .decoai-todo-check-label:hover,
+      .decoai-todo-add:hover,
+      .decoai-todo-delete:hover {
+        background-color: #0000004D;
       }
       .decoai-time-widget {
         height: calc(100% - 32px);
@@ -1508,14 +1920,14 @@ const mountWidgetOverlay = () => {
       }
       .decoai-time-controls {
         position: relative;
-        z-index: 5;
+        z-index: 4;
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: max(4px, 2cqw);
       }
       .decoai-time-control {
         position: relative;
-        z-index: 6;
+        z-index: 4;
         width: max(48px, 24cqmin);
         height: max(48px, 24cqmin);
         display: flex;
@@ -1530,9 +1942,6 @@ const mountWidgetOverlay = () => {
         touch-action: manipulation;
         user-select: none;
       }
-      .decoai-time-control:hover {
-        background-color: #0000004D;
-      }
       .decoai-time-control:disabled {
         opacity: 0.5;
         pointer-events: none;
@@ -1542,6 +1951,28 @@ const mountWidgetOverlay = () => {
         align-items: center;
         justify-content: center;
         gap: max(4px, 2cqw);
+      }
+      .decoai-time-stepper {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      .decoai-time-step {
+        width: max(36px, 18cqmin);
+        height: max(36px, 18cqmin);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: none;
+        border-radius: 999px;
+        padding: 0;
+        background-color: transparent;
+        color: inherit !important;
+        cursor: pointer;
+      }
+      .decoai-time-control:hover,
+      .decoai-time-step:hover {
+        background-color: #0000004D;
       }
       .decoai-time-input {
         width: 100%;
@@ -1554,10 +1985,9 @@ const mountWidgetOverlay = () => {
         outline: none;
         font-size: inherit;
       }
-      input::-webkit-outer-spin-button,
-      input::-webkit-inner-spin-button {
+      .decoai-time-input::-webkit-outer-spin-button,
+      .decoai-time-input::-webkit-inner-spin-button {
         -webkit-appearance: none;
-        margin: 0;
       }
     </style>
   `
@@ -1832,7 +2262,13 @@ const generateCSS = (
         border-radius: 24px !important;
       }
     ` : ""}
-    ${accentColor ? `::-webkit-scrollbar { width: auto !important; }::-webkit-scrollbar-thumb { background-color: ${accentColor}4D !important; border-radius: 22px !important; }` : ""}
+    ${accentColor
+      ? `
+      ${site === "chatgpt" || site === "gemini" ? container : "*"} {
+        scrollbar-width: auto !important;
+        scrollbar-color: ${accentColor}4D transparent !important;
+      }
+    ` : ""}
   `
 
   const getTextStyle = () =>
@@ -1963,7 +2399,10 @@ storage.watch({
 })
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName !== "local" || !hasCustomThemeStorageChange(changes)) return
+  if (areaName !== "local") return
+
+  if (changes[AUTH_SESSION_STORAGE_KEY]) premiumCache = null
+  if (!hasCustomThemeStorageChange(changes)) return
 
   void (async () => {
     if (!(await isCustomThemeSelected())) return

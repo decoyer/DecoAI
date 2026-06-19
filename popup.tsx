@@ -4,8 +4,10 @@ import { useEffect, useState } from "react"
 import { useStorage } from "@plasmohq/storage/hook"
 
 import {
+  AUTH_REFRESH_MS,
   AUTH_SESSION_STORAGE_KEY,
   getAuthSessionSnapshot,
+  getValidAuthSessionSnapshot,
   signInAndSaveAuthSession,
   type AuthSessionSnapshot,
   type PremiumStatus
@@ -57,6 +59,12 @@ function IndexPopup() {
 
   useEffect(() => {
     void loadSavedSession()
+
+    const intervalId = window.setInterval(() => {
+      void refreshSavedSession()
+    }, AUTH_REFRESH_MS)
+
+    return () => window.clearInterval(intervalId)
   }, [])
 
   useEffect(() => {
@@ -76,6 +84,20 @@ function IndexPopup() {
 
   const loadSavedSession = async () => {
     const snapshot = await getAuthSessionSnapshot()
+    setAuthSession(snapshot)
+    setPremiumStatus(snapshot?.premiumStatus || "unknown")
+  }
+
+  const refreshSavedSession = async () => {
+    let snapshot: AuthSessionSnapshot | null = null
+    try {
+      snapshot = await getValidAuthSessionSnapshot({
+        refreshPremiumStatus: true,
+        verifyGoogleGrant: true
+      })
+    } catch {
+      snapshot = null
+    }
     setAuthSession(snapshot)
     setPremiumStatus(snapshot?.premiumStatus || "unknown")
   }

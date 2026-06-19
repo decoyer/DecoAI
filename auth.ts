@@ -1,17 +1,7 @@
-import {
-  getAuth,
-  GoogleAuthProvider,
-  onAuthStateChanged,
-  signOut,
-  signInWithCredential,
-  type User
-} from "firebase/auth"
-
-import { app } from "./firebase"
-
 export type PremiumStatus = "unknown" | "free" | "premium"
 
 export const AUTH_SESSION_STORAGE_KEY = "auth-session"
+export const AUTH_REFRESH_MS = 5 * 60 * 1000
 
 export type AuthSessionSnapshot = {
   checkedAt: number
@@ -26,79 +16,77 @@ type AuthSessionValidationOptions = {
   verifyGoogleGrant?: boolean
 }
 
-type GoogleAccessTokenResponse = {
+type AuthMessageResponse<T> = T & {
   success?: boolean
-  token?: string
   error?: string
 }
 
-const GOOGLE_GRANT_CHECK_MS = 5 * 60 * 1000
-let verifiedGoogleGrant: { checkedAt: number; uid: string } | null = null
-
-export const requestGoogleAccessToken = (interactive: boolean) =>
-  new Promise<string>((resolve, reject) => {
-    chrome.runtime.sendMessage(
-      { type: "GET_GOOGLE_ACCESS_TOKEN", interactive },
-      (response?: GoogleAccessTokenResponse) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message))
-          return
-        }
-
-        if (!response?.success || !response.token) {
-          reject(new Error(response?.error || "Failed to get Google access token"))
-          return
-        }
-
-        resolve(response.token)
+const sendAuthMessage = <T>(message: Record<string, unknown>) =>
+  new Promise<T>((resolve, reject) => {
+    chrome.runtime.sendMessage(message, (response?: AuthMessageResponse<T>) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message))
+        return
       }
-    )
+
+      if (!response?.success) {
+        reject(new Error(response?.error || "Auth request failed"))
+        return
+      }
+
+      resolve(response as T)
+    })
   })
 
-export const getPremiumStatusForUser = async (
-  user: User | null,
-  forceRefresh = false
-): Promise<PremiumStatus> => {
-  if (!user) return "unknown"
-
-  const tokenResult = await user.getIdTokenResult(forceRefresh)
-  return tokenResult.claims.premium === true ? "premium" : "free"
-}
-
-export const signInWithGoogleAccessToken = async (accessToken: string) => {
-  const auth = getAuth(app)
-  const credential = GoogleAuthProvider.credential(null, accessToken)
-  const result = await signInWithCredential(auth, credential)
-  return result.user
-}
-
-export const saveAuthSessionSnapshot = async (
-  user: User,
-  premiumStatus: PremiumStatus
-) => {
-  const snapshot: AuthSessionSnapshot = {
-    checkedAt: Date.now(),
-    displayName: user.displayName || "",
-    email: user.email || "",
-    premiumStatus,
-    uid: user.uid
-  }
-
-  await chrome.storage.local.set({ [AUTH_SESSION_STORAGE_KEY]: snapshot })
-  return snapshot
-}
-
 export const signInAndSaveAuthSession = async (interactive: boolean) => {
-  const googleAccessToken = await requestGoogleAccessToken(interactive)
-  const user = await signInWithGoogleAccessToken(googleAccessToken)
-  const premiumStatus = await getPremiumStatusForUser(user, true)
+  const response = await sendAuthMessage<{ session: AuthSessionSnapshot }>({
+    type: "SIGN_IN_AND_SAVE_AUTH_SESSION",
+    interactive
+  })
 
-  return saveAuthSessionSnapshot(user, premiumStatus)
+  return response.session
+}
+
+export const restoreAuthSessionSnapshot = async (interactive = false) => {
+  const snapshot = await getAuthSessionSnapshot()
+  const isSnapshotFresh =
+    Boolean(snapshot?.checkedAt) &&
+    Date.now() - (snapshot?.checkedAt || 0) < AUTH_REFRESH_MS
+
+  if (snapshot && !interactive && isSnapshotFresh) return snapshot
+
+  try {
+    return await signInAndSaveAuthSession(interactive)
+  } catch {
+    if (snapshot && !interactive) return snapshot
+    await clearAuthSessionSnapshot()
+    return null
+  }
+}
+
+export const getVerifiedPremiumStatus = async (
+  forceRefresh = false,
+  interactiveFallback = false
+) => {
+  const response = await sendAuthMessage<{ isPremium: boolean }>({
+    type: "GET_VERIFIED_PREMIUM_STATUS",
+    forceRefresh,
+    interactiveFallback
+  })
+
+  return response.isPremium
+}
+
+export const signOutAuthSession = async () => {
+  await sendAuthMessage({ type: "SIGN_OUT_AUTH_SESSION" })
 }
 
 export const clearAuthSessionSnapshot = async () => {
-  await chrome.storage.local.remove(AUTH_SESSION_STORAGE_KEY)
-  await signOut(getAuth(app))
+  await sendAuthMessage({ type: "CLEAR_AUTH_SESSION_SNAPSHOT" })
+}
+
+export const clearAuthSessionAndFirebaseUser = async () => {
+  await signOutAuthSession()
 }
 
 export const getAuthSessionSnapshot = async () => {
@@ -133,70 +121,23 @@ export const getAuthSessionSnapshot = async () => {
   return authSessionSnapshot
 }
 
-const getCurrentUser = () => {
-  const auth = getAuth(app)
-  if (auth.currentUser) return Promise.resolve(auth.currentUser)
-
-  return new Promise<User | null>((resolve) => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      unsubscribe()
-      resolve(user)
-    })
-  })
-}
-
-const verifyGoogleGrantForUser = async (expectedUid: string) => {
-  if (
-    verifiedGoogleGrant?.uid === expectedUid &&
-    Date.now() - verifiedGoogleGrant.checkedAt < GOOGLE_GRANT_CHECK_MS
-  ) {
-    return getCurrentUser()
-  }
-
-  try {
-    const googleAccessToken = await requestGoogleAccessToken(false)
-    const user = await signInWithGoogleAccessToken(googleAccessToken)
-    if (user.uid !== expectedUid) return null
-
-    verifiedGoogleGrant = { checkedAt: Date.now(), uid: expectedUid }
-    return user
-  } catch {
-    return null
-  }
-}
-
 export const getValidAuthSessionSnapshot = async ({
   refreshPremiumStatus = false,
   verifyGoogleGrant = false
 }: AuthSessionValidationOptions = {}) => {
-  const snapshot = await getAuthSessionSnapshot()
-  if (!snapshot) return null
+  const response = await sendAuthMessage<{ session: AuthSessionSnapshot | null }>({
+    type: "VALIDATE_AUTH_SESSION",
+    refreshPremiumStatus,
+    verifyGoogleGrant
+  })
 
-  let user = await getCurrentUser()
-  if (!user || user.uid !== snapshot.uid) {
-    await clearAuthSessionSnapshot()
-    return null
-  }
-
-  if (verifyGoogleGrant) {
-    user = await verifyGoogleGrantForUser(snapshot.uid)
-    if (!user) {
-      await clearAuthSessionSnapshot()
-      return null
-    }
-  }
-
-  const premiumStatus = await getPremiumStatusForUser(user, refreshPremiumStatus)
-  if (premiumStatus !== snapshot.premiumStatus) {
-    return saveAuthSessionSnapshot(user, premiumStatus)
-  }
-
-  return snapshot
+  return response.session
 }
 
 export const getCurrentUserIdToken = async () => {
-  const user = await getCurrentUser()
-  if (!user) return ""
+  const response = await sendAuthMessage<{ idToken: string }>({
+    type: "GET_CURRENT_USER_ID_TOKEN"
+  })
 
-  return user.getIdToken(true)
+  return response.idToken
 }
