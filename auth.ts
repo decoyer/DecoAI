@@ -30,7 +30,7 @@ const sendAuthMessage = <T>(message: Record<string, unknown>) =>
       }
 
       if (!response?.success) {
-        reject(new Error(response?.error || "Auth request failed"))
+        reject(new Error(response?.error))
         return
       }
 
@@ -49,9 +49,7 @@ export const signInAndSaveAuthSession = async (interactive: boolean) => {
 
 export const restoreAuthSessionSnapshot = async (interactive = false) => {
   const snapshot = await getAuthSessionSnapshot()
-  const isSnapshotFresh =
-    Boolean(snapshot?.checkedAt) &&
-    Date.now() - (snapshot?.checkedAt || 0) < AUTH_REFRESH_MS
+  const isSnapshotFresh = Boolean(snapshot?.checkedAt) && Date.now() - (snapshot?.checkedAt || 0) < AUTH_REFRESH_MS
 
   if (snapshot && !interactive && isSnapshotFresh) return snapshot
 
@@ -111,10 +109,7 @@ export const getAuthSessionSnapshot = async () => {
     uid: snapshot.uid
   }
 
-  if (
-    typeof snapshot.googleAccessToken === "string" ||
-    typeof snapshot.idToken === "string"
-  ) {
+  if (typeof snapshot.googleAccessToken === "string" || typeof snapshot.idToken === "string") {
     await chrome.storage.local.set({ [AUTH_SESSION_STORAGE_KEY]: authSessionSnapshot })
   }
 

@@ -243,10 +243,7 @@ const getPremiumStatus = async ({
   const snapshot = await getAuthSessionSnapshot()
 
   try {
-    const isPremium = await getVerifiedPremiumStatus(
-      forceRefresh,
-      interactiveFallback
-    )
+    const isPremium = await getVerifiedPremiumStatus(forceRefresh, interactiveFallback)
     const nextSnapshot = await getAuthSessionSnapshot()
     const hasVerifiedNewStatus =
       Boolean(nextSnapshot?.checkedAt) &&
@@ -260,7 +257,6 @@ const getPremiumStatus = async ({
     ) {
       return { isPremium: false, isChecked: false }
     }
-
     premiumCache = { checkedAt: Date.now(), value: isPremium }
     return { isPremium, isChecked: true }
   } catch {
@@ -486,9 +482,7 @@ const getSelectedCustomTheme = async (): Promise<{
   const customThemes = customData[CUSTOM_THEMES_STORAGE_KEY] as
     | CustomTheme[]
     | undefined
-  const selectedCustomThemeId = customData[
-    SELECTED_CUSTOM_THEME_ID_STORAGE_KEY
-  ] as string | undefined
+  const selectedCustomThemeId = customData[SELECTED_CUSTOM_THEME_ID_STORAGE_KEY] as string | undefined
 
   if (!Array.isArray(customThemes) || !selectedCustomThemeId) {
     return { isPremium: false, theme: null }
@@ -501,9 +495,7 @@ const getSelectedCustomTheme = async (): Promise<{
   const selectedTheme = customThemes.find((item) => item.id === selectedCustomThemeId) || null
   const hasAnimatedTheme = customThemes.some(isAnimatedCustomTheme)
   const needsPremium = customThemes.length > 1 || hasAnimatedTheme
-  const premiumStatus = needsPremium
-    ? await getPremiumStatus()
-    : { isPremium: false, isChecked: false }
+  const premiumStatus = needsPremium ? await getPremiumStatus() : { isPremium: false, isChecked: false }
 
   if (premiumStatus.isPremium) return { isPremium: true, theme: selectedTheme }
 
@@ -691,15 +683,8 @@ const controlButton = (
     createElement(Icon, { icon, height: "50%", "aria-hidden": "true" })
   )
 
-const EMPTY_DOC: JSONContent = {
-  type: "doc",
-  content: [{ type: "paragraph" }]
-}
-
-const EMPTY_TASK_DOC: JSONContent = {
-  type: "doc",
-  content: [{ type: "paragraph" }]
-}
+const EMPTY_DOC: JSONContent = { type: "doc", content: [{ type: "paragraph" }] }
+const EMPTY_TASK_DOC: JSONContent = { type: "doc", content: [{ type: "paragraph" }] }
 
 type TodoItem = {
   checked: boolean

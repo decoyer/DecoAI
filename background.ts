@@ -14,6 +14,7 @@ const AUTH_SESSION_STORAGE_KEY = "auth-session"
 const AUTH_SILENT_FAILURE_COOLDOWN_MS = 60_000
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 const GOOGLE_AUTH_SCOPES = ["openid", "email", "profile"]
+
 const t = (key: string) => chrome.i18n.getMessage(key)
 
 type ExtensionManifest = chrome.runtime.Manifest & { oauth2?: { client_id?: string } }
@@ -69,48 +70,44 @@ const getTokenFromRedirectUrl = (redirectUrl: string) => {
 
 const getWebAuthToken = (interactive: boolean) =>
   new Promise<string>((resolve, reject) => {
-  const clientId = getOAuthClientId()
+    const clientId = getOAuthClientId()
 
-  if (!clientId) {
-    reject(new Error("Missing OAuth client ID"))
-    return
-  }
-
-  if (!chrome.identity.launchWebAuthFlow || !chrome.identity.getRedirectURL) {
-    reject(new Error("Web auth flow unavailable"))
-    return
-  }
-
-  const redirectUri = chrome.identity.getRedirectURL("oauth2")
-  const authUrl = new URL(GOOGLE_AUTH_URL)
-
-  authUrl.searchParams.set("client_id", clientId)
-  authUrl.searchParams.set("redirect_uri", redirectUri)
-  authUrl.searchParams.set("response_type", "token")
-  authUrl.searchParams.set("scope", GOOGLE_AUTH_SCOPES.join(" "))
-  authUrl.searchParams.set("prompt", interactive ? "select_account" : "none")
-
-  chrome.identity.launchWebAuthFlow(
-    {
-      url: authUrl.toString(),
-      interactive
-    },
-    (redirectUrl) => {
-      if (chrome.runtime.lastError || !redirectUrl) {
-        reject(new Error(chrome.runtime.lastError?.message || "Failed to complete login"))
-        return
-      }
-
-      const token = getTokenFromRedirectUrl(redirectUrl)
-
-      if (!token) {
-        reject(new Error("Missing access token"))
-        return
-      }
-
-      resolve(token)
+    if (!clientId) {
+      reject(new Error("Missing OAuth client ID"))
+      return
     }
-  )
+
+    if (!chrome.identity.launchWebAuthFlow || !chrome.identity.getRedirectURL) {
+      reject(new Error("Web auth flow unavailable"))
+      return
+    }
+
+    const redirectUri = chrome.identity.getRedirectURL("oauth2")
+    const authUrl = new URL(GOOGLE_AUTH_URL)
+
+    authUrl.searchParams.set("client_id", clientId)
+    authUrl.searchParams.set("redirect_uri", redirectUri)
+    authUrl.searchParams.set("response_type", "token")
+    authUrl.searchParams.set("scope", GOOGLE_AUTH_SCOPES.join(" "))
+    authUrl.searchParams.set("prompt", interactive ? "select_account" : "none")
+
+    chrome.identity.launchWebAuthFlow({ url: authUrl.toString(), interactive },
+      (redirectUrl) => {
+        if (chrome.runtime.lastError || !redirectUrl) {
+          reject(new Error(chrome.runtime.lastError?.message))
+          return
+        }
+
+        const token = getTokenFromRedirectUrl(redirectUrl)
+
+        if (!token) {
+          reject(new Error("Missing access token"))
+          return
+        }
+
+        resolve(token)
+      }
+    )
   })
 
 const sendWebAuthToken = (
@@ -119,11 +116,7 @@ const sendWebAuthToken = (
 ) => {
   getWebAuthToken(interactive)
     .then((token) => sendResponse({ success: true, token }))
-    .catch((error) =>
-      sendResponse({
-        success: false,
-        error: error instanceof Error ? error.message : "Failed to complete login"
-      })
+    .catch((error) => sendResponse({ success: false, error: error.message })
     )
 }
 
@@ -227,7 +220,6 @@ const verifySnapshotUserSilently = async (snapshot: AuthSessionSnapshot) => {
           await signOutAuthSession()
           return null
         }
-
         return user
       } catch {
         lastSilentAuthFailureAt = Date.now()
@@ -295,13 +287,8 @@ const getCurrentUserIdToken = async () => {
   const snapshot = await getAuthSessionSnapshot()
   let user = await getCurrentUser()
 
-  if (snapshot && user?.uid !== snapshot.uid) {
-    user = await verifySnapshotUserSilently(snapshot)
-  }
-
-  if (!user && snapshot) {
-    user = await verifySnapshotUserSilently(snapshot)
-  }
+  if (snapshot && user?.uid !== snapshot.uid) user = await verifySnapshotUserSilently(snapshot)
+  if (!user && snapshot) user = await verifySnapshotUserSilently(snapshot)
 
   return user ? user.getIdToken(true) : ""
 }
@@ -451,11 +438,7 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
   ) {
     void handleAuthMessage(message)
       .then((response) => sendResponse(response || { success: false }))
-      .catch((error) =>
-        sendResponse({
-          success: false,
-          error: error instanceof Error ? error.message : "Auth request failed"
-        })
+      .catch((error) => sendResponse({ success: false, error: error.message })
       )
     return true
   }

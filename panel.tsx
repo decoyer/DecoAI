@@ -283,8 +283,7 @@ const isCurrentPageDarkMode = () => {
   return currentSite ? document.querySelector(SITE_DARK_SELECTORS[currentSite]) !== null : false
 }
 
-const wait = (ms: number) =>
-  new Promise<void>((resolve) => { window.setTimeout(resolve, ms) })
+const wait = (ms: number) => new Promise<void>((resolve) => { window.setTimeout(resolve, ms) })
 
 const restrictToParentElement: Modifier = ({
   transform,
@@ -376,24 +375,14 @@ function CustomThemeSortableCard({
             className="custom-theme-card__action custom-theme-card__duplicate"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => onCustomCardDuplicateClick(event, item)}>
-            <Icon
-              icon="lucide:copy-plus"
-              height={16}
-              color="#fff"
-              aria-hidden="true"
-            />
+            <Icon icon="lucide:copy-plus" height={16} color="#fff" aria-hidden="true" />
           </button>
           <button
             type="button"
             className="custom-theme-card__action custom-theme-card__delete"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => onCustomCardDeleteClick(event, item)}>
-            <Icon
-              icon="lucide:trash-2"
-              height={16}
-              color="#fff"
-              aria-hidden="true"
-            />
+            <Icon icon="lucide:trash-2" height={16} color="#fff" aria-hidden="true" />
           </button>
         </div>
       )}
@@ -563,9 +552,7 @@ export function FabPanelApp() {
     return () => window.removeEventListener(FAB_OPEN_EVENT, onFabOpen)
   }, [theme, widgetLayout])
 
-  const editingTheme = customThemes.find(
-    (item) => item.id === editingCustomThemeId
-  )
+  const editingTheme = customThemes.find((item) => item.id === editingCustomThemeId)
 
   const getEditingThemeDraft = () => {
     if (!editingTheme) return null
@@ -595,9 +582,7 @@ export function FabPanelApp() {
     setDraftAccentColor(editingTheme.accent || "")
     setDraftBackgroundImageUrl(editingTheme.bgUrl || "")
     setDraftBackgroundColor(editingTheme.bgColor || "")
-    setDraftBackgroundOptions(
-      editingTheme.bgOptions || DEFAULT_CUSTOM_BG_OPTIONS
-    )
+    setDraftBackgroundOptions(editingTheme.bgOptions || DEFAULT_CUSTOM_BG_OPTIONS)
     setDraftCustomThemeName(editingTheme.name || "")
     setCustomEditTab("general")
   }, [editingTheme?.id])
@@ -787,9 +772,7 @@ export function FabPanelApp() {
             await openCheckout(nextIdToken)
             return
           }
-        } catch {
-          // Fall through to an interactive sign-in only if silent recovery failed.
-        }
+        } catch { }
 
         const nextAuthSession = await signInAndSaveAuthSession(true)
         setPremiumStatus(nextAuthSession.premiumStatus)
@@ -822,12 +805,7 @@ export function FabPanelApp() {
   }
 
   const onImportClick = async () => {
-    if (
-      customThemes.length > 0 &&
-      !(await requirePremiumAccess("pro_themeLimit"))
-    ) {
-      return
-    }
+    if (customThemes.length > 0 && !(await requirePremiumAccess("pro_themeLimit"))) return
     importFileRef.current?.click()
   }
 
@@ -851,10 +829,7 @@ export function FabPanelApp() {
       return
     }
     const hasAnimatedImportedTheme = hasAnimatedBackground(imported)
-    if (
-      hasAnimatedImportedTheme &&
-      !(await requirePremiumAccess("pro_animatedImage"))
-    ) {
+    if (hasAnimatedImportedTheme && !(await requirePremiumAccess("pro_animatedImage"))) {
       clearFileInput(importFileRef.current)
       return
     }
@@ -914,11 +889,7 @@ export function FabPanelApp() {
   }
   const onSaveClick = () => {
     const nextTheme = getEditingThemeDraft()
-    if (nextTheme) {
-      setCustomThemes((prev) =>
-        prev.map((item) => (item.id === nextTheme.id ? nextTheme : item))
-      )
-    }
+    if (nextTheme) setCustomThemes((prev) => prev.map((item) => (item.id === nextTheme.id ? nextTheme : item)))
     setView("themes")
     toast.success(t("success_themeSave"))
   }
@@ -928,9 +899,7 @@ export function FabPanelApp() {
     setDraftBackgroundImageUrl("")
     setDraftBackgroundOptions(DEFAULT_CUSTOM_BG_OPTIONS)
   }
-  const resetDraftBackgroundColor = () => {
-    setDraftBackgroundColor("")
-  }
+  const resetDraftBackgroundColor = () => setDraftBackgroundColor("")
   const onColorMatchClick = async () => {
     if (!(await requirePremiumAccess("pro_colorMatch"))) {
       return
@@ -948,9 +917,7 @@ export function FabPanelApp() {
       const palette = await Vibrant.from(canvas.toDataURL()).getPalette()
       const isDarkMode = isCurrentPageDarkMode()
       const nextAccent = palette.Vibrant?.hex || ""
-      const nextText = isDarkMode
-        ? palette.LightVibrant?.hex || ""
-        : palette.DarkVibrant?.hex || ""
+      const nextText = isDarkMode ? palette.LightVibrant?.hex || "" : palette.DarkVibrant?.hex || ""
 
       if (nextAccent) setDraftAccentColor(nextAccent)
       if (nextText) setDraftTextColor(nextText)
@@ -1587,12 +1554,7 @@ export function FabPanelApp() {
                           <Card>
                             <label style={rowStyle}>
                               <div style={inlineControlStyle}>
-                                <Icon
-                                  icon="mdi:wand"
-                                  height={24}
-                                  color="#66cdaa"
-                                  aria-hidden="true"
-                                />
+                                <Icon icon="mdi:wand" height={24} color="#66cdaa" aria-hidden="true" />
                                 <span style={fieldLabelStyle}>
                                   {t("colorMatch")}
                                 </span>
@@ -1738,11 +1700,7 @@ export function FabPanelApp() {
               zIndex: 10,
               pointerEvents: "auto"
             }}>
-            <Icon
-              icon="line-md:loading-twotone-loop"
-              height={48}
-              aria-hidden="true"
-            />
+            <Icon icon="line-md:loading-twotone-loop" height={48} aria-hidden="true" />
           </div>
         )}
       </div>

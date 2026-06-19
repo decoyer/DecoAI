@@ -54,8 +54,7 @@ function IndexPopup() {
   const [premiumStatus, setPremiumStatus] = useState<PremiumStatus>("unknown")
   const [activeTab, setActiveTab] = useState<PopupTab>("settings")
   const version = chrome.runtime.getManifest().version
-  const updateModelEnabled = (key: ModelKey, checked: boolean) =>
-    setModelEnabled({ ...modelEnabled, [key]: checked })
+  const updateModelEnabled = (key: ModelKey, checked: boolean) => setModelEnabled({ ...modelEnabled, [key]: checked })
 
   useEffect(() => {
     void loadSavedSession()
