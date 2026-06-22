@@ -931,7 +931,7 @@ function TodoWidgetContent({ widgetId }: { widgetId: string }) {
 const getDdayLabel = (targetDate: Date, today: Date) => {
   const dayDiff = differenceInCalendarDays(startOfDay(targetDate), startOfDay(today))
 
-  if (dayDiff === 0) return "D-Day"
+  if (dayDiff === 0) return "D-day"
   if (dayDiff > 0) return `D-${dayDiff}`
   return `D+${Math.abs(dayDiff)}`
 }
