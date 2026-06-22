@@ -128,7 +128,7 @@ const createWidgetInstance = (key: WidgetKey): WidgetInstance => {
   return {
     id: key,
     type: key,
-    name: t(widgetMeta?.labelKey || "noteWidget")
+    name: t(widgetMeta?.labelKey)
   }
 }
 
