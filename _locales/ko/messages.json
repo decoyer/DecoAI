@@ -51,10 +51,13 @@
     "message": "삭제"
   },
   "noteWidget": {
-    "message": "메모"
+    "message": "메모장"
   },
   "todoWidget": {
     "message": "체크리스트"
+  },
+  "ddayWidget": {
+    "message": "디데이"
   },
   "timerWidget": {
     "message": "타이머"

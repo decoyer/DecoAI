@@ -3,6 +3,7 @@ import { ListKit } from "@tiptap/extension-list"
 import { Placeholder } from "@tiptap/extensions"
 import { EditorContent, useEditor, type JSONContent } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
+import { differenceInCalendarDays, formatISO, parseISO, startOfDay } from "date-fns"
 import { Vibrant } from "node-vibrant/browser"
 import type { PlasmoCSConfig } from "plasmo"
 import React, {
@@ -31,6 +32,8 @@ import {
   clearAnimatedBgUrl,
   CUSTOM_THEME_PREVIEW_EVENT,
   CUSTOM_THEMES_STORAGE_KEY,
+  DDAY_WIDGET_STATE_STORAGE_KEY,
+  DEFAULT_DDAY_WIDGET_STATE,
   DEFAULT_STOPWATCH_WIDGET_STATE,
   DEFAULT_TIMER_WIDGET_STATE,
   DEFAULT_WIDGET_ENABLED,
@@ -58,6 +61,7 @@ import {
   WIDGET_LAYOUT_STORAGE_KEY,
   type CustomBgOptions,
   type CustomTheme,
+  type DdayWidgetState,
   type ModelEnabledMap,
   type SiteType,
   type StopwatchWidgetState,
@@ -202,8 +206,9 @@ const WIDGET_LIST: Array<{
 }> = [
     { key: "note", labelKey: "noteWidget", icon: "notepad-text" },
     { key: "todo", labelKey: "todoWidget", icon: "list-checks" },
-    { key: "timer", labelKey: "timerWidget", icon: "clock" },
-    { key: "stopwatch", labelKey: "stopwatchWidget", icon: "timer-reset" }
+    { key: "dday", labelKey: "ddayWidget", icon: "calendar-1" },
+    { key: "timer", labelKey: "timerWidget", icon: "alarm-clock" },
+    { key: "stopwatch", labelKey: "stopwatchWidget", icon: "timer" }
   ]
 
 const appendToPage = (element: HTMLElement) => {
@@ -876,7 +881,7 @@ function TodoWidgetContent({ widgetId }: { widgetId: string }) {
             addTodo()
           }
         },
-        createElement(Icon, { icon: "lucide:pencil", height: "50%", "aria-hidden": "true" })
+        createElement(Icon, { icon: "lucide:pencil", height: "75%", "aria-hidden": "true" })
       )
     ),
     createElement(
@@ -915,7 +920,7 @@ function TodoWidgetContent({ widgetId }: { widgetId: string }) {
                 setTodoItems(todoItems.filter((_, itemIndex) => itemIndex !== index))
               }
             },
-            createElement(Icon, { icon: "lucide:eraser", height: "50%", "aria-hidden": "true" })
+            createElement(Icon, { icon: "lucide:eraser", height: "75%", "aria-hidden": "true" })
           )
         )
       )
@@ -1055,7 +1060,7 @@ function TimerWidgetContent({ widgetId }: { widgetId: string }) {
     return createElement(
       "div",
       { className: "decoai-time-stepper" },
-      stepButton("lucide:circle-plus", 1),
+      stepButton("lucide:chevron-up", 1),
       createElement("input", {
         className: "decoai-time-input",
         type: "text",
@@ -1066,7 +1071,7 @@ function TimerWidgetContent({ widgetId }: { widgetId: string }) {
         onChange: (e) => setTimerTimePart(part, e.target.value),
         onClick: (e) => e.currentTarget.select()
       }),
-      stepButton("lucide:circle-minus", -1)
+      stepButton("lucide:chevron-down", -1)
     )
   }
 
@@ -1195,6 +1200,66 @@ function StopwatchWidgetContent({ widgetId }: { widgetId: string }) {
           : controlButton("lucide:play", startStopwatch),
         controlButton("lucide:rotate-ccw", resetStopwatch)
       )
+    )
+  )
+}
+
+const getDdayLabel = (targetDate: Date, today: Date) => {
+  const dayDiff = differenceInCalendarDays(startOfDay(targetDate), startOfDay(today))
+
+  if (dayDiff === 0) return "D-Day"
+  if (dayDiff > 0) return `D-${dayDiff}`
+  return `D+${Math.abs(dayDiff)}`
+}
+
+function DdayWidgetContent({ widgetId }: { widgetId: string }) {
+  const [state, setState] = useStorage<DdayWidgetState>(
+    `${DDAY_WIDGET_STATE_STORAGE_KEY}:${widgetId}`,
+    DEFAULT_DDAY_WIDGET_STATE
+  )
+  const [today, setToday] = useState(() => new Date())
+  const ddayState = { ...DEFAULT_DDAY_WIDGET_STATE, ...state }
+  const parsedTargetDate = ddayState.targetDate ? parseISO(ddayState.targetDate) : null
+  const targetDate = parsedTargetDate ?? today
+  const targetDateValue = parsedTargetDate ? ddayState.targetDate : formatISO(today, { representation: "date" })
+
+  React.useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setToday(new Date())
+    }, 60 * 1000)
+
+    return () => window.clearInterval(intervalId)
+  }, [])
+
+  return createElement(
+    "div",
+    {
+      className: "decoai-dday-widget",
+      onPointerDown: (e) => e.stopPropagation()
+    },
+    createElement(
+      "div",
+      { className: "decoai-dday-display" },
+      getDdayLabel(targetDate, today)
+    ),
+    createElement(
+      "label",
+      {
+        className: "decoai-time-control",
+        onPointerDown: (e) => e.stopPropagation(),
+        onPointerUp: (e) => e.stopPropagation(),
+        onClick: (e) => e.stopPropagation()
+      },
+      createElement(Icon, { icon: "lucide:calendar-days", height: "50%", "aria-hidden": "true" }),
+      createElement("input", {
+        type: "date",
+        className: "decoai-dday-date-input",
+        value: targetDateValue,
+        onChange: (e) => setState({ targetDate: e.currentTarget.value }),
+        onClick: (e) => e.stopPropagation(),
+        onPointerDown: (e) => e.stopPropagation(),
+        onPointerUp: (e) => e.stopPropagation()
+      })
     )
   )
 }
@@ -1394,13 +1459,15 @@ function WidgetOverlayApp() {
 
   const getWidgetStateKey = (item: WidgetInstance) => {
     switch (item.type) {
+      case "note":
+      case "todo":
+        return `${TEXT_WIDGET_STATE_STORAGE_KEY}:${item.id}`
+      case "dday":
+        return `${DDAY_WIDGET_STATE_STORAGE_KEY}:${item.id}`
       case "timer":
         return `${TIMER_WIDGET_STATE_STORAGE_KEY}:${item.id}`
       case "stopwatch":
         return `${STOPWATCH_WIDGET_STATE_STORAGE_KEY}:${item.id}`
-      case "note":
-      case "todo":
-        return `${TEXT_WIDGET_STATE_STORAGE_KEY}:${item.id}`
       default:
         return null
     }
@@ -1561,6 +1628,7 @@ function WidgetOverlayApp() {
         ),
         item.type === "note" ? createElement(NoteWidgetContent, { widgetId: item.id }) : null,
         item.type === "todo" ? createElement(TodoWidgetContent, { widgetId: item.id }) : null,
+        item.type === "dday" ? createElement(DdayWidgetContent, { widgetId: item.id }) : null,
         item.type === "timer" ? createElement(TimerWidgetContent, { widgetId: item.id }) : null,
         item.type === "stopwatch" ? createElement(StopwatchWidgetContent, { widgetId: item.id }) : null
       )
@@ -1807,12 +1875,12 @@ const mountWidgetOverlay = () => {
         min-width: 0;
         min-height: 24px;
         padding: max(4px, 2cqmin) max(8px, 4cqmin);
-        border: none;
+        border: 1px solid #4b5563;
         border-radius: 8px;
+        background-color: transparent;
         outline: none;
         font-size: max(16px, 8cqmin);
         -webkit-text-fill-color: #fff !important;
-        background-color: #4b5563;
       }
       .decoai-todo-input::placeholder {
         -webkit-text-fill-color: rgba(255, 255, 255, 0.35);
@@ -1885,6 +1953,35 @@ const mountWidgetOverlay = () => {
       .decoai-todo-add:hover,
       .decoai-todo-delete:hover {
         background-color: #0000004D;
+      }
+      .decoai-dday-widget {
+        height: calc(100% - 32px);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 10px 10px;
+        pointer-events: auto;
+        container-type: size;
+      }
+      .decoai-dday-display {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        font-size: max(36px, 18cqmin);
+        user-select: none;
+      }
+      .decoai-dday-date-input {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+      }
+      .decoai-dday-date-input::-webkit-calendar-picker-indicator {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        cursor: pointer;
       }
       .decoai-time-widget {
         height: calc(100% - 32px);

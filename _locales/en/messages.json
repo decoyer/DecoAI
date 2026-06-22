@@ -56,6 +56,9 @@
   "todoWidget": {
     "message": "To-do List"
   },
+  "ddayWidget": {
+    "message": "Day Counter"
+  },
   "timerWidget": {
     "message": "Timer"
   },

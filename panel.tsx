@@ -107,8 +107,9 @@ type CustomEditTab = "general" | "background" | "layout"
 const WIDGET_LIST: Array<{ key: WidgetKey; labelKey: string; icon: string }> = [
   { key: "note", labelKey: "noteWidget", icon: "notepad-text" },
   { key: "todo", labelKey: "todoWidget", icon: "list-checks" },
-  { key: "timer", labelKey: "timerWidget", icon: "clock" },
-  { key: "stopwatch", labelKey: "stopwatchWidget", icon: "timer-reset" }
+  { key: "dday", labelKey: "ddayWidget", icon: "calendar-1" },
+  { key: "timer", labelKey: "timerWidget", icon: "alarm-clock" },
+  { key: "stopwatch", labelKey: "stopwatchWidget", icon: "timer" }
 ]
 
 const isSameWidgetLayout = (
