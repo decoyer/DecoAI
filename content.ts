@@ -1253,7 +1253,7 @@ function DdayWidgetContent({ widgetId }: { widgetId: string }) {
       createElement(Icon, { icon: "lucide:calendar-days", height: "50%", "aria-hidden": "true" }),
       createElement("input", {
         type: "date",
-        className: "decoai-dday-date-input",
+        className: "decoai-dday-input",
         value: targetDateValue,
         onChange: (e) => setState({ targetDate: e.currentTarget.value }),
         onClick: (e) => e.stopPropagation(),
@@ -1971,12 +1971,12 @@ const mountWidgetOverlay = () => {
         font-size: max(36px, 18cqmin);
         user-select: none;
       }
-      .decoai-dday-date-input {
+      .decoai-dday-input {
         position: absolute;
         inset: 0;
         opacity: 0;
       }
-      .decoai-dday-date-input::-webkit-calendar-picker-indicator {
+      .decoai-dday-input::-webkit-calendar-picker-indicator {
         position: absolute;
         inset: 0;
         width: 100%;
