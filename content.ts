@@ -928,6 +928,66 @@ function TodoWidgetContent({ widgetId }: { widgetId: string }) {
   )
 }
 
+const getDdayLabel = (targetDate: Date, today: Date) => {
+  const dayDiff = differenceInCalendarDays(startOfDay(targetDate), startOfDay(today))
+
+  if (dayDiff === 0) return "D-Day"
+  if (dayDiff > 0) return `D-${dayDiff}`
+  return `D+${Math.abs(dayDiff)}`
+}
+
+function DdayWidgetContent({ widgetId }: { widgetId: string }) {
+  const [state, setState] = useStorage<DdayWidgetState>(
+    `${DDAY_WIDGET_STATE_STORAGE_KEY}:${widgetId}`,
+    DEFAULT_DDAY_WIDGET_STATE
+  )
+  const [today, setToday] = useState(() => new Date())
+  const ddayState = { ...DEFAULT_DDAY_WIDGET_STATE, ...state }
+  const parsedTargetDate = ddayState.targetDate ? parseISO(ddayState.targetDate) : null
+  const targetDate = parsedTargetDate ?? today
+  const targetDateValue = parsedTargetDate ? ddayState.targetDate : formatISO(today, { representation: "date" })
+
+  React.useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setToday(new Date())
+    }, 60 * 1000)
+
+    return () => window.clearInterval(intervalId)
+  }, [])
+
+  return createElement(
+    "div",
+    {
+      className: "decoai-dday-widget",
+      onPointerDown: (e) => e.stopPropagation()
+    },
+    createElement(
+      "div",
+      { className: "decoai-dday-display" },
+      getDdayLabel(targetDate, today)
+    ),
+    createElement(
+      "label",
+      {
+        className: "decoai-time-control",
+        onPointerDown: (e) => e.stopPropagation(),
+        onPointerUp: (e) => e.stopPropagation(),
+        onClick: (e) => e.stopPropagation()
+      },
+      createElement(Icon, { icon: "lucide:calendar-days", height: "50%", "aria-hidden": "true" }),
+      createElement("input", {
+        type: "date",
+        className: "decoai-dday-input",
+        value: targetDateValue,
+        onChange: (e) => setState({ targetDate: e.currentTarget.value }),
+        onClick: (e) => e.stopPropagation(),
+        onPointerDown: (e) => e.stopPropagation(),
+        onPointerUp: (e) => e.stopPropagation()
+      })
+    )
+  )
+}
+
 function TimerWidgetContent({ widgetId }: { widgetId: string }) {
   const [state, setState] = useStorage<TimerWidgetState>(
     `${TIMER_WIDGET_STATE_STORAGE_KEY}:${widgetId}`,
@@ -1200,66 +1260,6 @@ function StopwatchWidgetContent({ widgetId }: { widgetId: string }) {
           : controlButton("lucide:play", startStopwatch),
         controlButton("lucide:rotate-ccw", resetStopwatch)
       )
-    )
-  )
-}
-
-const getDdayLabel = (targetDate: Date, today: Date) => {
-  const dayDiff = differenceInCalendarDays(startOfDay(targetDate), startOfDay(today))
-
-  if (dayDiff === 0) return "D-Day"
-  if (dayDiff > 0) return `D-${dayDiff}`
-  return `D+${Math.abs(dayDiff)}`
-}
-
-function DdayWidgetContent({ widgetId }: { widgetId: string }) {
-  const [state, setState] = useStorage<DdayWidgetState>(
-    `${DDAY_WIDGET_STATE_STORAGE_KEY}:${widgetId}`,
-    DEFAULT_DDAY_WIDGET_STATE
-  )
-  const [today, setToday] = useState(() => new Date())
-  const ddayState = { ...DEFAULT_DDAY_WIDGET_STATE, ...state }
-  const parsedTargetDate = ddayState.targetDate ? parseISO(ddayState.targetDate) : null
-  const targetDate = parsedTargetDate ?? today
-  const targetDateValue = parsedTargetDate ? ddayState.targetDate : formatISO(today, { representation: "date" })
-
-  React.useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      setToday(new Date())
-    }, 60 * 1000)
-
-    return () => window.clearInterval(intervalId)
-  }, [])
-
-  return createElement(
-    "div",
-    {
-      className: "decoai-dday-widget",
-      onPointerDown: (e) => e.stopPropagation()
-    },
-    createElement(
-      "div",
-      { className: "decoai-dday-display" },
-      getDdayLabel(targetDate, today)
-    ),
-    createElement(
-      "label",
-      {
-        className: "decoai-time-control",
-        onPointerDown: (e) => e.stopPropagation(),
-        onPointerUp: (e) => e.stopPropagation(),
-        onClick: (e) => e.stopPropagation()
-      },
-      createElement(Icon, { icon: "lucide:calendar-days", height: "50%", "aria-hidden": "true" }),
-      createElement("input", {
-        type: "date",
-        className: "decoai-dday-input",
-        value: targetDateValue,
-        onChange: (e) => setState({ targetDate: e.currentTarget.value }),
-        onClick: (e) => e.stopPropagation(),
-        onPointerDown: (e) => e.stopPropagation(),
-        onPointerUp: (e) => e.stopPropagation()
-      })
     )
   )
 }
