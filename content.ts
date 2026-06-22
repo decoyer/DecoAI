@@ -970,11 +970,12 @@ function DdayWidgetContent({ widgetId }: { widgetId: string }) {
       "label",
       {
         className: "decoai-time-control",
+        style: { width: "max(32px, 16cqmin)", height: "max(32px, 16cqmin)" },
         onPointerDown: (e) => e.stopPropagation(),
         onPointerUp: (e) => e.stopPropagation(),
         onClick: (e) => e.stopPropagation()
       },
-      createElement(Icon, { icon: "lucide:calendar-days", height: "50%", "aria-hidden": "true" }),
+      createElement(Icon, { icon: "lucide:calendar-days", height: "75%", "aria-hidden": "true" }),
       createElement("input", {
         type: "date",
         className: "decoai-dday-input",
@@ -1959,21 +1960,22 @@ const mountWidgetOverlay = () => {
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: space-between;
+        justify-content: space-evenly;
         padding: 0 10px 10px;
         pointer-events: auto;
         container-type: size;
       }
       .decoai-dday-display {
-        flex: 1;
         display: flex;
         align-items: center;
-        font-size: max(36px, 18cqmin);
+        font-size: max(48px, 24cqmin);
         user-select: none;
       }
       .decoai-dday-input {
         position: absolute;
         inset: 0;
+        padding: 0;
+        border: none;
         opacity: 0;
       }
       .decoai-dday-input::-webkit-calendar-picker-indicator {
@@ -2021,7 +2023,6 @@ const mountWidgetOverlay = () => {
         background-color: transparent;
         color: inherit !important;
         cursor: pointer;
-        touch-action: manipulation;
         user-select: none;
       }
       .decoai-time-control:disabled {
