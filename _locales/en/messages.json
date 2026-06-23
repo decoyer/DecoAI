@@ -65,6 +65,9 @@
   "stopwatchWidget": {
     "message": "Stopwatch"
   },
+  "photoWidget": {
+    "message": "Sticker"
+  },
   "profile": {
     "message": "Profile"
   },
@@ -215,8 +218,11 @@
   "pro_themeLimit": {
     "message": "Upgrade to Pro for Unlimited Theme Presets."
   },
-  "pro_animatedImage": {
+  "pro_animatedBG": {
     "message": "Upgrade to Pro for Animated Backgrounds."
+  },
+  "pro_animatedSticker": {
+    "message": "Upgrade to Pro for Animated Stickers."
   },
   "pro_colorMatch": {
     "message": "Upgrade to Pro for AI Color Match."

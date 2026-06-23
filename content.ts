@@ -34,6 +34,7 @@ import {
   CUSTOM_THEMES_STORAGE_KEY,
   DDAY_WIDGET_STATE_STORAGE_KEY,
   DEFAULT_DDAY_WIDGET_STATE,
+  DEFAULT_PHOTO_WIDGET_STATE,
   DEFAULT_STOPWATCH_WIDGET_STATE,
   DEFAULT_TIMER_WIDGET_STATE,
   DEFAULT_WIDGET_ENABLED,
@@ -42,8 +43,11 @@ import {
   DEFAULT_WIDGET_MIN_SIZE,
   detectCurrentSite,
   FAB_OPEN_EVENT,
+  isAnimatedBgUrl,
   isAnimatedCustomTheme,
+  isAnimatedImage,
   MODEL_ENABLED_STORAGE_KEY,
+  PHOTO_WIDGET_STATE_STORAGE_KEY,
   sanitizeColor,
   sanitizeCustomBgOptions,
   sanitizeCustomBgUrl,
@@ -63,6 +67,7 @@ import {
   type CustomTheme,
   type DdayWidgetState,
   type ModelEnabledMap,
+  type PhotoWidgetState,
   type SiteType,
   type StopwatchWidgetState,
   type TimerWidgetState,
@@ -208,7 +213,8 @@ const WIDGET_LIST: Array<{
     { key: "todo", labelKey: "todoWidget", icon: "list-checks" },
     { key: "dday", labelKey: "ddayWidget", icon: "calendar-1" },
     { key: "timer", labelKey: "timerWidget", icon: "alarm-clock" },
-    { key: "stopwatch", labelKey: "stopwatchWidget", icon: "timer" }
+    { key: "stopwatch", labelKey: "stopwatchWidget", icon: "timer" },
+    { key: "photo", labelKey: "photoWidget", icon: "sticker" }
   ]
 
 const appendToPage = (element: HTMLElement) => {
@@ -601,8 +607,14 @@ const clampWidgetFrameToViewport = (
     width,
     height,
     x: clampNumber(frame.x, 0, Math.max(0, viewportWidth - width), 0),
-    y: clampNumber(frame.y, 0, Math.max(0, viewportHeight - height), 0)
+    y: clampNumber(frame.y, 0, Math.max(0, viewportHeight - height), 0),
+    rotation: normalizeWidgetRotation(frame.rotation)
   }
+}
+
+const PHOTO_WIDGET_MIN_SIZE: WidgetSize = {
+  width: 100,
+  height: 100
 }
 
 const getInitialWidgetFrame = (index: number): WidgetFrame => {
@@ -615,8 +627,18 @@ const getInitialWidgetFrame = (index: number): WidgetFrame => {
   const x = Math.min(maxX, 300)
   const y = Math.min(maxY, index * 100 + 25)
 
-  return { x, y, width, height }
+  return { x, y, width, height, rotation: 0 }
 }
+
+const getWidgetTransform = (frame: WidgetFrame) =>
+  `translate(${frame.x}px, ${frame.y}px) rotate(${normalizeWidgetRotation(frame.rotation)}deg)`
+
+const normalizeWidgetRotation = (rotation: number) => {
+  const normalized = rotation % 360
+  return normalized < 0 ? normalized + 360 : normalized
+}
+
+const WIDGET_ROTATION_DEGREES = Array.from({ length: 25 }, (_, index) => index * 15)
 
 const isWidgetDarkMode = () => {
   const currentSite = detectCurrentSite()
@@ -666,6 +688,51 @@ const getStopwatchMilliseconds = (
   stopwatch: ReturnType<typeof useStopwatch>
 ) => stopwatch.totalSeconds * 1000 + stopwatch.milliseconds
 
+const PHOTO_WIDGET_MAX_IMAGE_SIZE = 1920
+const PHOTO_WIDGET_IMAGE_QUALITY = 0.86
+
+const resizePhotoWidgetImage = (file: File) =>
+  new Promise<string | null>((resolve) => {
+    const reader = new FileReader()
+
+    reader.onerror = () => resolve(null)
+    reader.onload = () => {
+      const sourceUrl = sanitizeCustomBgUrl(reader.result)
+      if (!sourceUrl) {
+        resolve(null)
+        return
+      }
+
+      const image = new Image()
+      image.onerror = () => resolve(sourceUrl)
+      image.onload = () => {
+        const scale = Math.min(
+          1,
+          PHOTO_WIDGET_MAX_IMAGE_SIZE / image.naturalWidth,
+          PHOTO_WIDGET_MAX_IMAGE_SIZE / image.naturalHeight
+        )
+
+        if (scale >= 1 && file.size <= 1024 * 1024) {
+          resolve(sourceUrl)
+          return
+        }
+
+        const canvas = document.createElement("canvas")
+        canvas.width = Math.max(1, Math.round(image.naturalWidth * scale))
+        canvas.height = Math.max(1, Math.round(image.naturalHeight * scale))
+        const context = canvas.getContext("2d")
+        if (!context) {
+          resolve(sourceUrl)
+          return
+        }
+        context.drawImage(image, 0, 0, canvas.width, canvas.height)
+        resolve(canvas.toDataURL("image/webp", PHOTO_WIDGET_IMAGE_QUALITY))
+      }
+      image.src = sourceUrl
+    }
+    reader.readAsDataURL(file)
+  })
+
 const controlButton = (
   icon: string,
   onClick: () => void,
@@ -675,7 +742,7 @@ const controlButton = (
     "button",
     {
       type: "button",
-      className: "decoai-time-control",
+      className: "decoai-widget-control",
       disabled,
       onPointerDown: (e) => e.stopPropagation(),
       onPointerUp: (e) => e.stopPropagation(),
@@ -969,7 +1036,7 @@ function DdayWidgetContent({ widgetId }: { widgetId: string }) {
     createElement(
       "label",
       {
-        className: "decoai-time-control",
+        className: "decoai-widget-control",
         style: { width: "max(32px, 16cqmin)", height: "max(32px, 16cqmin)" },
         onPointerDown: (e) => e.stopPropagation(),
         onPointerUp: (e) => e.stopPropagation(),
@@ -1156,7 +1223,7 @@ function TimerWidgetContent({ widgetId }: { widgetId: string }) {
       ),
       createElement(
         "div",
-        { className: "decoai-time-controls" },
+        { className: "decoai-widget-controls" },
         timer.isRunning
           ? controlButton("lucide:pause", pauseTimer)
           : controlButton("lucide:play", startTimer, timer.totalSeconds <= 0),
@@ -1255,13 +1322,95 @@ function StopwatchWidgetContent({ widgetId }: { widgetId: string }) {
       ),
       createElement(
         "div",
-        { className: "decoai-time-controls" },
+        { className: "decoai-widget-controls" },
         stopwatch.isRunning
           ? controlButton("lucide:pause", pauseStopwatch)
           : controlButton("lucide:play", startStopwatch),
         controlButton("lucide:rotate-ccw", resetStopwatch)
       )
     )
+  )
+}
+
+function PhotoWidgetContent({
+  widgetId,
+}: {
+  widgetId: string
+}) {
+  const uploadRef = useRef<HTMLInputElement>(null)
+  const [photoState, setPhotoState] = useStorage<PhotoWidgetState>(
+    {
+      key: `${PHOTO_WIDGET_STATE_STORAGE_KEY}:${widgetId}`,
+      instance: localStorageInstance
+    },
+    DEFAULT_PHOTO_WIDGET_STATE
+  )
+  const imageUrl = sanitizeCustomBgUrl(photoState?.imageUrl)
+
+  const uploadImage = async (file?: File) => {
+    if (!file || !file.type.startsWith("image/")) return
+    const animated = await isAnimatedImage(file)
+    if (animated) {
+      const { isPremium, isChecked } = await getPremiumStatus()
+      if (!isPremium) {
+        if (isChecked) toast.error(t("pro_animatedSticker"))
+        return
+      }
+    }
+    const nextImageUrl = await resizePhotoWidgetImage(file)
+    if (!nextImageUrl) return
+    setPhotoState({ imageUrl: nextImageUrl })
+  }
+
+  const uploadButton = createElement(
+    "button",
+    {
+      type: "button",
+      className: "decoai-widget-control decoai-photo-widget-upload",
+      onPointerDown: (event) => event.stopPropagation(),
+      onPointerUp: (event) => event.stopPropagation(),
+      onClick: (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        uploadRef.current?.click()
+      }
+    },
+    createElement(Icon, { icon: "lucide:image-up", height: "50%", "aria-hidden": "true" })
+  )
+
+  return createElement(
+    "div",
+    { className: "decoai-photo-widget" },
+    createElement("input", {
+      ref: uploadRef,
+      type: "file",
+      accept: "image/*",
+      onChange: (event) => {
+        void uploadImage(event.currentTarget.files?.[0])
+        event.currentTarget.value = ""
+      },
+      style: { display: "none" }
+    }),
+    imageUrl
+      ? createElement(
+        React.Fragment,
+        null,
+        createElement("img", {
+          className: "decoai-photo-widget-image",
+          src: imageUrl,
+          draggable: false
+        }),
+        createElement(
+          "div",
+          { className: "decoai-photo-widget-upload-overlay" },
+          uploadButton
+        )
+      )
+      : createElement(
+        "div",
+        { className: "decoai-photo-widget-placeholder" },
+        uploadButton
+      )
   )
 }
 
@@ -1305,7 +1454,7 @@ function WidgetOverlayApp() {
           const fallback = getInitialWidgetFrame(index)
           nextFrames[item.id] = clampWidgetFrameToViewport(
             { ...fallback, ...frameMap?.[item.id] },
-            DEFAULT_WIDGET_MIN_SIZE
+            item.type === "photo" ? PHOTO_WIDGET_MIN_SIZE : DEFAULT_WIDGET_MIN_SIZE
           )
           return nextFrames
         },
@@ -1317,15 +1466,47 @@ function WidgetOverlayApp() {
 
   React.useEffect(() => {
     const items = widgetItems || DEFAULT_WIDGET_INSTANCES
-    if (!hasMultipleWidgets(items)) return
 
     void (async () => {
+      const removablePhotoWidgetIds: string[] = []
+
+      for (const item of items) {
+        if (item.type !== "photo") continue
+
+        const photoState = await localStorageInstance.get<PhotoWidgetState>(
+          `${PHOTO_WIDGET_STATE_STORAGE_KEY}:${item.id}`
+        )
+        if (isAnimatedBgUrl(photoState?.imageUrl || "")) {
+          removablePhotoWidgetIds.push(item.id)
+        }
+      }
+
+      if (!hasMultipleWidgets(items) && removablePhotoWidgetIds.length === 0) return
+
       const premiumStatus = await getPremiumStatus()
       if (premiumStatus.isPremium) return
       if (!premiumStatus.isChecked) return
-      setWidgetItems(normalizeCustomWidgets(items))
+
+      const removablePhotoWidgetIdSet = new Set(removablePhotoWidgetIds)
+      const normalizedItems = normalizeCustomWidgets(items).filter(
+        (item) => !removablePhotoWidgetIdSet.has(item.id)
+      )
+
+      setWidgetItems(normalizedItems)
+
+      if (removablePhotoWidgetIds.length > 0) {
+        setFrameMap((prev) => {
+          const nextFrameMap = { ...(prev || {}) }
+          removablePhotoWidgetIds.forEach((id) => delete nextFrameMap[id])
+          return nextFrameMap
+        })
+        removablePhotoWidgetIds.forEach((id) => {
+          void localStorageInstance.remove(`${PHOTO_WIDGET_STATE_STORAGE_KEY}:${id}`)
+        })
+        toast.error(t("pro_animatedSticker"), { toastId: "normalizeSticker" })
+      }
     })()
-  }, [setWidgetItems, widgetItems])
+  }, [setFrameMap, setWidgetItems, widgetItems])
 
   React.useEffect(() => {
     const onWidgetLayoutPreview = (event: Event) => {
@@ -1371,8 +1552,8 @@ function WidgetOverlayApp() {
       document.removeEventListener("pointerdown", onDocumentPointerDown, true)
   }, [editingWidgetId])
 
-  const getWidgetStyle = (id: string): CSSProperties => {
-    const frame = frames[id]
+  const getWidgetStyle = (item: WidgetInstance): CSSProperties => {
+    const frame = frames[item.id]
     const opacity = clampNumber(layout.opacity, 0, 1, 0.8)
     const textColor = layout.textColor
     const accentColor = layout.accentColor
@@ -1386,7 +1567,7 @@ function WidgetOverlayApp() {
       top: 0,
       width: frame.width,
       height: frame.height,
-      transform: `translate(${frame.x}px, ${frame.y}px)`,
+      transform: getWidgetTransform(frame),
       backgroundColor,
       color: textColor,
       "--decoai-widget-bg": backgroundColor,
@@ -1398,9 +1579,14 @@ function WidgetOverlayApp() {
       overflow: "hidden",
       pointerEvents: "auto",
       touchAction: "none",
-      zIndex: editingWidgetId === id ? 2 : 1,
+      zIndex: editingWidgetId === item.id ? 2 : 1,
       willChange: "transform, width, height"
     } as CSSProperties
+  }
+
+  const getWidgetMinSize = (id: string | null): WidgetSize => {
+    const item = visibleWidgetItems.find((widget) => widget.id === id)
+    return item?.type === "photo" ? PHOTO_WIDGET_MIN_SIZE : DEFAULT_WIDGET_MIN_SIZE
   }
 
   const persistLiveFrame = (id: string | null) => {
@@ -1408,7 +1594,7 @@ function WidgetOverlayApp() {
     const nextFrame = liveFrameRef.current[id] as WidgetFrame
     setFrameMap((prev) => ({
       ...prev,
-      [id]: clampWidgetFrameToViewport(nextFrame, DEFAULT_WIDGET_MIN_SIZE)
+      [id]: clampWidgetFrameToViewport(nextFrame, getWidgetMinSize(id))
     }))
   }
 
@@ -1453,7 +1639,10 @@ function WidgetOverlayApp() {
       return nextFrameMap
     })
     const stateKey = getWidgetStateKey(item)
-    if (stateKey) void storage.remove(stateKey)
+    if (stateKey) {
+      const stateStorage = item.type === "photo" ? localStorageInstance : storage
+      void stateStorage.remove(stateKey)
+    }
     if (editingWidgetId === item.id) setEditingWidgetId(null)
     if (titleEditingWidgetId === item.id) setTitleEditingWidgetId(null)
   }
@@ -1469,6 +1658,8 @@ function WidgetOverlayApp() {
         return `${TIMER_WIDGET_STATE_STORAGE_KEY}:${item.id}`
       case "stopwatch":
         return `${STOPWATCH_WIDGET_STATE_STORAGE_KEY}:${item.id}`
+      case "photo":
+        return `${PHOTO_WIDGET_STATE_STORAGE_KEY}:${item.id}`
       default:
         return null
     }
@@ -1505,19 +1696,20 @@ function WidgetOverlayApp() {
     visibleWidgetItems.map((item) => {
       const widgetMeta = WIDGET_LIST.find((widget) => widget.key === item.type)
       if (!widgetMeta) return null
+      const isPhotoWidget = item.type === "photo"
       const isTitleEditing = titleEditingWidgetId === item.id
       return createElement(
         "div",
         {
           key: item.id,
           ref: (node: HTMLDivElement | null) => widgetRefs.current[item.id] = node,
-          className: "decoai-widget-card",
+          className: `decoai-widget-card${isPhotoWidget ? " decoai-widget-card-photo" : ""}`,
           onPointerDown: () => setEditingWidgetId(item.id),
           onClick: (e) => {
             e.stopPropagation()
             setEditingWidgetId(item.id)
           },
-          style: getWidgetStyle(item.id)
+          style: getWidgetStyle(item)
         },
         createElement(
           "div",
@@ -1531,52 +1723,59 @@ function WidgetOverlayApp() {
               padding: "0 10px"
             }
           },
-          createElement(Icon, { icon: `lucide:${widgetMeta.icon}`, height: 16, "aria-hidden": "true" }),
-          isTitleEditing
-            ? createElement("input", {
-              autoFocus: true,
-              type: "text",
-              value: editingTitle,
-              maxLength: 20,
-              spellCheck: false,
-              autoComplete: "off",
-              onChange: (e) => setEditingTitle(e.target.value.slice(0, 20)),
-              onBlur: () => finishTitleEditing(item),
-              onPointerDown: (e) => e.stopPropagation(),
-              onKeyDown: (e) => {
-                e.stopPropagation()
-                if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur()
-              },
-              onKeyUp: (e) => e.stopPropagation(),
-              style: {
-                flex: 1,
-                width: 0,
-                minWidth: 0,
-                padding: 0,
-                border: "none",
-                outline: "none",
-                background: "transparent",
-                font: "inherit",
-                color: "inherit",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap"
-              }
-            })
-            : createElement(
-              "div",
-              {
+          !isPhotoWidget
+            ? createElement(Icon, {
+              icon: `lucide:${widgetMeta.icon}`,
+              height: 16,
+              "aria-hidden": "true"
+            }) : null,
+          !isPhotoWidget
+            ? isTitleEditing
+              ? createElement("input", {
+                autoFocus: true,
+                type: "text",
+                value: editingTitle,
+                maxLength: 20,
+                spellCheck: false,
+                autoComplete: "off",
+                onChange: (e) => setEditingTitle(e.target.value.slice(0, 20)),
+                onBlur: () => finishTitleEditing(item),
+                onPointerDown: (e) => e.stopPropagation(),
+                onKeyDown: (e) => {
+                  e.stopPropagation()
+                  if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur()
+                },
+                onKeyUp: (e) => e.stopPropagation(),
                 style: {
                   flex: 1,
+                  width: 0,
                   minWidth: 0,
+                  padding: 0,
+                  border: "none",
+                  outline: "none",
+                  background: "transparent",
+                  font: "inherit",
+                  color: "inherit",
                   overflow: "hidden",
                   textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                  userSelect: "none"
+                  whiteSpace: "nowrap"
                 }
-              },
-              item.name ?? t(widgetMeta.labelKey)
-            ),
+              })
+              : createElement(
+                "div",
+                {
+                  style: {
+                    flex: 1,
+                    minWidth: 0,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    userSelect: "none"
+                  }
+                },
+                item.name ?? t(widgetMeta.labelKey)
+              )
+            : null,
           createElement(
             "div",
             { className: "decoai-widget-card__actions" },
@@ -1590,10 +1789,14 @@ function WidgetOverlayApp() {
                 onClick: (e) => {
                   e.preventDefault()
                   e.stopPropagation()
-                  startTitleEditing(item)
+                  isPhotoWidget ? "AI 배경 제거" : startTitleEditing(item)
                 }
               },
-              createElement(Icon, { icon: "lucide:square-pen", height: 16, "aria-hidden": "true" })
+              createElement(Icon, {
+                icon: isPhotoWidget ? "mdi:wand" : "lucide:square-pen",
+                height: 16,
+                "aria-hidden": "true"
+              })
             ),
             createElement(
               "button",
@@ -1631,13 +1834,17 @@ function WidgetOverlayApp() {
         item.type === "todo" ? createElement(TodoWidgetContent, { widgetId: item.id }) : null,
         item.type === "dday" ? createElement(DdayWidgetContent, { widgetId: item.id }) : null,
         item.type === "timer" ? createElement(TimerWidgetContent, { widgetId: item.id }) : null,
-        item.type === "stopwatch" ? createElement(StopwatchWidgetContent, { widgetId: item.id }) : null
+        item.type === "stopwatch" ? createElement(StopwatchWidgetContent, { widgetId: item.id }) : null,
+        item.type === "photo" ? createElement(PhotoWidgetContent, { widgetId: item.id }) : null
       )
     }),
     createElement(Moveable, {
       target: selectedTarget,
       draggable: true,
       resizable: true,
+      rotatable: true,
+      snapRotationDegrees: WIDGET_ROTATION_DEGREES,
+      snapRotationThreshold: 4,
       checkInput: true,
       snappable: true,
       elementGuidelines: Object.entries(widgetRefs.current)
@@ -1662,9 +1869,9 @@ function WidgetOverlayApp() {
             x: frame.x + deltaX,
             y: frame.y + deltaY
           },
-          DEFAULT_WIDGET_MIN_SIZE
+          getWidgetMinSize(editingWidgetId)
         )
-        event.target.style.transform = `translate(${nextFrame.x}px, ${nextFrame.y}px)`
+        event.target.style.transform = getWidgetTransform(nextFrame)
         liveFrameRef.current[editingWidgetId] = nextFrame
       },
       onDragEnd: () => {
@@ -1675,9 +1882,10 @@ function WidgetOverlayApp() {
         interactionStartFrameRef.current = editingWidgetId ? frames[editingWidgetId] : null
         const viewportWidth = Math.max(document.documentElement.clientWidth, 320)
         const viewportHeight = Math.max(document.documentElement.clientHeight, 240)
+        const minSize = getWidgetMinSize(editingWidgetId)
         event.setMin([
-          Math.min(DEFAULT_WIDGET_MIN_SIZE.width, viewportWidth),
-          Math.min(DEFAULT_WIDGET_MIN_SIZE.height, viewportHeight)
+          Math.min(minSize.width, viewportWidth),
+          Math.min(minSize.height, viewportHeight)
         ])
         event.setMax([viewportWidth, viewportHeight])
       },
@@ -1693,14 +1901,28 @@ function WidgetOverlayApp() {
             width: event.width,
             height: event.height
           },
-          DEFAULT_WIDGET_MIN_SIZE
+          getWidgetMinSize(editingWidgetId)
         )
         event.target.style.width = `${nextFrame.width}px`
         event.target.style.height = `${nextFrame.height}px`
-        event.target.style.transform = `translate(${nextFrame.x}px, ${nextFrame.y}px)`
+        event.target.style.transform = getWidgetTransform(nextFrame)
         liveFrameRef.current[editingWidgetId] = nextFrame
       },
       onResizeEnd: () => {
+        persistLiveFrame(editingWidgetId)
+        interactionStartFrameRef.current = null
+      },
+      onRotateStart: () => {
+        interactionStartFrameRef.current = editingWidgetId ? frames[editingWidgetId] : null
+      },
+      onRotate: (event) => {
+        if (!editingWidgetId) return
+        const frame = interactionStartFrameRef.current || frames[editingWidgetId]
+        const nextFrame = { ...frame, rotation: normalizeWidgetRotation(event.rotation) }
+        event.target.style.transform = getWidgetTransform(nextFrame)
+        liveFrameRef.current[editingWidgetId] = nextFrame
+      },
+      onRotateEnd: () => {
         persistLiveFrame(editingWidgetId)
         interactionStartFrameRef.current = null
       }
@@ -1724,6 +1946,7 @@ const mountWidgetOverlay = () => {
         display: flex;
         flex: 0 0 auto;
         gap: 2px;
+        margin-left: auto;
         opacity: 0;
         transform: scale(0.9);
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1756,6 +1979,14 @@ const mountWidgetOverlay = () => {
       .decoai-widget-card:hover {
         opacity: 1;
       }
+      .decoai-widget-card-photo:has(.decoai-photo-widget-image) {
+        background-color: transparent !important;
+        opacity: 1;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+        overflow: visible !important;
+      }
       .decoai-widget-card:hover .decoai-widget-card__actions {
         opacity: 1;
         transform: scale(1);
@@ -1782,6 +2013,64 @@ const mountWidgetOverlay = () => {
       }
       .decoai-widget-card__delete:hover {
         background-color: #d32f2f;
+      }
+      .decoai-photo-widget {
+        position: relative;
+        width: 100%;
+        height: calc(100% - 32px);
+        pointer-events: auto;
+        container-type: size;
+      }
+      .decoai-widget-card-photo:has(.decoai-photo-widget-image) .decoai-photo-widget {
+        height: 100%;
+        transform: translateY(-32px);
+      }
+      .decoai-photo-widget-image {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
+        user-select: none;
+        pointer-events: none;
+      }
+      .decoai-photo-widget-placeholder {
+        position: absolute;
+        top: -32px;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        pointer-events: none;
+      }
+      .decoai-photo-widget-upload-overlay {
+        position: absolute;
+        top: -32px;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        pointer-events: none;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .decoai-widget-card-photo:has(.decoai-photo-widget-image) .decoai-photo-widget-upload-overlay {
+        top: 0;
+      }
+      .decoai-photo-widget:hover .decoai-photo-widget-upload-overlay {
+        opacity: 1;
+        transform: scale(1);
+      }
+      .decoai-photo-widget-upload {
+        width: max(96px, 48cqmin);
+        height: max(96px, 48cqmin);
+        pointer-events: auto;
       }
       .decoai-note-widget,
       .decoai-todo-widget {
@@ -2002,14 +2291,14 @@ const mountWidgetOverlay = () => {
         gap: max(8px, 4cqw);
         font-size: max(32px, 16cqmin);
       }
-      .decoai-time-controls {
+      .decoai-widget-controls {
         position: relative;
         z-index: 4;
         display: flex;
         flex-direction: column;
         gap: max(4px, 2cqw);
       }
-      .decoai-time-control {
+      .decoai-widget-control {
         position: relative;
         z-index: 4;
         width: max(48px, 24cqmin);
@@ -2025,7 +2314,7 @@ const mountWidgetOverlay = () => {
         cursor: pointer;
         user-select: none;
       }
-      .decoai-time-control:disabled {
+      .decoai-widget-control:disabled {
         opacity: 0.5;
         pointer-events: none;
       }
@@ -2053,7 +2342,7 @@ const mountWidgetOverlay = () => {
         color: inherit !important;
         cursor: pointer;
       }
-      .decoai-time-control:hover,
+      .decoai-widget-control:hover,
       .decoai-time-step:hover {
         background-color: #0000004D;
       }

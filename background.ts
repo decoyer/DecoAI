@@ -415,10 +415,7 @@ const openCheckout = async (
     chrome.tabs.create({ url: checkoutUrl })
     sendResponse({ success: true })
   } catch (error) {
-    sendResponse({
-      success: false,
-      error: error instanceof Error ? error.message : "Checkout request failed"
-    })
+    sendResponse({ success: false, error: "Checkout request failed" })
   }
 }
 

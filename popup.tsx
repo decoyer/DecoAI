@@ -273,7 +273,7 @@ function IndexPopup() {
                   type="button"
                   onClick={onSubscriptionClick}
                   style={actionButtonStyle}>
-                  <Icon icon="lucide:repeat" color="#66cdaa" height={24} aria-hidden="true" />
+                  <Icon icon="lucide:inbox" color="#66cdaa" height={24} aria-hidden="true" />
                 </button>
               </div>
 

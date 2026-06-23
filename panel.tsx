@@ -109,7 +109,8 @@ const WIDGET_LIST: Array<{ key: WidgetKey; labelKey: string; icon: string }> = [
   { key: "todo", labelKey: "todoWidget", icon: "list-checks" },
   { key: "dday", labelKey: "ddayWidget", icon: "calendar-1" },
   { key: "timer", labelKey: "timerWidget", icon: "alarm-clock" },
-  { key: "stopwatch", labelKey: "stopwatchWidget", icon: "timer" }
+  { key: "stopwatch", labelKey: "stopwatchWidget", icon: "timer" },
+  { key: "photo", labelKey: "photoWidget", icon: "sticker" }
 ]
 
 const isSameWidgetLayout = (
@@ -126,7 +127,7 @@ const createWidgetInstance = (key: WidgetKey): WidgetInstance => {
   const widgetMeta = WIDGET_LIST.find((widget) => widget.key === key)
 
   return {
-    id: key,
+    id: key === "photo" ? `${key}-${crypto.randomUUID()}` : key,
     type: key,
     name: t(widgetMeta?.labelKey)
   }
@@ -736,7 +737,7 @@ export function FabPanelApp() {
   }
 
   const requirePremiumAccess = async (
-    messageKey: "pro_themeLimit" | "pro_animatedImage" | "pro_colorMatch"
+    messageKey: "pro_themeLimit" | "pro_animatedBG" | "pro_colorMatch"
   ) => {
     setIsLoading(true)
     try {
@@ -830,7 +831,7 @@ export function FabPanelApp() {
       return
     }
     const hasAnimatedImportedTheme = hasAnimatedBackground(imported)
-    if (hasAnimatedImportedTheme && !(await requirePremiumAccess("pro_animatedImage"))) {
+    if (hasAnimatedImportedTheme && !(await requirePremiumAccess("pro_animatedBG"))) {
       clearFileInput(importFileRef.current)
       return
     }
@@ -862,7 +863,7 @@ export function FabPanelApp() {
       return
     }
     const animated = await isAnimatedImage(file)
-    if (animated && !(await requirePremiumAccess("pro_animatedImage"))) {
+    if (animated && !(await requirePremiumAccess("pro_animatedBG"))) {
       clearFileInput(bgUploadRef.current)
       return
     }

@@ -23,7 +23,7 @@ export type CustomTheme = {
 export type SiteType = "chatgpt" | "gemini" | "claude" | "grok"
 export type ModelEnabledMap = Record<SiteType, boolean>
 
-export type WidgetKey = "note" | "todo" | "dday" | "timer" | "stopwatch"
+export type WidgetKey = "note" | "todo" | "dday" | "timer" | "stopwatch" | "photo"
 export type WidgetInstance = {
   id: string
   type: WidgetKey
@@ -51,11 +51,15 @@ export type StopwatchWidgetState = {
   stopwatchStartedAt: number | null
   stopwatchRunning: boolean
 }
+export type PhotoWidgetState = {
+  imageUrl: string
+}
 export type WidgetFrame = {
   x: number
   y: number
   width: number
   height: number
+  rotation?: number
 }
 export type WidgetFrameMap = Record<string, WidgetFrame>
 export type WidgetSize = {
@@ -83,6 +87,7 @@ export const WIDGET_INSTANCES_STORAGE_KEY = "widget-instances"
 export const TIMER_WIDGET_STATE_STORAGE_KEY = "timer-widget-state"
 export const STOPWATCH_WIDGET_STATE_STORAGE_KEY = "stopwatch-widget-state"
 export const DDAY_WIDGET_STATE_STORAGE_KEY = "dday-widget-state"
+export const PHOTO_WIDGET_STATE_STORAGE_KEY = "photo-widget-state"
 export const CUSTOM_THEME_LAYOUT_STORAGE_KEY = "custom-theme-layout-map"
 export const THEME_LOADING_EVENT = "decoai:theme-loading"
 export const FAB_OPEN_EVENT = "decoai:fab-open"
@@ -119,7 +124,8 @@ export const DEFAULT_WIDGET_INSTANCES: WidgetInstance[] = [
   { id: "todo", type: "todo" },
   { id: "dday", type: "dday" },
   { id: "timer", type: "timer" },
-  { id: "stopwatch", type: "stopwatch" }
+  { id: "stopwatch", type: "stopwatch" },
+  { id: "photo", type: "photo" }
 ]
 
 export const DEFAULT_WIDGET_ENABLED: WidgetEnabledMap = {
@@ -127,7 +133,8 @@ export const DEFAULT_WIDGET_ENABLED: WidgetEnabledMap = {
   todo: false,
   dday: false,
   timer: false,
-  stopwatch: false
+  stopwatch: false,
+  photo: false
 }
 
 export const DEFAULT_WIDGET_LAYOUT: WidgetLayoutOptions = {
@@ -153,6 +160,10 @@ export const DEFAULT_STOPWATCH_WIDGET_STATE: StopwatchWidgetState = {
   stopwatchElapsedMilliseconds: 0,
   stopwatchStartedAt: null,
   stopwatchRunning: false
+}
+
+export const DEFAULT_PHOTO_WIDGET_STATE: PhotoWidgetState = {
+  imageUrl: ""
 }
 
 export const DEFAULT_WIDGET_MIN_SIZE: WidgetSize = {

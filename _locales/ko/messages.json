@@ -65,6 +65,9 @@
   "stopwatchWidget": {
     "message": "스톱워치"
   },
+  "photoWidget": {
+    "message": "스티커"
+  },
   "profile": {
     "message": "프로필"
   },
@@ -215,8 +218,11 @@
   "pro_themeLimit": {
     "message": "커스텀 테마를 더 추가하려면 Pro로 업그레이드하세요."
   },
-  "pro_animatedImage": {
+  "pro_animatedBG": {
     "message": "움직이는 배경화면을 사용하려면 Pro로 업그레이드하세요."
+  },
+  "pro_animatedSticker": {
+    "message": "움직이는 스티커를 사용하려면 Pro로 업그레이드하세요."
   },
   "pro_colorMatch": {
     "message": "AI 컬러 매칭을 사용하려면 Pro로 업그레이드하세요."
