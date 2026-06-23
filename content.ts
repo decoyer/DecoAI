@@ -688,48 +688,11 @@ const getStopwatchMilliseconds = (
   stopwatch: ReturnType<typeof useStopwatch>
 ) => stopwatch.totalSeconds * 1000 + stopwatch.milliseconds
 
-const PHOTO_WIDGET_MAX_IMAGE_SIZE = 1920
-const PHOTO_WIDGET_IMAGE_QUALITY = 0.86
-
 const resizePhotoWidgetImage = (file: File) =>
   new Promise<string | null>((resolve) => {
     const reader = new FileReader()
-
     reader.onerror = () => resolve(null)
-    reader.onload = () => {
-      const sourceUrl = sanitizeCustomBgUrl(reader.result)
-      if (!sourceUrl) {
-        resolve(null)
-        return
-      }
-
-      const image = new Image()
-      image.onerror = () => resolve(sourceUrl)
-      image.onload = () => {
-        const scale = Math.min(
-          1,
-          PHOTO_WIDGET_MAX_IMAGE_SIZE / image.naturalWidth,
-          PHOTO_WIDGET_MAX_IMAGE_SIZE / image.naturalHeight
-        )
-
-        if (scale >= 1 && file.size <= 1024 * 1024) {
-          resolve(sourceUrl)
-          return
-        }
-
-        const canvas = document.createElement("canvas")
-        canvas.width = Math.max(1, Math.round(image.naturalWidth * scale))
-        canvas.height = Math.max(1, Math.round(image.naturalHeight * scale))
-        const context = canvas.getContext("2d")
-        if (!context) {
-          resolve(sourceUrl)
-          return
-        }
-        context.drawImage(image, 0, 0, canvas.width, canvas.height)
-        resolve(canvas.toDataURL("image/webp", PHOTO_WIDGET_IMAGE_QUALITY))
-      }
-      image.src = sourceUrl
-    }
+    reader.onload = () => resolve(sanitizeCustomBgUrl(reader.result) || null)
     reader.readAsDataURL(file)
   })
 
@@ -756,7 +719,6 @@ const controlButton = (
   )
 
 const EMPTY_DOC: JSONContent = { type: "doc", content: [{ type: "paragraph" }] }
-const EMPTY_TASK_DOC: JSONContent = { type: "doc", content: [{ type: "paragraph" }] }
 
 type TodoItem = {
   checked: boolean
@@ -780,16 +742,11 @@ const createTodoDoc = (items: TodoItem[]): JSONContent => ({
         content: items.map((item) => ({
           type: "taskItem",
           attrs: { checked: item.checked },
-          content: [
-            {
-              type: "paragraph",
-              content: item.text ? [{ type: "text", text: item.text }] : []
-            }
-          ]
+          content: [{ type: "paragraph", content: item.text ? [{ type: "text", text: item.text }] : [] }]
         }))
       }
     ]
-    : EMPTY_TASK_DOC.content
+    : EMPTY_DOC.content
 })
 
 const textWidgetButton = (
@@ -880,7 +837,7 @@ function TodoWidgetContent({ widgetId }: { widgetId: string }) {
   const [inputValue, setInputValue] = useState("")
   const [content, setContent] = useStorage<JSONContent>(
     `${TEXT_WIDGET_STATE_STORAGE_KEY}:${widgetId}`,
-    EMPTY_TASK_DOC
+    EMPTY_DOC
   )
   const editor = useEditor({
     extensions: [
@@ -898,7 +855,7 @@ function TodoWidgetContent({ widgetId }: { widgetId: string }) {
         taskItem: { nested: true }
       })
     ],
-    content: content || EMPTY_TASK_DOC,
+    content: content || EMPTY_DOC,
     editable: false
   })
   const todoItems = getTodoItems(content)
@@ -1084,10 +1041,7 @@ function TimerWidgetContent({ widgetId }: { widgetId: string }) {
 
   React.useEffect(() => {
     const nextRemaining = getSyncedTimerSeconds(timerState)
-    timer.restart(
-      expiryTimestamp(nextRemaining),
-      timerState.timerRunning && nextRemaining > 0
-    )
+    timer.restart(expiryTimestamp(nextRemaining), timerState.timerRunning && nextRemaining > 0)
   }, [
     timerState.timerEndAt,
     timerState.timerRemainingSeconds,
