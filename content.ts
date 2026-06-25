@@ -1444,10 +1444,8 @@ function WidgetOverlayApp() {
       const premiumStatus = await getPremiumStatus()
       if (premiumStatus.isPremium || !premiumStatus.isChecked) return
 
-      const removablePhotoWidgetIdSet = new Set(removablePhotoWidgetIds)
-      const normalizedItems = normalizeCustomWidgets(items).filter(
-        (item) => !removablePhotoWidgetIdSet.has(item.id)
-      )
+      const set = new Set(removablePhotoWidgetIds)
+      const normalizedItems = normalizeCustomWidgets(items).filter((item) => !set.has(item.id))
 
       setWidgetItems(normalizedItems)
 
