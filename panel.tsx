@@ -188,23 +188,13 @@ const rowStyle = {
   justifyContent: "space-between",
   alignItems: "center"
 } as const
-const colorInputStyle = {
-  width: 50,
-  height: 30,
-  backgroundColor: "#4b5563",
-  border: "none",
-  borderRadius: 8,
-  padding: 4,
-  cursor: "pointer",
-  overflow: "hidden"
-} as const
 const controlButtonStyle = {
   paddingTop: 4,
   paddingBottom: 4,
   backgroundColor: "#4b5563",
   color: "#fff",
   border: "none",
-  borderRadius: 12,
+  borderRadius: 8,
   whiteSpace: "nowrap",
   cursor: "pointer"
 } as const
@@ -337,6 +327,14 @@ function CustomThemeSortableCard({
     transition,
     isDragging
   } = useSortable({ id: item.id })
+  const bgStyle = {
+    "--custom-bg-scale-x": item.bgUrl && item.bgOptions.scaleX === -1 ? "-1" : "1",
+    backgroundImage: item.bgUrl ? `url(${item.bgUrl})` : "none",
+    backgroundColor: item.bgColor || "transparent",
+    filter: item.bgUrl
+      ? `invert(${item.bgOptions.invert}) grayscale(${item.bgOptions.grayscale}) blur(${item.bgOptions.blur * 0.2}px) brightness(${item.bgOptions.brightness})`
+      : "none"
+  } as CSSProperties & { "--custom-bg-scale-x": string }
 
   return (
     <div
@@ -363,10 +361,7 @@ function CustomThemeSortableCard({
         }}>
         <div
           className="custom-theme-card__bg"
-          style={{
-            backgroundImage: item.bgUrl ? `url(${item.bgUrl})` : "none",
-            backgroundColor: !item.bgUrl ? item.bgColor : "transparent"
-          }}
+          style={bgStyle}
         />
         <div className="custom-theme-card__title">{item.name}</div>
       </button>
@@ -545,7 +540,6 @@ export function FabPanelApp() {
       void syncGoogleSession()
       setPanelMode(customEvent.detail?.view === "widget" ? "widget" : "theme")
       if (customEvent.detail?.view === "widget") {
-        setView("themes")
         setDraftWidgetLayout({ ...DEFAULT_WIDGET_LAYOUT, ...widgetLayout })
       }
       setThemeTab(theme === "custom" ? "custom" : "preset")
@@ -594,9 +588,6 @@ export function FabPanelApp() {
     value: string | number | boolean
   ) => setDraftBackgroundOptions((prev) => ({ ...prev, [key]: value }))
 
-  const hasPremiumLockedThemes = (themes: CustomTheme[]) =>
-    themes.length > 1 || themes.some((item) => isAnimatedBgUrl(item.bgUrl))
-
   const normalizeCustomThemes = () => {
     if (!customThemes.length) return false
 
@@ -643,22 +634,21 @@ export function FabPanelApp() {
   }
 
   useEffect(() => {
-    if (!isPremiumChecked) return
-    if (isPremiumUser) return
+    if (!isPremiumChecked || !isFreeUser || isPremiumUser) return
 
-    const hasLockedThemes = customThemes.length > 0 && hasPremiumLockedThemes(customThemes)
-    const hasLockedWidgets = hasPremiumLockedWidgets(widgetItems || DEFAULT_WIDGET_INSTANCES)
+    const themeLimitLocked = customThemes.length > 1
+    const animatedThemeLocked = hasAnimatedBackground(customThemes)
+    const widgetLocked = hasPremiumLockedWidgets(widgetItems || DEFAULT_WIDGET_INSTANCES)
 
-    if (isFreeUser && (hasLockedThemes || hasLockedWidgets)) {
-      if (hasLockedThemes) {
-        normalizeCustomThemes()
-        toast.error(t("pro_themeLimit"), { toastId: "normalizeTheme" })
-      }
-      if (hasLockedWidgets) {
-        normalizeCustomWidgets()
-        toast.error(t("pro_widgetLimit"), { toastId: "normalizeWidget" })
-      }
-      return
+    if (themeLimitLocked || animatedThemeLocked) {
+      normalizeCustomThemes()
+      if (themeLimitLocked) toast.error(t("pro_themeLimit"), { toastId: "normalizeThemeLimit" })
+      if (animatedThemeLocked) toast.error(t("pro_animatedBG"), { toastId: "normalizeAnimatedBG" })
+    }
+
+    if (widgetLocked) {
+      normalizeCustomWidgets()
+      toast.error(t("pro_widgetLimit"), { toastId: "normalizeWidget" })
     }
   }, [
     draftBackgroundImageUrl,
@@ -737,7 +727,7 @@ export function FabPanelApp() {
   }
 
   const requirePremiumAccess = async (
-    messageKey: "pro_themeLimit" | "pro_animatedBG" | "pro_colorMatch"
+    messageKey: string
   ) => {
     setIsLoading(true)
     try {
@@ -813,7 +803,7 @@ export function FabPanelApp() {
 
   const onImportFile = async (file?: File) => {
     if (!file) {
-      toast.error(t("error_fileNotSelected"))
+      toast.error(t("error_fileRequired"))
       return
     }
     if (file.size > MAX_FILE_BYTES) {
@@ -854,7 +844,7 @@ export function FabPanelApp() {
 
   const onUploadCustomBg = async (file?: File) => {
     if (!file) {
-      toast.error(t("error_fileNotSelected"))
+      toast.error(t("error_fileRequired"))
       return
     }
     if (file.size > MAX_FILE_BYTES) {
@@ -869,9 +859,7 @@ export function FabPanelApp() {
     }
     const reader = new FileReader()
     reader.onload = () => {
-      const result = sanitizeCustomBgUrl(
-        typeof reader.result === "string" ? reader.result : ""
-      )
+      const result = sanitizeCustomBgUrl(reader.result)
       if (!result) {
         toast.error(t("error_fileInvalid"))
         clearFileInput(bgUploadRef.current)
@@ -902,20 +890,62 @@ export function FabPanelApp() {
     setDraftBackgroundOptions(DEFAULT_CUSTOM_BG_OPTIONS)
   }
   const resetDraftBackgroundColor = () => setDraftBackgroundColor("")
-  const onColorMatchClick = async () => {
-    if (!(await requirePremiumAccess("pro_colorMatch"))) {
-      return
-    }
 
-    if (!draftBackgroundImageUrl) return
+  const onRemoveBGClick = async () => {
+    if (!draftBackgroundImageUrl || !(await requirePremiumAccess("pro_removeBG"))) return
 
+    const toastId = toast.loading(t("loading_removeBG"))
     setIsLoading(true)
+
+    try {
+      const result = await new Promise<string>((resolve, reject) => {
+        chrome.runtime.sendMessage(
+          { type: "REMOVE_BACKGROUND_IMAGE", imageUrl: draftBackgroundImageUrl },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              reject(new Error(chrome.runtime.lastError.message))
+              return
+            }
+            if (!response?.success) {
+              reject(new Error(response?.error || "Failed to remove background"))
+              return
+            }
+            resolve(response.dataUrl)
+          }
+        )
+      })
+
+      setDraftBackgroundImageUrl(result)
+
+      toast.update(toastId, {
+        render: t("success_removeBG"),
+        type: "success",
+        isLoading: false,
+        autoClose: null,
+        closeOnClick: null
+      })
+    } catch (error) {
+      toast.update(toastId, {
+        render: t("error_removeBG"),
+        type: "error",
+        isLoading: false,
+        autoClose: null,
+        closeOnClick: null
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const onColorMatchClick = async () => {
+    if (!draftBackgroundImageUrl || !(await requirePremiumAccess("pro_colorMatch"))) return
+
+    const toastId = toast.loading(t("loading_colorMatch"))
+    setIsLoading(true)
+
     try {
       await wait(2000)
-      const canvas = await renderImageToCanvas(
-        draftBackgroundImageUrl,
-        draftBackgroundOptions
-      )
+      const canvas = await renderImageToCanvas(draftBackgroundImageUrl, draftBackgroundOptions, 256, draftBackgroundColor)
       const palette = await Vibrant.from(canvas.toDataURL()).getPalette()
       const isDarkMode = isCurrentPageDarkMode()
       const nextAccent = palette.Vibrant?.hex || ""
@@ -924,7 +954,21 @@ export function FabPanelApp() {
       if (nextAccent) setDraftAccentColor(nextAccent)
       if (nextText) setDraftTextColor(nextText)
 
-      toast.success(t("success_colorMatch"))
+      toast.update(toastId, {
+        render: t("success_colorMatch"),
+        type: "success",
+        isLoading: false,
+        autoClose: null,
+        closeOnClick: null
+      })
+    } catch (error) {
+      toast.update(toastId, {
+        render: t("error_colorMatch"),
+        type: "error",
+        isLoading: false,
+        autoClose: null,
+        closeOnClick: null
+      })
     } finally {
       setIsLoading(false)
     }
@@ -981,15 +1025,8 @@ export function FabPanelApp() {
   }
 
   const onCustomPlusClick = async () => {
-    if (
-      customThemes.length > 0 &&
-      !(await requirePremiumAccess("pro_themeLimit"))
-    ) {
-      return
-    }
-    const created = createCustomTheme(
-      `${t("custom")} ${customThemes.length + 1}`
-    )
+    if (customThemes.length > 0 && !(await requirePremiumAccess("pro_themeLimit"))) return
+    const created = createCustomTheme(`${t("custom")} ${customThemes.length + 1}`)
     setCustomThemes((prev) => [...prev, created])
   }
 
@@ -1146,8 +1183,9 @@ export function FabPanelApp() {
           background-position: center center;
           background-size: cover;
           background-repeat: no-repeat;
-          transform: scale(1);
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          scale: 1;
+          transform: scaleX(var(--custom-bg-scale-x, 1));
+          transition: scale 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .custom-theme-card__title {
           position: absolute;
@@ -1201,7 +1239,7 @@ export function FabPanelApp() {
         .custom-theme-card__delete:hover {
           background-color: #d32f2f;
         }
-        .custom-theme-card:hover .custom-theme-card__bg { transform: scale(1.1); }
+        .custom-theme-card:hover .custom-theme-card__bg { scale: 1.1; }
         .custom-theme-card:hover .custom-theme-card__title { background-color: #0000004D; }
         .pro-button { animation: pro-gradient 10s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
         .footer button:hover { filter: brightness(1.1); }
@@ -1217,11 +1255,7 @@ export function FabPanelApp() {
               <>
                 <h3 style={centeredHeadingStyle}>{t("widgetSettings")}</h3>
                 <div
-                  style={{
-                    ...tabGridStyle,
-                    marginTop: 20,
-                    gridTemplateColumns: "1fr 1fr"
-                  }}>
+                  style={{ ...tabGridStyle, marginTop: 20, gridTemplateColumns: "1fr 1fr" }}>
                   {(["visibility", "layout"] as const).map((tab) => (
                     <TabButton
                       key={tab}
@@ -1239,9 +1273,7 @@ export function FabPanelApp() {
                           key={item.key}
                           label={t(item.labelKey)}
                           icon={item.icon}
-                          checked={
-                            (widgetEnabled?.[item.key] ?? DEFAULT_WIDGET_ENABLED[item.key]) && hasWidgetType(item.key)
-                          }
+                          checked={(widgetEnabled?.[item.key] ?? DEFAULT_WIDGET_ENABLED[item.key]) && hasWidgetType(item.key)}
                           onChange={(checked) => updateWidgetEnabled(item.key, checked)}
                         />
                       ))}
@@ -1397,11 +1429,7 @@ export function FabPanelApp() {
                             onChange={(e) => setDraftCustomThemeName(e.target.value.slice(0, 10))}
                             onKeyDown={(e) => e.stopPropagation()}
                             onKeyUp={(e) => e.stopPropagation()}
-                            style={{
-                              ...textInputStyle,
-                              userSelect: "text",
-                              WebkitUserSelect: "text"
-                            }}
+                            style={{ ...textInputStyle, userSelect: "text", WebkitUserSelect: "text" }}
                           />
                         </div>
                       </Card>
@@ -1449,12 +1477,7 @@ export function FabPanelApp() {
                               type="button"
                               onClick={resetDraftBackgroundImage}
                               disabled={!draftBackgroundImageUrl}
-                              style={{
-                                ...controlButtonStyle,
-                                ...disabledControlStyle(
-                                  Boolean(draftBackgroundImageUrl)
-                                )
-                              }}>
+                              style={{ ...controlButtonStyle, ...disabledControlStyle(Boolean(draftBackgroundImageUrl)) }}>
                               {t("reset")}
                             </button>
                           </div>
@@ -1462,6 +1485,20 @@ export function FabPanelApp() {
                       </Card>
                       {draftBackgroundImageUrl && (
                         <>
+                          <Card>
+                            <label style={rowStyle}>
+                              <div style={inlineControlStyle}>
+                                <Icon icon="lucide:sparkles" height={24} color="#66cdaa" aria-hidden="true" />
+                                <span style={fieldLabelStyle}>{t("removeBG")}</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={onRemoveBGClick}
+                                style={controlButtonStyle}>
+                                {t("apply")}
+                              </button>
+                            </label>
+                          </Card>
                           <Card>
                             <div style={columnControlStyle}>
                               <RangeControl
@@ -1473,17 +1510,13 @@ export function FabPanelApp() {
                                 onChange={(v) =>
                                   updateCustomBgOption(
                                     "position",
-                                    `${Number(v)}% ${getPositionYPercent(
-                                      draftBackgroundOptions.position
-                                    )}%`
+                                    `${Number(v)}% ${getPositionYPercent(draftBackgroundOptions.position)}%`
                                   )
                                 }
                                 onReset={() =>
                                   updateCustomBgOption(
                                     "position",
-                                    `50% ${getPositionYPercent(
-                                      draftBackgroundOptions.position
-                                    )}%`
+                                    `50% ${getPositionYPercent(draftBackgroundOptions.position)}%`
                                   )
                                 }
                               />
@@ -1496,17 +1529,13 @@ export function FabPanelApp() {
                                 onChange={(v) =>
                                   updateCustomBgOption(
                                     "position",
-                                    `${getPositionXPercent(
-                                      draftBackgroundOptions.position
-                                    )}% ${Number(v)}%`
+                                    `${getPositionXPercent(draftBackgroundOptions.position)}% ${Number(v)}%`
                                   )
                                 }
                                 onReset={() =>
                                   updateCustomBgOption(
                                     "position",
-                                    `${getPositionXPercent(
-                                      draftBackgroundOptions.position
-                                    )}% 50%`
+                                    `${getPositionXPercent(draftBackgroundOptions.position)}% 50%`
                                   )
                                 }
                               />
@@ -1556,10 +1585,8 @@ export function FabPanelApp() {
                           <Card>
                             <label style={rowStyle}>
                               <div style={inlineControlStyle}>
-                                <Icon icon="mdi:wand" height={24} color="#66cdaa" aria-hidden="true" />
-                                <span style={fieldLabelStyle}>
-                                  {t("colorMatch")}
-                                </span>
+                                <Icon icon="lucide:sparkles" height={24} color="#66cdaa" aria-hidden="true" />
+                                <span style={fieldLabelStyle}>{t("colorMatch")}</span>
                               </div>
                               <button
                                 type="button"
@@ -1622,10 +1649,7 @@ export function FabPanelApp() {
                 <FooterButton
                   onClick={onExportClick}
                   disabled={theme !== "custom"}
-                  style={{
-                    ...footerButtonStyle,
-                    ...disabledControlStyle(theme === "custom")
-                  }}
+                  style={{ ...footerButtonStyle, ...disabledControlStyle(theme === "custom") }}
                   icon="upload"
                   label={t("exportTheme")}
                 />
@@ -1648,18 +1672,13 @@ export function FabPanelApp() {
               <div style={{ ...rowStyle, gap: 8 }}>
                 <FooterButton
                   onClick={resetEditingThemeDraft}
-                  style={{
-                    ...footerButtonStyle
-                  }}
+                  style={footerButtonStyle}
                   icon="rotate-ccw"
                   label={t("reset")}
                 />
                 <FooterButton
                   onClick={onSaveClick}
-                  style={{
-                    ...footerButtonStyle,
-                    backgroundColor: "#1976d2"
-                  }}
+                  style={{ ...footerButtonStyle, backgroundColor: "#1976d2" }}
                   icon="save"
                   label={t("save")}
                 />
@@ -1679,11 +1698,7 @@ export function FabPanelApp() {
                 <FooterButton
                   className="pro-button"
                   onClick={onProClick}
-                  style={{
-                    ...proButtonStyle,
-                    display: "flex",
-                    justifyContent: "center"
-                  }}
+                  style={{ ...proButtonStyle, display: "flex", justifyContent: "center" }}
                   icon="assets/pro.gif"
                   label={t("upgradePro")}
                 />
@@ -1717,7 +1732,7 @@ const themeCardStyle = (color: string, active: boolean) => ({
   height: 100,
   backgroundColor: color,
   border: "none",
-  borderRadius: "12px",
+  borderRadius: 12,
   cursor: "pointer",
   boxShadow: active ? "inset 2px 2px 5px rgba(0, 0, 0, 0.2), 0 0 0 3px #66cdaa" : "none",
   transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
@@ -1767,15 +1782,8 @@ function ThemeCard({
       type="button"
       className={`preset-theme-card${className ? ` ${className}` : ""}`}
       onClick={onClick}
-      style={{
-        ...themeCardStyle(color, active),
-        backgroundColor: "transparent",
-        cursor: "pointer"
-      }}>
-      <div
-        className="preset-theme-card__bg"
-        style={{ background: themeCardBg(color) }}
-      />
+      style={{ ...themeCardStyle(color, active), backgroundColor: "transparent", cursor: "pointer" }}>
+      <div className="preset-theme-card__bg" style={{ background: themeCardBg(color) }} />
       <span className="preset-theme-card__emoji">{emoji}</span>
       <span className="preset-theme-card__label">{label}</span>
     </button>
@@ -1817,15 +1825,10 @@ function FooterButton({
   return (
     <button type="button" {...buttonProps}>
       <div style={iconLabelStyle}>
-        {icon.includes("assets") ? (
-          <img
-            src={chrome.runtime.getURL(icon)}
-            draggable="false"
-            style={{ height: 16 }}
-          />
-        ) : (
-          <Icon icon={`lucide:${icon}`} height={16} aria-hidden="true" />
-        )}
+        {icon.includes("assets")
+          ? <img src={chrome.runtime.getURL(icon)} draggable="false" style={{ height: 16 }} />
+          : <Icon icon={`lucide:${icon}`} height={16} aria-hidden="true" />
+        }
         <span>{label}</span>
       </div>
     </button>
@@ -1855,16 +1858,13 @@ function ColorSettingCard({
             value={value || "#000000"}
             onChange={(e) => onChange(e.target.value)}
             className="color-picker"
-            style={colorInputStyle}
+            style={{ ...controlButtonStyle, padding: 4 }}
           />
           <button
             type="button"
             onClick={onReset}
             disabled={!canReset}
-            style={{
-              ...controlButtonStyle,
-              ...disabledControlStyle(canReset)
-            }}>
+            style={{ ...controlButtonStyle, ...disabledControlStyle(canReset) }}>
             {t("reset")}
           </button>
         </div>
@@ -1899,10 +1899,7 @@ function RangeControl({
               type="button"
               onClick={onReset}
               disabled={disabled}
-              style={{
-                ...controlButtonStyle,
-                ...disabledControlStyle(!disabled)
-              }}>
+              style={{ ...controlButtonStyle, ...disabledControlStyle(!disabled) }}>
               {t("reset")}
             </button>
           )}

@@ -92,6 +92,9 @@
   "accent": {
     "message": "강조색"
   },
+  "removeBG": {
+    "message": "AI 배경 제거"
+  },
   "colorMatch": {
     "message": "AI 컬러 매칭"
   },
@@ -182,11 +185,17 @@
   "place_todoWidget": {
     "message": "할 일을 입력하세요..."
   },
+  "loading_removeBG": {
+    "message": "AI 배경 제거 진행 중..."
+  },
+  "loading_colorMatch": {
+    "message": "AI 컬러 매칭 진행 중..."
+  },
   "alert_timerExpired": {
     "message": "설정한 타이머가 종료되었습니다."
   },
-  "error_fileNotSelected": {
-    "message": "먼저 파일을 선택해 주세요."
+  "error_fileRequired": {
+    "message": "먼저 파일을 업로드해 주세요."
   },
   "error_fileExceed": {
     "message": "10MB보다 작은 파일을 업로드해 주세요."
@@ -195,7 +204,10 @@
     "message": "올바른 파일을 업로드해 주세요."
   },
   "error_checkoutFail": {
-    "message": "결제창을 열 수 없습니다. 다시 시도해 주세요."
+    "message": "결제창을 열 수 없습니다. 잠시 후에 다시 시도해 주세요."
+  },
+  "error_removeBG": {
+    "message": "AI 배경 제거가 실패했습니다. 잠시 후에 다시 시도해 주세요."
   },
   "success_themeExport": {
     "message": "커스텀 테마를 내보냈습니다."
@@ -212,6 +224,9 @@
   "success_themeDuplicate": {
     "message": "커스텀 테마를 복제했습니다."
   },
+  "success_removeBG": {
+    "message": "AI 배경 제거를 적용했습니다."
+  },
   "success_colorMatch": {
     "message": "AI 컬러 매칭을 적용했습니다."
   },
@@ -223,6 +238,9 @@
   },
   "pro_animatedSticker": {
     "message": "움직이는 스티커를 사용하려면 Pro로 업그레이드하세요."
+  },
+  "pro_removeBG": {
+    "message": "AI 배경 제거를 사용하려면 Pro로 업그레이드하세요."
   },
   "pro_colorMatch": {
     "message": "AI 컬러 매칭을 사용하려면 Pro로 업그레이드하세요."

@@ -40,7 +40,8 @@ const isHttpsUrl = (value: unknown) => {
   }
 }
 
-const isImageSource = (value: unknown) => typeof value === "string" && IMAGE_SOURCE_URLS.has(value)
+const isImageSource = (value: unknown) =>
+  typeof value === "string" && IMAGE_SOURCE_URLS.has(value)
 
 const getContentLength = (response: Response) => {
   const value = Number(response.headers.get("content-length") || 0)
@@ -139,9 +140,7 @@ const getAuthSessionSnapshot = async () => {
   const snapshot = result[AUTH_SESSION_STORAGE_KEY]
 
   if (
-    !snapshot ||
-    typeof snapshot !== "object" ||
-    typeof snapshot.displayName !== "string" ||
+    !snapshot || typeof snapshot !== "object" ||
     typeof snapshot.uid !== "string" ||
     typeof snapshot.premiumStatus !== "string"
   ) {
@@ -149,9 +148,9 @@ const getAuthSessionSnapshot = async () => {
   }
 
   return {
-    checkedAt: typeof snapshot.checkedAt === "number" ? snapshot.checkedAt : 0,
-    displayName: snapshot.displayName,
-    email: typeof snapshot.email === "string" ? snapshot.email : "",
+    checkedAt: Number(snapshot.checkedAt) || 0,
+    displayName: String(snapshot.displayName || ""),
+    email: String(snapshot.email || ""),
     premiumStatus: snapshot.premiumStatus as PremiumStatus,
     uid: snapshot.uid
   } satisfies AuthSessionSnapshot
@@ -350,7 +349,7 @@ const fetchImageAsDataUrl = async (
 
   if (contentType.includes("application/json")) {
     const data = await response.json()
-    const resolvedImageUrl = typeof data?.url === "string" ? data.url : ""
+    const resolvedImageUrl = data.url
 
     if (!isHttpsUrl(resolvedImageUrl)) {
       sendResponse({ success: false })
@@ -382,11 +381,11 @@ const fetchImageAsDataUrl = async (
 }
 
 const openCheckout = async (
-  idToken: unknown,
+  idToken: string,
   sendResponse: (response?: unknown) => void
 ) => {
   try {
-    if (typeof idToken !== "string" || idToken.length < 100) {
+    if (idToken.length < 100) {
       sendResponse({ success: false, error: "Invalid token" })
       return
     }
@@ -405,7 +404,7 @@ const openCheckout = async (
     }
 
     const data = await response.json()
-    const checkoutUrl = typeof data?.checkoutUrl === "string" ? data.checkoutUrl : ""
+    const checkoutUrl = data.checkoutUrl
 
     if (!checkoutUrl || !isHttpsUrl(checkoutUrl)) {
       sendResponse({ success: false, error: "Checkout URL missing" })
@@ -416,6 +415,56 @@ const openCheckout = async (
     sendResponse({ success: true })
   } catch (error) {
     sendResponse({ success: false, error: "Checkout request failed" })
+  }
+}
+
+const blobToDataUrl = (blob: Blob) =>
+  new Promise<string>((resolve) => {
+    const reader = new FileReader()
+    reader.onloadend = () => resolve(reader.result as string)
+    reader.readAsDataURL(blob)
+  })
+
+const sanitizeImagePng = async (blob: Blob) => {
+  const image = await createImageBitmap(blob, { imageOrientation: "from-image" })
+  const canvas = new OffscreenCanvas(image.width, image.height)
+  const context = canvas.getContext("2d")
+
+  if (!context) throw new Error("Canvas unavailable")
+
+  context.drawImage(image, 0, 0)
+  image.close()
+
+  const pngBlob = await canvas.convertToBlob({ type: "image/png" })
+  const nonce = crypto.randomUUID()
+  const nonceBlob = new Blob([nonce], { type: "text/plain" })
+
+  return new Blob([pngBlob, nonceBlob], { type: "image/png" })
+}
+
+const removeBackgroundImage = async (
+  imageUrl: string,
+  sendResponse: (response?: unknown) => void
+) => {
+  try {
+    const response = await fetch(imageUrl)
+    const blob = await response.blob()
+    const requestBlob = await sanitizeImagePng(blob)
+
+    const formData = new FormData()
+    formData.append("image", requestBlob, "image.png")
+
+    const res = await fetch("https://clearbackdrop.com/api/v1/remove-background", {
+      method: "POST",
+      body: formData
+    })
+
+    if (!res.ok) throw new Error(`Remove background failed: ${res.status}`)
+
+    const result = await res.blob()
+    sendResponse({ success: true, dataUrl: await blobToDataUrl(result) })
+  } catch (error) {
+    sendResponse({ success: false, error: error.message })
   }
 }
 
@@ -447,6 +496,11 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
 
   if (message.type === "OPEN_CHECKOUT") {
     void openCheckout(message.idToken, sendResponse)
+    return true
+  }
+
+  if (message.type === "REMOVE_BACKGROUND_IMAGE") {
+    void removeBackgroundImage(message.imageUrl, sendResponse)
     return true
   }
 

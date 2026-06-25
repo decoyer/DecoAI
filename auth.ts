@@ -92,9 +92,7 @@ export const getAuthSessionSnapshot = async () => {
   const snapshot = result[AUTH_SESSION_STORAGE_KEY]
 
   if (
-    !snapshot ||
-    typeof snapshot !== "object" ||
-    typeof snapshot.displayName !== "string" ||
+    !snapshot || typeof snapshot !== "object" ||
     typeof snapshot.uid !== "string" ||
     typeof snapshot.premiumStatus !== "string"
   ) {
@@ -102,16 +100,14 @@ export const getAuthSessionSnapshot = async () => {
   }
 
   const authSessionSnapshot: AuthSessionSnapshot = {
-    checkedAt: typeof snapshot.checkedAt === "number" ? snapshot.checkedAt : 0,
-    displayName: snapshot.displayName,
-    email: typeof snapshot.email === "string" ? snapshot.email : "",
+    checkedAt: Number(snapshot.checkedAt) || 0,
+    displayName: String(snapshot.displayName || ""),
+    email: String(snapshot.email || ""),
     premiumStatus: snapshot.premiumStatus as PremiumStatus,
     uid: snapshot.uid
   }
 
-  if (typeof snapshot.googleAccessToken === "string" || typeof snapshot.idToken === "string") {
-    await chrome.storage.local.set({ [AUTH_SESSION_STORAGE_KEY]: authSessionSnapshot })
-  }
+  await chrome.storage.local.set({ [AUTH_SESSION_STORAGE_KEY]: authSessionSnapshot })
 
   return authSessionSnapshot
 }

@@ -208,9 +208,7 @@ export const sanitizeColor = (value: unknown) => {
 
 export const sanitizeCustomBgUrl = (value: unknown) => {
   if (typeof value !== "string" || !value) return ""
-  return /^data:image\/(?:png|jpe?g|gif|webp|avif);base64,/i.test(value)
-    ? value
-    : ""
+  return /^data:image\/(?:png|jpe?g|gif|webp|avif);base64,/i.test(value) ? value : ""
 }
 
 export const sanitizePosition = (value: unknown) => {
@@ -219,12 +217,7 @@ export const sanitizePosition = (value: unknown) => {
     /^(-?\d+(?:\.\d+)?)%\s+(-?\d+(?:\.\d+)?)%$/
   )
   if (percentMatch) {
-    return `${clampNumber(percentMatch[1], 0, 100, 50)}% ${clampNumber(
-      percentMatch[2],
-      0,
-      100,
-      50
-    )}%`
+    return `${clampNumber(percentMatch[1], 0, 100, 50)}% ${clampNumber(percentMatch[2], 0, 100, 50)}%`
   }
 
   return DEFAULT_CUSTOM_BG_OPTIONS.position
@@ -266,10 +259,12 @@ export const sanitizeCustomBgOptions = (
 export const renderImageToCanvas = async (
   imageSource: string,
   options?: Partial<CustomBgOptions>,
-  maxSize = 256
+  maxSize = 256,
+  backgroundColor = ""
 ) => {
   const imageUrl = sanitizeCustomBgUrl(imageSource)
   const imageOptions = sanitizeCustomBgOptions(options)
+  const canvasBgColor = sanitizeColor(backgroundColor)
   const position = getSanitizedPositionPercentPair(imageOptions.position)
 
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -283,25 +278,34 @@ export const renderImageToCanvas = async (
   canvas.width = maxSize
   canvas.height = maxSize
 
+  const sourceCanvas = document.createElement("canvas")
+  sourceCanvas.width = maxSize
+  sourceCanvas.height = maxSize
+
   const context = canvas.getContext("2d")
-  const scale = Math.max(
-    canvas.width / image.naturalWidth,
-    canvas.height / image.naturalHeight
-  )
+  const sourceContext = sourceCanvas.getContext("2d")
+  const scale = Math.max(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight)
   const drawWidth = image.naturalWidth * scale
   const drawHeight = image.naturalHeight * scale
   const drawX = (canvas.width - drawWidth) * (position.x / 100)
   const drawY = (canvas.height - drawHeight) * (position.y / 100)
 
+  sourceContext.clearRect(0, 0, sourceCanvas.width, sourceCanvas.height)
+  if (canvasBgColor) {
+    sourceContext.fillStyle = canvasBgColor
+    sourceContext.fillRect(0, 0, sourceCanvas.width, sourceCanvas.height)
+  }
+  sourceContext.save()
+  if (imageOptions.scaleX === -1) {
+    sourceContext.translate(sourceCanvas.width, 0)
+    sourceContext.scale(-1, 1)
+  }
+  sourceContext.drawImage(image, drawX, drawY, drawWidth, drawHeight)
+  sourceContext.restore()
+
   context.clearRect(0, 0, canvas.width, canvas.height)
   context.filter = `invert(${imageOptions.invert}) grayscale(${imageOptions.grayscale}) blur(${imageOptions.blur}px) brightness(${imageOptions.brightness})`
-  context.save()
-  if (imageOptions.scaleX === -1) {
-    context.translate(canvas.width, 0)
-    context.scale(-1, 1)
-  }
-  context.drawImage(image, drawX, drawY, drawWidth, drawHeight)
-  context.restore()
+  context.drawImage(sourceCanvas, 0, 0)
   context.filter = "none"
 
   return canvas
@@ -339,9 +343,7 @@ export const parseImportedThemes = (
 
   const themes = Array.isArray(data.customThemes) ? data.customThemes : []
 
-  return themes.map((theme, index) =>
-    normalizeCustomTheme(theme, getFallbackName(index))
-  )
+  return themes.map((theme, index) => normalizeCustomTheme(theme, getFallbackName(index)))
 }
 
 export const createThemeExportBlob = (themeData: CustomTheme) =>

@@ -413,7 +413,7 @@ const mountToastContainer = () => {
     createElement(ToastContainer, {
       position: "top-right",
       theme: "colored",
-      autoClose: 1500,
+      autoClose: 2000,
       closeOnClick: true,
       pauseOnFocusLoss: false,
       newestOnTop: true,
@@ -1032,10 +1032,7 @@ function TimerWidgetContent({ widgetId }: { widgetId: string }) {
         timerRemainingSeconds: 0,
         timerRunning: false
       }))
-      chrome.runtime.sendMessage({
-        type: "TIMER_EXPIRED",
-        widgetId
-      })
+      chrome.runtime.sendMessage({ type: "TIMER_EXPIRED", widgetId })
     }
   })
 
@@ -1288,8 +1285,10 @@ function StopwatchWidgetContent({ widgetId }: { widgetId: string }) {
 
 function PhotoWidgetContent({
   widgetId,
+  isRemovingBG = false,
 }: {
   widgetId: string
+  isRemovingBG?: boolean
 }) {
   const uploadRef = useRef<HTMLInputElement>(null)
   const [photoState, setPhotoState] = useStorage<PhotoWidgetState>(
@@ -1354,11 +1353,13 @@ function PhotoWidgetContent({
           src: imageUrl,
           draggable: false
         }),
-        createElement(
-          "div",
-          { className: "decoai-photo-widget-upload-overlay" },
-          uploadButton
-        )
+        !isRemovingBG
+          ? createElement(
+            "div",
+            { className: "decoai-photo-widget-upload-overlay" },
+            uploadButton
+          )
+          : null
       )
       : createElement(
         "div",
@@ -1390,15 +1391,17 @@ function WidgetOverlayApp() {
   const [editingWidgetId, setEditingWidgetId] = useState<string | null>(null)
   const [titleEditingWidgetId, setTitleEditingWidgetId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState("")
+  const [removingBGWidgetIds, setRemovingBGWidgetIds] = useState<Record<string, boolean>>({})
+  const [selectedTarget, setSelectedTarget] = useState<HTMLDivElement | null>(null)
   const widgetRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const removeBGToastIdsRef = useRef<Record<string, ReturnType<typeof toast.loading>>>({})
   const liveFrameRef = useRef<Partial<WidgetFrameMap>>({})
   const interactionStartFrameRef = useRef<WidgetFrame | null>(null)
   const layout = { ...DEFAULT_WIDGET_LAYOUT, ...(previewLayout || layoutOptions) }
   const visibleWidgetItems = useMemo(
-    () =>
-      (widgetItems || DEFAULT_WIDGET_INSTANCES).filter(
-        (item) => (enabledMap?.[item.type] ?? DEFAULT_WIDGET_ENABLED[item.type]) !== false
-      ),
+    () => (widgetItems || DEFAULT_WIDGET_INSTANCES).filter(
+      (item) => (enabledMap?.[item.type] ?? DEFAULT_WIDGET_ENABLED[item.type]) !== false
+    ),
     [enabledMap, widgetItems]
   )
   const frames = useMemo(
@@ -1416,7 +1419,10 @@ function WidgetOverlayApp() {
       ),
     [frameMap, visibleWidgetItems]
   )
-  const selectedTarget = editingWidgetId ? widgetRefs.current[editingWidgetId] ?? null : null
+  React.useLayoutEffect(() => {
+    setSelectedTarget(editingWidgetId ? widgetRefs.current[editingWidgetId] ?? null : null)
+  }, [editingWidgetId, visibleWidgetItems])
+  const selectedWidget = visibleWidgetItems.find((item) => item.id === editingWidgetId)
 
   React.useEffect(() => {
     const items = widgetItems || DEFAULT_WIDGET_INSTANCES
@@ -1430,16 +1436,13 @@ function WidgetOverlayApp() {
         const photoState = await localStorageInstance.get<PhotoWidgetState>(
           `${PHOTO_WIDGET_STATE_STORAGE_KEY}:${item.id}`
         )
-        if (isAnimatedBgUrl(photoState?.imageUrl || "")) {
-          removablePhotoWidgetIds.push(item.id)
-        }
+        if (isAnimatedBgUrl(photoState?.imageUrl || "")) removablePhotoWidgetIds.push(item.id)
       }
 
       if (!hasMultipleWidgets(items) && removablePhotoWidgetIds.length === 0) return
 
       const premiumStatus = await getPremiumStatus()
-      if (premiumStatus.isPremium) return
-      if (!premiumStatus.isChecked) return
+      if (premiumStatus.isPremium || !premiumStatus.isChecked) return
 
       const removablePhotoWidgetIdSet = new Set(removablePhotoWidgetIds)
       const normalizedItems = normalizeCustomWidgets(items).filter(
@@ -1475,16 +1478,9 @@ function WidgetOverlayApp() {
   React.useEffect(() => {
     const updateDarkMode = () => setIsDarkMode(isWidgetDarkMode())
     const observer = new MutationObserver(updateDarkMode)
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class", "data-mode"]
-    })
-    if (document.body) {
-      observer.observe(document.body, {
-        attributes: true,
-        attributeFilter: ["class"]
-      })
-    }
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-mode"] })
+    if (document.body) observer.observe(document.body, { attributes: true, attributeFilter: ["class"] })
+
     updateDarkMode()
     return () => observer.disconnect()
   }, [])
@@ -1493,12 +1489,7 @@ function WidgetOverlayApp() {
     const onDocumentPointerDown = (event: PointerEvent) => {
       if (!editingWidgetId) return
       const target = event.target as Element | null
-      if (
-        target?.closest(".decoai-widget-card") ||
-        target?.closest(".moveable-control-box")
-      ) {
-        return
-      }
+      if (target?.closest(".decoai-widget-card") || target?.closest(".moveable-control-box")) return
       setEditingWidgetId(null)
     }
     document.addEventListener("pointerdown", onDocumentPointerDown, { capture: true })
@@ -1575,11 +1566,7 @@ function WidgetOverlayApp() {
     if (sourceFrame) {
       setFrameMap((prev) => ({
         ...(prev || {}),
-        [copiedId]: {
-          ...sourceFrame,
-          x: sourceFrame.x + 32,
-          y: sourceFrame.y + 32
-        }
+        [copiedId]: { ...sourceFrame, x: sourceFrame.x + 32, y: sourceFrame.y + 32 }
       }))
     }
     setEditingWidgetId(copiedId)
@@ -1596,6 +1583,17 @@ function WidgetOverlayApp() {
     if (stateKey) {
       const stateStorage = item.type === "photo" ? localStorageInstance : storage
       void stateStorage.remove(stateKey)
+    }
+    if (item.type === "photo") {
+      const toastId = removeBGToastIdsRef.current[item.id]
+      if (toastId) {
+        toast.dismiss(toastId)
+        delete removeBGToastIdsRef.current[item.id]
+      }
+      setRemovingBGWidgetIds((prev) => {
+        const { [item.id]: _removed, ...next } = prev
+        return next
+      })
     }
     if (editingWidgetId === item.id) setEditingWidgetId(null)
     if (titleEditingWidgetId === item.id) setTitleEditingWidgetId(null)
@@ -1625,6 +1623,83 @@ function WidgetOverlayApp() {
     )
   }
 
+  const onRemoveBGClick = async (item: WidgetInstance) => {
+    if (removingBGWidgetIds[item.id]) return
+
+    const photoState = await localStorageInstance.get<PhotoWidgetState>(
+      `${PHOTO_WIDGET_STATE_STORAGE_KEY}:${item.id}`
+    )
+    const imageUrl = sanitizeCustomBgUrl(photoState?.imageUrl)
+    if (!imageUrl) {
+      toast.error(t("error_fileRequired"))
+      return
+    }
+
+    const { isPremium, isChecked } = await getPremiumStatus()
+    if (!isPremium) {
+      if (isChecked) toast.error(t("pro_removeBG"))
+      return
+    }
+
+    const toastId = toast.loading(t("loading_removeBG"))
+    removeBGToastIdsRef.current[item.id] = toastId
+    setRemovingBGWidgetIds((prev) => ({ ...prev, [item.id]: true }))
+
+    try {
+      const result = await new Promise<string>((resolve, reject) => {
+        chrome.runtime.sendMessage(
+          { type: "REMOVE_BACKGROUND_IMAGE", imageUrl },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              reject(new Error(chrome.runtime.lastError.message))
+              return
+            }
+            if (!response?.success) {
+              reject(new Error(response?.error || "Failed to remove background"))
+              return
+            }
+            resolve(response.dataUrl)
+          }
+        )
+      })
+
+      const latestPhotoState = await localStorageInstance.get<PhotoWidgetState>(
+        `${PHOTO_WIDGET_STATE_STORAGE_KEY}:${item.id}`
+      )
+      if (!latestPhotoState) return
+
+      await localStorageInstance.set(`${PHOTO_WIDGET_STATE_STORAGE_KEY}:${item.id}`, { imageUrl: result })
+
+      toast.update(toastId, {
+        render: t("success_removeBG"),
+        type: "success",
+        isLoading: false,
+        autoClose: null,
+        closeOnClick: null
+      })
+    } catch {
+      const latestPhotoState = await localStorageInstance.get<PhotoWidgetState>(
+        `${PHOTO_WIDGET_STATE_STORAGE_KEY}:${item.id}`
+      )
+      if (!latestPhotoState) return
+
+      toast.update(toastId, {
+        render: t("error_removeBG"),
+        type: "error",
+        isLoading: false,
+        autoClose: null,
+        closeOnClick: null
+      })
+    }
+    finally {
+      delete removeBGToastIdsRef.current[item.id]
+      setRemovingBGWidgetIds((prev) => {
+        const { [item.id]: _removed, ...next } = prev
+        return next
+      })
+    }
+  }
+
   const startTitleEditing = (item: WidgetInstance) => {
     const widgetMeta = WIDGET_LIST.find((widget) => widget.key === item.type)
     setEditingWidgetId(item.id)
@@ -1651,6 +1726,7 @@ function WidgetOverlayApp() {
       const widgetMeta = WIDGET_LIST.find((widget) => widget.key === item.type)
       if (!widgetMeta) return null
       const isPhotoWidget = item.type === "photo"
+      const isRemovingBG = isPhotoWidget && Boolean(removingBGWidgetIds[item.id])
       const isTitleEditing = titleEditingWidgetId === item.id
       return createElement(
         "div",
@@ -1738,16 +1814,17 @@ function WidgetOverlayApp() {
               {
                 type: "button",
                 className: "decoai-widget-card__action decoai-widget-card__edit",
+                style: isRemovingBG ? { pointerEvents: "none" } : undefined,
                 onPointerDown: (e) => e.stopPropagation(),
                 onPointerUp: (e) => e.stopPropagation(),
                 onClick: (e) => {
                   e.preventDefault()
                   e.stopPropagation()
-                  isPhotoWidget ? "AI 배경 제거" : startTitleEditing(item)
+                  isPhotoWidget ? void onRemoveBGClick(item) : startTitleEditing(item)
                 }
               },
               createElement(Icon, {
-                icon: isPhotoWidget ? "mdi:wand" : "lucide:square-pen",
+                icon: isRemovingBG ? "line-md:loading-twotone-loop" : `lucide:${isPhotoWidget ? "sparkles" : "square-pen"}`,
                 height: 16,
                 "aria-hidden": "true"
               })
@@ -1789,14 +1866,14 @@ function WidgetOverlayApp() {
         item.type === "dday" ? createElement(DdayWidgetContent, { widgetId: item.id }) : null,
         item.type === "timer" ? createElement(TimerWidgetContent, { widgetId: item.id }) : null,
         item.type === "stopwatch" ? createElement(StopwatchWidgetContent, { widgetId: item.id }) : null,
-        item.type === "photo" ? createElement(PhotoWidgetContent, { widgetId: item.id }) : null
+        item.type === "photo" ? createElement(PhotoWidgetContent, { widgetId: item.id, isRemovingBG }) : null
       )
     }),
     createElement(Moveable, {
       target: selectedTarget,
       draggable: true,
       resizable: true,
-      rotatable: true,
+      rotatable: selectedWidget?.type === "photo",
       snapRotationDegrees: WIDGET_ROTATION_DEGREES,
       snapRotationThreshold: 4,
       checkInput: true,

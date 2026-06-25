@@ -92,6 +92,9 @@
   "accent": {
     "message": "Accent"
   },
+  "removeBG": {
+    "message": "AI Cutout"
+  },
   "colorMatch": {
     "message": "AI Color Match"
   },
@@ -182,11 +185,17 @@
   "place_todoWidget": {
     "message": "Add a new task..."
   },
+  "loading_removeBG": {
+    "message": "Running AI Cutout..."
+  },
+  "loading_colorMatch": {
+    "message": "Running AI Color Match..."
+  },
   "alert_timerExpired": {
     "message": "Your timer has finished."
   },
-  "error_fileNotSelected": {
-    "message": "Please select a file first."
+  "error_fileRequired": {
+    "message": "Please upload a file first."
   },
   "error_fileExceed": {
     "message": "Please upload a file smaller than 10MB."
@@ -195,7 +204,10 @@
     "message": "Please upload a valid file."
   },
   "error_checkoutFail": {
-    "message": "Unable to open checkout. Please try again."
+    "message": "Unable to open checkout. Please try again later."
+  },
+  "error_removeBG": {
+    "message": "Unable to complete AI Cutout. Please try again later."
   },
   "success_themeExport": {
     "message": "Theme exported successfully."
@@ -212,6 +224,9 @@
   "success_themeDuplicate": {
     "message": "Theme duplicated successfully."
   },
+  "success_removeBG": {
+    "message": "AI Cutout completed successfully."
+  },
   "success_colorMatch": {
     "message": "AI Color Match completed successfully."
   },
@@ -223,6 +238,9 @@
   },
   "pro_animatedSticker": {
     "message": "Upgrade to Pro for Animated Stickers."
+  },
+  "pro_removeBG": {
+    "message": "Upgrade to Pro for AI Cutout."
   },
   "pro_colorMatch": {
     "message": "Upgrade to Pro for AI Color Match."
