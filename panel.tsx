@@ -8,23 +8,11 @@ import {
   type DragStartEvent,
   type Modifier
 } from "@dnd-kit/core"
-import {
-  arrayMove,
-  rectSortingStrategy,
-  SortableContext,
-  useSortable
-} from "@dnd-kit/sortable"
+import { arrayMove, rectSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import { Icon } from "@iconify/react"
 import { Vibrant } from "node-vibrant/browser"
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type ReactNode
-} from "react"
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
 import { toast } from "react-toastify"
 
 import { Storage } from "@plasmohq/storage"

@@ -1,10 +1,4 @@
-import {
-  getAuth,
-  GoogleAuthProvider,
-  onAuthStateChanged,
-  signInWithCredential,
-  signOut
-} from "firebase/auth/web-extension"
+import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithCredential, signOut } from "firebase/auth/web-extension"
 
 import type { User } from "firebase/auth"
 import { app } from "./firebase"

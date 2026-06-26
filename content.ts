@@ -6,13 +6,7 @@ import StarterKit from "@tiptap/starter-kit"
 import { differenceInCalendarDays, formatISO, parseISO, startOfDay } from "date-fns"
 import { Vibrant } from "node-vibrant/browser"
 import type { PlasmoCSConfig } from "plasmo"
-import React, {
-  createElement,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties
-} from "react"
+import React, { createElement, useMemo, useRef, useState, type CSSProperties } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import Moveable from "react-moveable"
 import { useStopwatch, useTimer } from "react-timer-hook"
@@ -21,11 +15,7 @@ import { toast, ToastContainer } from "react-toastify"
 import { Storage } from "@plasmohq/storage"
 import { useStorage } from "@plasmohq/storage/hook"
 
-import {
-  AUTH_SESSION_STORAGE_KEY,
-  getAuthSessionSnapshot,
-  getVerifiedPremiumStatus
-} from "./auth"
+import { AUTH_SESSION_STORAGE_KEY, getAuthSessionSnapshot, getVerifiedPremiumStatus } from "./auth"
 import { FabPanelApp } from "./panel"
 import {
   clampNumber,
