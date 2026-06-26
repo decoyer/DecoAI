@@ -234,11 +234,7 @@ const getPremiumStatus = async ({
   forceRefresh = false,
   interactiveFallback = false
 } = {}) => {
-  if (
-    !forceRefresh &&
-    premiumCache &&
-    Date.now() - premiumCache.checkedAt < PREMIUM_REFRESH_MS
-  ) {
+  if (!forceRefresh && premiumCache && Date.now() - premiumCache.checkedAt < PREMIUM_REFRESH_MS) {
     return { isPremium: premiumCache.value, isChecked: true }
   }
 
