@@ -195,7 +195,7 @@ function IndexPopup() {
               <label style={rowStyle}>
                 <div style={itemLabelStyle}>
                   <Icon icon="lucide:wallpaper" color="#66cdaa" height={16} aria-hidden="true" />
-                  <span style={{ lineHeight: 1 }}>{t("themeSettings")}</span>
+                  <span style={{ lineHeight: 1 }}>{t("theme")} {t("setting")}</span>
                 </div>
                 <ToggleSwitch
                   checked={!themeHidden}
@@ -206,7 +206,7 @@ function IndexPopup() {
               <label style={rowStyle}>
                 <div style={itemLabelStyle}>
                   <Icon icon="lucide:component" color="#66cdaa" height={16} aria-hidden="true" />
-                  <span style={{ lineHeight: 1 }}>{t("widgetSettings")}</span>
+                  <span style={{ lineHeight: 1 }}>{t("widget")} {t("setting")}</span>
                 </div>
                 <ToggleSwitch
                   checked={!widgetHidden}

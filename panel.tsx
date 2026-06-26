@@ -77,7 +77,7 @@ import {
   type WidgetLayoutOptions
 } from "./utils"
 
-const t = (key: string) => chrome.i18n.getMessage(key)
+const t = (key: string, value?: string) => chrome.i18n.getMessage(key, value)
 const localStorageInstance = new Storage({ area: "local" })
 
 const THEME_LIST = [
@@ -806,17 +806,29 @@ export function FabPanelApp() {
       toast.error(t("error_fileRequired"))
       return
     }
+    if (file.type !== "application/json") {
+      toast.error(t("error_fileInvalid", "JSON"))
+      clearFileInput(importFileRef.current)
+      return
+    }
     if (file.size > MAX_FILE_BYTES) {
       toast.error(t("error_fileExceed"))
       clearFileInput(importFileRef.current)
       return
     }
 
-    const text = await file.text()
-    const imported = parseImportedThemes(text, (index) => `${t("custom")} ${index + 1}`)
+    let imported: CustomTheme[] = []
+    try {
+      const text = await file.text()
+      imported = parseImportedThemes(text, (index) => `${t("custom")} ${index + 1}`)
+    } catch {
+      toast.error(t("error_fileInvalid", "JSON"))
+      clearFileInput(importFileRef.current)
+      return
+    }
 
     if (!imported.length) {
-      toast.error(t("error_fileInvalid"))
+      toast.error(t("error_fileInvalid", "JSON"))
       clearFileInput(importFileRef.current)
       return
     }
@@ -847,6 +859,10 @@ export function FabPanelApp() {
       toast.error(t("error_fileRequired"))
       return
     }
+    if (!file.type.startsWith("image/")) {
+      toast.error(t("error_fileInvalid", "IMG"))
+      return
+    }
     if (file.size > MAX_FILE_BYTES) {
       toast.error(t("error_fileExceed"))
       clearFileInput(importFileRef.current)
@@ -861,7 +877,7 @@ export function FabPanelApp() {
     reader.onload = () => {
       const result = sanitizeCustomBgUrl(reader.result)
       if (!result) {
-        toast.error(t("error_fileInvalid"))
+        toast.error(t("error_fileInvalid", "IMG"))
         clearFileInput(bgUploadRef.current)
         return
       }
@@ -1253,7 +1269,7 @@ export function FabPanelApp() {
           <div style={contentStyle}>
             {panelMode === "widget" && (
               <>
-                <h3 style={centeredHeadingStyle}>{t("widgetSettings")}</h3>
+                <h3 style={centeredHeadingStyle}>{t("widget")} {t("setting")}</h3>
                 <div
                   style={{ ...tabGridStyle, marginTop: 20, gridTemplateColumns: "1fr 1fr" }}>
                   {(["visibility", "layout"] as const).map((tab) => (
@@ -1327,7 +1343,7 @@ export function FabPanelApp() {
             )}
             {panelMode === "theme" && view === "themes" && (
               <>
-                <h3 style={centeredHeadingStyle}>{t("themeSettings")}</h3>
+                <h3 style={centeredHeadingStyle}>{t("theme")} {t("setting")}</h3>
                 <div style={themeSectionStyle}>
                   <div
                     style={{
@@ -1487,14 +1503,15 @@ export function FabPanelApp() {
                         <>
                           <Card>
                             <label style={rowStyle}>
-                              <div style={inlineControlStyle}>
+                              <div style={{ ...inlineControlStyle, gap: 8 }}>
                                 <Icon icon="lucide:sparkles" height={24} color="#66cdaa" aria-hidden="true" />
                                 <span style={fieldLabelStyle}>{t("removeBG")}</span>
                               </div>
                               <button
                                 type="button"
                                 onClick={onRemoveBGClick}
-                                style={controlButtonStyle}>
+                                style={{ ...controlButtonStyle, display: "flex", alignItems: "center" }}>
+                                <Icon icon="lucide:flask-conical" height={16} color="#66cdaa" aria-hidden="true" />
                                 {t("apply")}
                               </button>
                             </label>
@@ -1502,7 +1519,7 @@ export function FabPanelApp() {
                           <Card>
                             <div style={columnControlStyle}>
                               <RangeControl
-                                label={t("imagePositionX")}
+                                label={t("horizontal")}
                                 min={0}
                                 max={100}
                                 step={1}
@@ -1521,7 +1538,7 @@ export function FabPanelApp() {
                                 }
                               />
                               <RangeControl
-                                label={t("imagePositionY")}
+                                label={t("vertical")}
                                 min={0}
                                 max={100}
                                 step={1}
@@ -1542,7 +1559,7 @@ export function FabPanelApp() {
                             </div>
                           </Card>
                           <CheckboxCard
-                            label={t("scaleX")}
+                            label={t("flip")}
                             checked={draftBackgroundOptions.scaleX === -1}
                             onChange={(c) => updateCustomBgOption("scaleX", c ? -1 : 1)}
                           />
@@ -1584,7 +1601,7 @@ export function FabPanelApp() {
                         <>
                           <Card>
                             <label style={rowStyle}>
-                              <div style={inlineControlStyle}>
+                              <div style={{ ...inlineControlStyle, gap: 8 }}>
                                 <Icon icon="lucide:sparkles" height={24} color="#66cdaa" aria-hidden="true" />
                                 <span style={fieldLabelStyle}>{t("colorMatch")}</span>
                               </div>
@@ -1651,13 +1668,13 @@ export function FabPanelApp() {
                   disabled={theme !== "custom"}
                   style={{ ...footerButtonStyle, ...disabledControlStyle(theme === "custom") }}
                   icon="upload"
-                  label={t("exportTheme")}
+                  label={t("export")}
                 />
                 <FooterButton
                   onClick={onImportClick}
                   style={footerButtonStyle}
                   icon="download"
-                  label={t("importTheme")}
+                  label={t("import")}
                 />
                 <input
                   ref={importFileRef}

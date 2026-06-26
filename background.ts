@@ -514,4 +514,15 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
 
     return true
   }
+
+  if (message.type === "STOPWATCH_EXCEED") {
+    chrome.notifications.create(`stopwatch-exceed:${message.widgetId}:${Date.now()}`, {
+      type: "basic",
+      iconUrl: chrome.runtime.getURL("assets/icon.png"),
+      title: "DecoAI",
+      message: t("alert_stopwatchExceed")
+    })
+
+    return true
+  }
 })

@@ -46,6 +46,7 @@ import {
   isAnimatedBgUrl,
   isAnimatedCustomTheme,
   isAnimatedImage,
+  MAX_FILE_BYTES,
   MODEL_ENABLED_STORAGE_KEY,
   PHOTO_WIDGET_STATE_STORAGE_KEY,
   sanitizeColor,
@@ -181,7 +182,7 @@ const THEME_BG_URLS: Partial<Record<ThemeName, string>> = {
   fractal: "https://i.imgur.com/H1rtAbm.png"
 }
 
-const t = (key: string) => chrome.i18n.getMessage(key)
+const t = (key: string, value?: string) => chrome.i18n.getMessage(key, value)
 
 const THEME_STYLE_ID = "ai-theme-style"
 const FAB_STYLE_ID = "decoai-fab-style"
@@ -639,6 +640,7 @@ const normalizeWidgetRotation = (rotation: number) => {
 }
 
 const WIDGET_ROTATION_DEGREES = Array.from({ length: 25 }, (_, index) => index * 15)
+const MAX_STOPWATCH_MILLISECONDS = 60 * 60 * 1000
 
 const isWidgetDarkMode = () => {
   const currentSite = detectCurrentSite()
@@ -1191,13 +1193,31 @@ function StopwatchWidgetContent({ widgetId }: { widgetId: string }) {
   )
   const stopwatchState = { ...DEFAULT_STOPWATCH_WIDGET_STATE, ...state }
   const savedElapsedMilliseconds = getSyncedStopwatchMilliseconds(stopwatchState)
+  const shouldResetSavedStopwatch = savedElapsedMilliseconds >= MAX_STOPWATCH_MILLISECONDS
+  const stopwatchExceedNotifiedRef = React.useRef(false)
   const stopwatch = useStopwatch({
-    autoStart: stopwatchState.stopwatchRunning,
+    autoStart: stopwatchState.stopwatchRunning && !shouldResetSavedStopwatch,
     interval: 10,
-    offsetTimestamp: offsetTimestamp(savedElapsedMilliseconds)
+    offsetTimestamp: offsetTimestamp(shouldResetSavedStopwatch ? 0 : savedElapsedMilliseconds)
   })
 
+  const resetStopwatch = () => {
+    stopwatch.reset(offsetTimestamp(0), false)
+    setState((prev) => ({
+      ...DEFAULT_STOPWATCH_WIDGET_STATE,
+      ...prev,
+      stopwatchElapsedMilliseconds: 0,
+      stopwatchStartedAt: null,
+      stopwatchRunning: false
+    }))
+  }
+
   React.useEffect(() => {
+    if (shouldResetSavedStopwatch) {
+      resetStopwatch()
+      return
+    }
+
     stopwatch.reset(
       offsetTimestamp(getSyncedStopwatchMilliseconds(stopwatchState)),
       stopwatchState.stopwatchRunning
@@ -1205,8 +1225,23 @@ function StopwatchWidgetContent({ widgetId }: { widgetId: string }) {
   }, [
     stopwatchState.stopwatchElapsedMilliseconds,
     stopwatchState.stopwatchRunning,
-    stopwatchState.stopwatchStartedAt
+    stopwatchState.stopwatchStartedAt,
+    shouldResetSavedStopwatch
   ])
+
+  React.useEffect(() => {
+    const elapsedMilliseconds = getStopwatchMilliseconds(stopwatch)
+    if (elapsedMilliseconds < MAX_STOPWATCH_MILLISECONDS) {
+      stopwatchExceedNotifiedRef.current = false
+      return
+    }
+
+    if (!stopwatchExceedNotifiedRef.current && stopwatch.isRunning) {
+      stopwatchExceedNotifiedRef.current = true
+      chrome.runtime.sendMessage({ type: "STOPWATCH_EXCEED", widgetId })
+      resetStopwatch()
+    }
+  }, [stopwatch.totalSeconds, stopwatch.milliseconds, stopwatch.isRunning])
 
   const startStopwatch = () => {
     const elapsedMilliseconds = getStopwatchMilliseconds(stopwatch)
@@ -1229,17 +1264,6 @@ function StopwatchWidgetContent({ widgetId }: { widgetId: string }) {
       ...DEFAULT_STOPWATCH_WIDGET_STATE,
       ...prev,
       stopwatchElapsedMilliseconds: elapsedMilliseconds,
-      stopwatchStartedAt: null,
-      stopwatchRunning: false
-    }))
-  }
-
-  const resetStopwatch = () => {
-    stopwatch.reset(offsetTimestamp(0), false)
-    setState((prev) => ({
-      ...DEFAULT_STOPWATCH_WIDGET_STATE,
-      ...prev,
-      stopwatchElapsedMilliseconds: 0,
       stopwatchStartedAt: null,
       stopwatchRunning: false
     }))
@@ -1301,7 +1325,19 @@ function PhotoWidgetContent({
   const imageUrl = sanitizeCustomBgUrl(photoState?.imageUrl)
 
   const uploadImage = async (file?: File) => {
-    if (!file || !file.type.startsWith("image/")) return
+    if (!file) {
+      toast.error(t("error_fileRequired"))
+      return
+    }
+    if (!file.type.startsWith("image/")) {
+      toast.error(t("error_fileInvalid", "IMG"))
+      return
+    }
+    if (file.size > MAX_FILE_BYTES) {
+      toast.error(t("error_fileExceed"))
+      return
+    }
+
     const animated = await isAnimatedImage(file)
     if (animated) {
       const { isPremium, isChecked } = await getPremiumStatus()
@@ -2512,7 +2548,7 @@ const mountFab = async () => {
       height: 24,
       "aria-hidden": "true"
     }),
-    tooltipText: t("themeSettings"),
+    tooltipText: `${t("theme")} ${t("setting")}`,
     panelView: "theme"
   })
 
@@ -2523,7 +2559,7 @@ const mountFab = async () => {
       height: 24,
       "aria-hidden": "true"
     }),
-    tooltipText: t("widgetSettings"),
+    tooltipText: `${t("widget")} ${t("setting")}`,
     panelView: "widget"
   })
 

@@ -2,26 +2,38 @@
   "setting": {
     "message": "Settings"
   },
-  "account": {
-    "message": "Account"
-  },
-  "general": {
-    "message": "General"
-  },
-  "button": {
-    "message": "Button"
-  },
   "visibility": {
     "message": "Visibility"
+  },
+  "theme": {
+    "message": "Theme"
+  },
+  "widget": {
+    "message": "Widget"
   },
   "models": {
     "message": "Models"
   },
-  "themeSettings": {
-    "message": "Theme Settings"
+  "account": {
+    "message": "Account"
   },
-  "widgetSettings": {
-    "message": "Widget Settings"
+  "profile": {
+    "message": "Profile"
+  },
+  "email": {
+    "message": "Email"
+  },
+  "name": {
+    "message": "Name"
+  },
+  "subscription": {
+    "message": "Subscription"
+  },
+  "status": {
+    "message": "Status"
+  },
+  "plan": {
+    "message": "Plan"
   },
   "addTheme": {
     "message": "Add Theme"
@@ -38,6 +50,15 @@
   "custom": {
     "message": "Custom"
   },
+  "export": {
+    "message": "Export"
+  },
+  "import": {
+    "message": "Import"
+  },
+  "upload": {
+    "message": "Upload"
+  },
   "reset": {
     "message": "Reset"
   },
@@ -50,95 +71,8 @@
   "delete": {
     "message": "Delete"
   },
-  "noteWidget": {
-    "message": "Notes"
-  },
-  "todoWidget": {
-    "message": "To-do List"
-  },
-  "ddayWidget": {
-    "message": "Day Counter"
-  },
-  "timerWidget": {
-    "message": "Timer"
-  },
-  "stopwatchWidget": {
-    "message": "Stopwatch"
-  },
-  "photoWidget": {
-    "message": "Sticker"
-  },
-  "profile": {
-    "message": "Profile"
-  },
-  "name": {
-    "message": "Name"
-  },
-  "email": {
-    "message": "Email"
-  },
-  "subscription": {
-    "message": "Subscription"
-  },
-  "plan": {
-    "message": "Plan"
-  },
-  "status": {
-    "message": "Status"
-  },
-  "text": {
-    "message": "Text"
-  },
-  "accent": {
-    "message": "Accent"
-  },
-  "removeBG": {
-    "message": "AI Cutout"
-  },
-  "colorMatch": {
-    "message": "AI Color Match"
-  },
-  "background": {
-    "message": "BG"
-  },
-  "backgroundColor": {
-    "message": "Color"
-  },
-  "backgroundImage": {
-    "message": "Image"
-  },
-  "upload": {
-    "message": "Upload"
-  },
-  "imagePositionX": {
-    "message": "Horizontal"
-  },
-  "imagePositionY": {
-    "message": "Vertical"
-  },
-  "brightness": {
-    "message": "Brightness"
-  },
-  "blur": {
-    "message": "Blur"
-  },
-  "scaleX": {
-    "message": "Flip"
-  },
-  "invert": {
-    "message": "Invert"
-  },
-  "grayscale": {
-    "message": "Grayscale"
-  },
-  "glassBlur": {
-    "message": "Glass Blur"
-  },
-  "opacity": {
-    "message": "Opacity"
-  },
-  "layout": {
-    "message": "Layout"
+  "general": {
+    "message": "General"
   },
   "title": {
     "message": "Title"
@@ -149,11 +83,56 @@
   "hideFooter": {
     "message": "Hide Footer"
   },
-  "exportTheme": {
-    "message": "Export"
+  "background": {
+    "message": "BG"
   },
-  "importTheme": {
-    "message": "Import"
+  "backgroundColor": {
+    "message": "Color"
+  },
+  "backgroundImage": {
+    "message": "Image"
+  },
+  "removeBG": {
+    "message": "Remove BG"
+  },
+  "horizontal": {
+    "message": "Horizontal"
+  },
+  "vertical": {
+    "message": "Vertical"
+  },
+  "flip": {
+    "message": "Flip"
+  },
+  "brightness": {
+    "message": "Brightness"
+  },
+  "blur": {
+    "message": "Blur"
+  },
+  "invert": {
+    "message": "Invert"
+  },
+  "grayscale": {
+    "message": "Grayscale"
+  },
+  "layout": {
+    "message": "Layout"
+  },
+  "colorMatch": {
+    "message": "Color Match"
+  },
+  "text": {
+    "message": "Text"
+  },
+  "accent": {
+    "message": "Accent"
+  },
+  "opacity": {
+    "message": "Opacity"
+  },
+  "glassBlur": {
+    "message": "Glass Blur"
   },
   "random": {
     "message": "Random"
@@ -179,6 +158,24 @@
   "default": {
     "message": "Default"
   },
+  "noteWidget": {
+    "message": "Notes"
+  },
+  "todoWidget": {
+    "message": "To-do List"
+  },
+  "ddayWidget": {
+    "message": "Day Counter"
+  },
+  "timerWidget": {
+    "message": "Timer"
+  },
+  "stopwatchWidget": {
+    "message": "Stopwatch"
+  },
+  "photoWidget": {
+    "message": "Sticker"
+  },
   "place_noteWidget": {
     "message": "Write a note..."
   },
@@ -186,13 +183,16 @@
     "message": "Add a new task..."
   },
   "loading_removeBG": {
-    "message": "Running AI Cutout..."
+    "message": "Running Remove BG..."
   },
   "loading_colorMatch": {
-    "message": "Running AI Color Match..."
+    "message": "Running Color Match..."
   },
   "alert_timerExpired": {
     "message": "Your timer has finished."
+  },
+  "alert_stopwatchExceed": {
+    "message": "Your stopwatch exceeded 1 hour and has been reset."
   },
   "error_fileRequired": {
     "message": "Please upload a file first."
@@ -201,13 +201,13 @@
     "message": "Please upload a file smaller than 10MB."
   },
   "error_fileInvalid": {
-    "message": "Please upload a valid file."
+    "message": "Please upload a valid $1 file."
   },
   "error_checkoutFail": {
     "message": "Unable to open checkout. Please try again later."
   },
   "error_removeBG": {
-    "message": "Unable to complete AI Cutout. Please try again later."
+    "message": "Unable to complete Remove BG. Please try again later."
   },
   "success_themeExport": {
     "message": "Theme exported successfully."
@@ -225,10 +225,10 @@
     "message": "Theme duplicated successfully."
   },
   "success_removeBG": {
-    "message": "AI Cutout completed successfully."
+    "message": "Remove BG completed successfully."
   },
   "success_colorMatch": {
-    "message": "AI Color Match completed successfully."
+    "message": "Color Match completed successfully."
   },
   "pro_themeLimit": {
     "message": "Upgrade to Pro for Unlimited Theme Presets."
@@ -240,10 +240,10 @@
     "message": "Upgrade to Pro for Animated Stickers."
   },
   "pro_removeBG": {
-    "message": "Upgrade to Pro for AI Cutout."
+    "message": "Upgrade to Pro for Remove BG."
   },
   "pro_colorMatch": {
-    "message": "Upgrade to Pro for AI Color Match."
+    "message": "Upgrade to Pro for Color Match."
   },
   "pro_widgetLimit": {
     "message": "Upgrade to Pro for Multiple Widgets."

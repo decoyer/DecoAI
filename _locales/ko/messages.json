@@ -2,26 +2,38 @@
   "setting": {
     "message": "설정"
   },
-  "account": {
-    "message": "계정"
-  },
-  "general": {
-    "message": "일반"
-  },
-  "button": {
-    "message": "버튼"
-  },
   "visibility": {
     "message": "표시"
+  },
+  "theme": {
+    "message": "테마"
+  },
+  "widget": {
+    "message": "위젯"
   },
   "models": {
     "message": "모델"
   },
-  "themeSettings": {
-    "message": "테마 설정"
+  "account": {
+    "message": "계정"
   },
-  "widgetSettings": {
-    "message": "위젯 설정"
+  "profile": {
+    "message": "프로필"
+  },
+  "email": {
+    "message": "이메일"
+  },
+  "name": {
+    "message": "이름"
+  },
+  "subscription": {
+    "message": "구독"
+  },
+  "status": {
+    "message": "상태"
+  },
+  "plan": {
+    "message": "플랜"
   },
   "addTheme": {
     "message": "테마 추가"
@@ -38,6 +50,15 @@
   "custom": {
     "message": "커스텀"
   },
+  "export": {
+    "message": "내보내기"
+  },
+  "import": {
+    "message": "가져오기"
+  },
+  "upload": {
+    "message": "업로드"
+  },
   "reset": {
     "message": "초기화"
   },
@@ -50,95 +71,8 @@
   "delete": {
     "message": "삭제"
   },
-  "noteWidget": {
-    "message": "메모장"
-  },
-  "todoWidget": {
-    "message": "체크리스트"
-  },
-  "ddayWidget": {
-    "message": "디데이"
-  },
-  "timerWidget": {
-    "message": "타이머"
-  },
-  "stopwatchWidget": {
-    "message": "스톱워치"
-  },
-  "photoWidget": {
-    "message": "스티커"
-  },
-  "profile": {
-    "message": "프로필"
-  },
-  "name": {
-    "message": "이름"
-  },
-  "email": {
-    "message": "이메일"
-  },
-  "subscription": {
-    "message": "구독"
-  },
-  "plan": {
-    "message": "플랜"
-  },
-  "status": {
-    "message": "상태"
-  },
-  "text": {
-    "message": "글자색"
-  },
-  "accent": {
-    "message": "강조색"
-  },
-  "removeBG": {
-    "message": "AI 배경 제거"
-  },
-  "colorMatch": {
-    "message": "AI 컬러 매칭"
-  },
-  "background": {
-    "message": "배경"
-  },
-  "backgroundColor": {
-    "message": "배경색"
-  },
-  "backgroundImage": {
-    "message": "배경 사진"
-  },
-  "upload": {
-    "message": "업로드"
-  },
-  "imagePositionX": {
-    "message": "가로 위치"
-  },
-  "imagePositionY": {
-    "message": "세로 위치"
-  },
-  "brightness": {
-    "message": "밝기 효과"
-  },
-  "blur": {
-    "message": "블러 효과"
-  },
-  "scaleX": {
-    "message": "대칭 이동"
-  },
-  "invert": {
-    "message": "반전 효과"
-  },
-  "grayscale": {
-    "message": "흑백 효과"
-  },
-  "glassBlur": {
-    "message": "유리 효과"
-  },
-  "opacity": {
-    "message": "투명도"
-  },
-  "layout": {
-    "message": "레이아웃"
+  "general": {
+    "message": "일반"
   },
   "title": {
     "message": "제목"
@@ -149,17 +83,62 @@
   "hideFooter": {
     "message": "푸터 숨기기"
   },
-  "exportTheme": {
-    "message": "내보내기"
+  "background": {
+    "message": "배경"
   },
-  "importTheme": {
-    "message": "가져오기"
+  "backgroundColor": {
+    "message": "배경색"
+  },
+  "backgroundImage": {
+    "message": "배경 사진"
+  },
+  "removeBG": {
+    "message": "배경 제거"
+  },
+  "horizontal": {
+    "message": "가로 위치"
+  },
+  "vertical": {
+    "message": "세로 위치"
+  },
+  "flip": {
+    "message": "대칭 이동"
+  },
+  "brightness": {
+    "message": "밝기 효과"
+  },
+  "blur": {
+    "message": "블러 효과"
+  },
+  "invert": {
+    "message": "반전 효과"
+  },
+  "grayscale": {
+    "message": "흑백 효과"
+  },
+  "layout": {
+    "message": "레이아웃"
+  },
+  "colorMatch": {
+    "message": "색상 맞춤"
+  },
+  "text": {
+    "message": "글자색"
+  },
+  "accent": {
+    "message": "강조색"
+  },
+  "opacity": {
+    "message": "투명도"
+  },
+  "glassBlur": {
+    "message": "유리 효과"
   },
   "random": {
     "message": "랜덤"
   },
   "nasa": {
-    "message": "우주"
+    "message": "NASA"
   },
   "neon": {
     "message": "네온"
@@ -179,6 +158,24 @@
   "default": {
     "message": "기본"
   },
+  "noteWidget": {
+    "message": "메모장"
+  },
+  "todoWidget": {
+    "message": "체크리스트"
+  },
+  "ddayWidget": {
+    "message": "디데이"
+  },
+  "timerWidget": {
+    "message": "타이머"
+  },
+  "stopwatchWidget": {
+    "message": "스톱워치"
+  },
+  "photoWidget": {
+    "message": "스티커"
+  },
   "place_noteWidget": {
     "message": "메모를 작성하세요..."
   },
@@ -186,13 +183,16 @@
     "message": "할 일을 입력하세요..."
   },
   "loading_removeBG": {
-    "message": "AI 배경 제거 진행 중..."
+    "message": "배경 제거 진행 중..."
   },
   "loading_colorMatch": {
-    "message": "AI 컬러 매칭 진행 중..."
+    "message": "색상 맞춤 진행 중..."
   },
   "alert_timerExpired": {
     "message": "설정한 타이머가 종료되었습니다."
+  },
+  "alert_stopwatchExceed": {
+    "message": "스톱워치가 1시간을 초과해 초기화되었습니다."
   },
   "error_fileRequired": {
     "message": "먼저 파일을 업로드해 주세요."
@@ -201,13 +201,13 @@
     "message": "10MB보다 작은 파일을 업로드해 주세요."
   },
   "error_fileInvalid": {
-    "message": "올바른 파일을 업로드해 주세요."
+    "message": "올바른 $1 파일을 업로드해 주세요."
   },
   "error_checkoutFail": {
     "message": "결제창을 열 수 없습니다. 잠시 후에 다시 시도해 주세요."
   },
   "error_removeBG": {
-    "message": "AI 배경 제거가 실패했습니다. 잠시 후에 다시 시도해 주세요."
+    "message": "배경 제거가 실패했습니다. 잠시 후에 다시 시도해 주세요."
   },
   "success_themeExport": {
     "message": "커스텀 테마를 내보냈습니다."
@@ -225,10 +225,10 @@
     "message": "커스텀 테마를 복제했습니다."
   },
   "success_removeBG": {
-    "message": "AI 배경 제거를 적용했습니다."
+    "message": "배경 제거가 완료되었습니다."
   },
   "success_colorMatch": {
-    "message": "AI 컬러 매칭을 적용했습니다."
+    "message": "색상 맞춤이 완료되었습니다."
   },
   "pro_themeLimit": {
     "message": "커스텀 테마를 더 추가하려면 Pro로 업그레이드하세요."
@@ -240,10 +240,10 @@
     "message": "움직이는 스티커를 사용하려면 Pro로 업그레이드하세요."
   },
   "pro_removeBG": {
-    "message": "AI 배경 제거를 사용하려면 Pro로 업그레이드하세요."
+    "message": "배경 제거를 사용하려면 Pro로 업그레이드하세요."
   },
   "pro_colorMatch": {
-    "message": "AI 컬러 매칭을 사용하려면 Pro로 업그레이드하세요."
+    "message": "색상 맞춤을 사용하려면 Pro로 업그레이드하세요."
   },
   "pro_widgetLimit": {
     "message": "같은 위젯을 더 추가하려면 Pro로 업그레이드하세요."
