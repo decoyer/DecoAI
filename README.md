@@ -4,7 +4,7 @@ AI chat customization browser extension with *Plasmo*
 using *Google Authentication*
 
 ## Details
-![mainpage](https://github.com/user-attachments/assets/6851d7ea-a103-4d64-929c-4ec741023b9e)
+![mainpage](https://github.com/user-attachments/assets/0be99fbb-313b-44b1-91b6-f584a59be77e)
 
 ### <div align="center">Decorate Your AI Chat</div>
 
