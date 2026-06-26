@@ -1498,8 +1498,7 @@ export function FabPanelApp() {
                               <button
                                 type="button"
                                 onClick={onRemoveBGClick}
-                                style={{ ...controlButtonStyle, display: "flex", alignItems: "center" }}>
-                                <Icon icon="lucide:flask-conical" height={16} color="#66cdaa" aria-hidden="true" />
+                                style={controlButtonStyle}>
                                 {t("apply")}
                               </button>
                             </label>
