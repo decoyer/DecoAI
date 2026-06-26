@@ -25,7 +25,6 @@ using *Firebase Authentication*
 - ```Animated Images Support```
 - ```Cross-Device Sync```
 - ```AI-Powered Customization (Beta)```
-- ```More Pro Features Coming Soon```
 
 ## Getting Started
 ![React](https://img.shields.io/badge/react-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB) &ensp;
@@ -37,23 +36,17 @@ using *Firebase Authentication*
 # Install dependencies
 npm install
 
-# Run the local extension build
-npm run dev
-
 # Create a production build
 npm run build
-
-# Package the extension
-npm run package
 ```
 
 Load the generated Plasmo build directory as an unpacked extension in a Chromium-based browser.
 
 ## Supported Services
-- ```ChatGPT``` ```https://chatgpt.com/```
-- ```Gemini``` ```https://gemini.google.com/```
-- ```Claude``` ```https://claude.ai/```
-- ```Grok``` ```https://grok.com/```
+- ```ChatGPT```
+- ```Gemini```
+- ```Claude```
+- ```Grok```
 
 ## Requirements
 ```INI
@@ -70,10 +63,8 @@ Background removal API access
 
 - *Firebase project*
   - Used for Google authentication and Pro status verification.
-  - Configure Firebase client settings in ```firebase.ts```.
 - *Google OAuth client*
-  - Required for Chrome extension sign-in through ```chrome.identity```.
-  - Configure the extension OAuth client in the ```manifest.oauth2``` field of ```package.json```.
+  - Required for Chrome extension sign-in through ```chrome.identity```.json```.
 - *Background removal API access*
   - Used by the Remove BG feature.
   - The current implementation calls the background removal endpoint from the extension background script.
