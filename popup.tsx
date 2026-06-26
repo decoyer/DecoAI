@@ -9,6 +9,7 @@ import {
   getAuthSessionSnapshot,
   getValidAuthSessionSnapshot,
   signInAndSaveAuthSession,
+  signOutAuthSession,
   type AuthSessionSnapshot,
   type PremiumStatus
 } from "./auth"
@@ -31,10 +32,6 @@ const MODEL_LIST = [
 ] as const
 
 type PopupTab = "settings" | "account"
-
-const getPremiumStatusLabel = (status: PremiumStatus) => {
-  return status === "premium" ? "Pro" : "Free"
-}
 
 function IndexPopup() {
   const [themeHidden, setThemeHidden] = useStorage<boolean>(
@@ -112,6 +109,17 @@ function IndexPopup() {
     }
   }
 
+  const onSignOutClick = async () => {
+    setIsLoading(true)
+    try {
+      await signOutAuthSession()
+      setAuthSession(null)
+      setPremiumStatus("unknown")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const onSubscriptionClick = () => window.open("https://polar.sh/kstm/portal")
 
   return (
@@ -166,7 +174,7 @@ function IndexPopup() {
               draggable="false"
               style={{ height: 24 }}
             />
-            <h3>DecoAI</h3>
+            <h2>DecoAI</h2>
             <span style={{ lineHeight: 1 }}>v{version}</span>
           </div>
         </div>
@@ -243,10 +251,15 @@ function IndexPopup() {
                 </div>
                 <button
                   type="button"
-                  onClick={onSignInClick}
+                  onClick={authSession ? onSignOutClick : onSignInClick}
                   disabled={isLoading}
                   style={actionButtonStyle}>
-                  <Icon icon="lucide:refresh-ccw" color="#66cdaa" height={24} aria-hidden="true" />
+                  <Icon
+                    icon={`lucide:${authSession ? "log-out" : "log-in"}`}
+                    color="#66cdaa"
+                    height={24}
+                    aria-hidden="true"
+                  />
                 </button>
               </div>
 
@@ -282,7 +295,7 @@ function IndexPopup() {
                   <span>{t("status")}</span>
                 </div>
                 <Icon
-                  icon={`lucide:${authSession ? "circle-check-big" : "circle-alert"}`}
+                  icon={`lucide:${authSession ? "circle-check-big" : "circle-question-mark"}`}
                   height={16}
                   color={authSession ? "#0d6efd" : "#ffc107"}
                   aria-hidden="true"
@@ -293,7 +306,7 @@ function IndexPopup() {
                 <div style={itemLabelStyle}>
                   <span>{t("plan")}</span>
                 </div>
-                <span>{getPremiumStatusLabel(premiumStatus)}</span>
+                <span>{premiumStatus === "premium" ? "Pro" : "Free"}</span>
               </div>
             </>
           )}
