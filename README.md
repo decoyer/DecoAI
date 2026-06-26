@@ -1,14 +1,12 @@
 # DecoAI
-AI chat customization browser extension with *Plasmo*, *React*, and *TypeScript*
+AI chat customization browser extension with *Plasmo*
 
-using *Firebase Authentication*
+using *Google Authentication*
 
 ## Details
-<p align="center">
-  <img src="./assets/pro.gif" alt="DecoAI preview">
-</p>
+![mainpage](https://github.com/user-attachments/assets/6851d7ea-a103-4d64-929c-4ec741023b9e)
 
-### <div align="center">Decorate your AI chat with themes, widgets, and custom visuals</div>
+### <div align="center">Decorate Your AI Chat</div>
 
 ## Key Features
 - ```AI chat theme customization```
