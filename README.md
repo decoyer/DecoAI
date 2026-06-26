@@ -1,2 +1,84 @@
 # DecoAI
-Decorate your AI chat
+AI chat customization browser extension with *Plasmo*, *React*, and *TypeScript*
+
+using *Firebase Authentication*
+
+## Details
+<p align="center">
+  <img src="./assets/pro.gif" alt="DecoAI preview">
+</p>
+
+### <div align="center">Decorate your AI chat with themes, widgets, and custom visuals</div>
+
+## Key Features
+- ```AI chat theme customization```
+- ```Custom theme presets```
+- ```Resizable chat widgets```
+- ```Animated backgrounds and stickers```
+- ```AI-assisted color matching```
+- ```Image background removal```
+- ```Google sign-in and Pro access control```
+- ```Chrome, Edge, and Whale support```
+
+## Pro Features
+- ```Unlimited Theme Presets & Widgets```
+- ```Animated Images Support```
+- ```Cross-Device Sync```
+- ```AI-Powered Customization (Beta)```
+- ```More Pro Features Coming Soon```
+
+## Getting Started
+![React](https://img.shields.io/badge/react-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB) &ensp;
+![TypeScript](https://img.shields.io/badge/typescript-%233178C6.svg?style=for-the-badge&logo=typescript&logoColor=white) &ensp;
+![Plasmo](https://img.shields.io/badge/plasmo-%237c3aed.svg?style=for-the-badge&logo=googlechrome&logoColor=white) &ensp;
+![Firebase](https://img.shields.io/badge/firebase-%23FFCA28.svg?style=for-the-badge&logo=firebase&logoColor=black)
+
+```INI
+# Install dependencies
+npm install
+
+# Run the local extension build
+npm run dev
+
+# Create a production build
+npm run build
+
+# Package the extension
+npm run package
+```
+
+Load the generated Plasmo build directory as an unpacked extension in a Chromium-based browser.
+
+## Supported Services
+- ```ChatGPT``` ```https://chatgpt.com/```
+- ```Gemini``` ```https://gemini.google.com/```
+- ```Claude``` ```https://claude.ai/```
+- ```Grok``` ```https://grok.com/```
+
+## Requirements
+```INI
+# Runtime
+Node.js
+npm
+Chromium-based browser
+
+# Extension services
+Firebase project
+Google OAuth client
+Background removal API access
+```
+
+- *Firebase project*
+  - Used for Google authentication and Pro status verification.
+  - Configure Firebase client settings in ```firebase.ts```.
+- *Google OAuth client*
+  - Required for Chrome extension sign-in through ```chrome.identity```.
+  - Configure the extension OAuth client in the ```manifest.oauth2``` field of ```package.json```.
+- *Background removal API access*
+  - Used by the Remove BG feature.
+  - The current implementation calls the background removal endpoint from the extension background script.
+
+## Tasks
+- [ ] Enable account-level backup and restore
+- [ ] Improve cross-device sync stability
+- [ ] Add more Pro-only customization tools
