@@ -28,7 +28,7 @@ const MODEL_LIST = [
   { key: "chatgpt", icon: "bi:openai", label: "ChatGPT" },
   { key: "gemini", icon: "vscode-icons:file-type-gemini", label: "Gemini" },
   { key: "claude", icon: "logos:claude-icon", label: "Claude" },
-  { key: "grok", icon: "bxl:grok", label: "Grok" }
+  { key: "grok", icon: "selfhst:grok-light", label: "Grok" }
 ] as const
 
 type PopupTab = "settings" | "account"
