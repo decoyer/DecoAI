@@ -27,8 +27,7 @@ using *Google Authentication*
 ## Getting Started
 ![React](https://img.shields.io/badge/react-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB) &ensp;
 ![TypeScript](https://img.shields.io/badge/typescript-%233178C6.svg?style=for-the-badge&logo=typescript&logoColor=white) &ensp;
-![Plasmo](https://img.shields.io/badge/plasmo-%237c3aed.svg?style=for-the-badge&logo=googlechrome&logoColor=white) &ensp;
-![Firebase](https://img.shields.io/badge/firebase-%23FFCA28.svg?style=for-the-badge&logo=firebase&logoColor=black)
+![Plasmo](https://img.shields.io/badge/plasmo-%237c3aed.svg?style=for-the-badge&logo=googlechrome&logoColor=white)
 
 ```INI
 # Install dependencies
