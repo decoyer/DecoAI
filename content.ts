@@ -15,7 +15,7 @@ import { toast, ToastContainer } from "react-toastify"
 import { Storage } from "@plasmohq/storage"
 import { useStorage } from "@plasmohq/storage/hook"
 
-import { AUTH_SESSION_STORAGE_KEY, getAuthSessionSnapshot, getVerifiedPremiumStatus } from "./auth"
+import { AUTH_REFRESH_MS, AUTH_SESSION_STORAGE_KEY, getAuthSessionSnapshot, getVerifiedPremiumStatus } from "./auth"
 import { FabPanelApp } from "./panel"
 import {
   clampNumber,
@@ -190,7 +190,6 @@ const TOAST_STYLE_ID = "decoai-toastify-style"
 const TOAST_ROOT_ID = "decoai-toast-root"
 const TEXT_WIDGET_STATE_STORAGE_KEY = "text-widget-state"
 const CUSTOM_THEME_WATCH_STORAGE_KEYS = [CUSTOM_THEMES_STORAGE_KEY, SELECTED_CUSTOM_THEME_ID_STORAGE_KEY]
-const PREMIUM_REFRESH_MS = 5 * 60 * 1000
 let premiumCache: { checkedAt: number; value: boolean } | null = null
 
 type FabPanelView = "theme" | "widget"
@@ -234,7 +233,7 @@ const getPremiumStatus = async ({
   forceRefresh = false,
   interactiveFallback = false
 } = {}) => {
-  if (!forceRefresh && premiumCache && Date.now() - premiumCache.checkedAt < PREMIUM_REFRESH_MS) {
+  if (!forceRefresh && premiumCache && Date.now() - premiumCache.checkedAt < AUTH_REFRESH_MS) {
     return { isPremium: premiumCache.value, isChecked: true }
   }
 

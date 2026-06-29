@@ -390,10 +390,7 @@ const openCheckout = async (
     })
 
     if (!response.ok) {
-      sendResponse({
-        success: false,
-        error: `Checkout request failed: ${response.status}`
-      })
+      sendResponse({ success: false, error: `Checkout request failed: ${response.status}` })
       return
     }
 
@@ -424,9 +421,15 @@ const removeBackgroundImage = async (
   sendResponse: (response?: unknown) => void
 ) => {
   try {
+    const idToken = await getCurrentUserIdToken()
+    if (idToken.length < 100) {
+      sendResponse({ success: false, error: "Invalid token" })
+      return
+    }
+
     const res = await fetch("https://decoai.cokr.workers.dev/remove-bg", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },
       body: JSON.stringify({ imageUrl })
     })
 
