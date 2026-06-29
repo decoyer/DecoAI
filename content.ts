@@ -293,6 +293,7 @@ const getFABStyle = () => {
         flex-direction: column;
         align-items: flex-end;
         gap: 10px;
+        pointer-events: none;
       }
 
       .${FAB_THEME_BTN_CLASS},
@@ -329,6 +330,7 @@ const getFABStyle = () => {
         flex-direction: row-reverse;
         align-items: center;
         gap: 10px;
+        pointer-events: auto;
       }
 
       .${FAB_TOOLTIP_CLASS} {
@@ -1989,6 +1991,8 @@ const mountWidgetOverlay = () => {
   const root = document.createElement("div")
   root.id = WIDGET_ROOT_ID
   root.style.display = "none"
+  root.style.position = "relative"
+  root.style.zIndex = "1"
   root.innerHTML = `
     <style>
       .decoai-widget-card__actions {
