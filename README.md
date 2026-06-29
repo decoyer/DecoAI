@@ -50,16 +50,12 @@ Chromium-based browser
 # Extension services
 Firebase project
 Google OAuth client
-Background removal API access
 ```
 
 - *Firebase project*
   - Used for ```Google Authentication``` and Pro status verification.
 - *Google OAuth client*
   - Required for Chrome extension sign-in through ```chrome.identity```.
-- *Background removal API access*
-  - Used by the Remove BG feature.
-  - The current implementation calls the background removal endpoint from the extension background script.
 
 ## Tasks
 - [ ] Enable account-level backup and restore
