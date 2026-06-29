@@ -24,6 +24,15 @@ let silentUserVerification:
   | { uid: string; promise: Promise<User | null> }
   | null = null
 let lastSilentAuthFailureAt = 0
+const IMAGE_DB_NAME = "decoai-images"
+const IMAGE_DB_VERSION = 1
+const IMAGE_STORE_NAME = "images"
+
+type StoredImage = {
+  id: string
+  blob: Blob
+  createdAt: number
+}
 
 const isHttpsUrl = (value: unknown) => {
   if (typeof value !== "string") return false
@@ -32,6 +41,62 @@ const isHttpsUrl = (value: unknown) => {
   } catch {
     return false
   }
+}
+
+const openImageDb = () =>
+  new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open(IMAGE_DB_NAME, IMAGE_DB_VERSION)
+    request.onerror = () => reject(request.error)
+    request.onsuccess = () => resolve(request.result)
+    request.onupgradeneeded = () => {
+      const db = request.result
+      if (!db.objectStoreNames.contains(IMAGE_STORE_NAME)) db.createObjectStore(IMAGE_STORE_NAME, { keyPath: "id" })
+    }
+  })
+
+const imageStoreRequest = async <T>(
+  mode: IDBTransactionMode,
+  createRequest: (store: IDBObjectStore) => IDBRequest<T>
+) => {
+  const db = await openImageDb()
+  return new Promise<T>((resolve, reject) => {
+    const transaction = db.transaction(IMAGE_STORE_NAME, mode)
+    const request = createRequest(transaction.objectStore(IMAGE_STORE_NAME))
+
+    request.onerror = () => reject(request.error)
+    request.onsuccess = () => resolve(request.result)
+    transaction.onerror = () => reject(transaction.error)
+    transaction.onabort = () => reject(transaction.error)
+  }).finally(() => db.close())
+}
+
+const dataUrlToBlob = async (dataUrl: string) => {
+  if (!/^data:image\/(?:png|jpe?g|gif|webp|avif);base64,/i.test(dataUrl)) throw new Error("Invalid image data")
+
+  const response = await fetch(dataUrl)
+  const blob = await response.blob()
+  if (!blob.type.startsWith("image/") || blob.size > MAX_FILE_BYTES) throw new Error("Invalid image data")
+  return blob
+}
+
+const saveImageDataUrl = async (dataUrl: string) => {
+  const blob = await dataUrlToBlob(dataUrl)
+  const id = crypto.randomUUID()
+  await imageStoreRequest("readwrite", (store) =>
+    store.put({ id, blob, createdAt: Date.now() } satisfies StoredImage)
+  )
+  return id
+}
+
+const getImageDataUrl = async (id: string) => {
+  if (!id) return ""
+  const image = await imageStoreRequest<StoredImage | undefined>("readonly", (store) => store.get(id))
+  return image?.blob ? blobToDataUrl(image.blob) : ""
+}
+
+const deleteImage = async (id: string) => {
+  if (!id) return
+  await imageStoreRequest("readwrite", (store) => store.delete(id))
 }
 
 const isImageSource = (value: unknown) =>
@@ -442,6 +507,20 @@ const removeBackgroundImage = async (
   }
 }
 
+const handleImageStoreMessage = async (message: any) => {
+  switch (message.type) {
+    case "SAVE_IMAGE_DATA_URL":
+      return { success: true, id: await saveImageDataUrl(message.dataUrl) }
+    case "GET_IMAGE_DATA_URL":
+      return { success: true, dataUrl: await getImageDataUrl(message.id) }
+    case "DELETE_IMAGE":
+      await deleteImage(message.id)
+      return { success: true }
+    default:
+      return null
+  }
+}
+
 chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
   if (message.type === "GET_GOOGLE_ACCESS_TOKEN") {
     sendWebAuthToken(sendResponse, message.interactive !== false)
@@ -475,6 +554,17 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
 
   if (message.type === "REMOVE_BACKGROUND_IMAGE") {
     void removeBackgroundImage(message.imageUrl, sendResponse)
+    return true
+  }
+
+  if (
+    message.type === "SAVE_IMAGE_DATA_URL" ||
+    message.type === "GET_IMAGE_DATA_URL" ||
+    message.type === "DELETE_IMAGE"
+  ) {
+    void handleImageStoreMessage(message)
+      .then((response) => sendResponse(response || { success: false }))
+      .catch((error) => sendResponse({ success: false, error: error.message }))
     return true
   }
 

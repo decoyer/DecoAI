@@ -31,9 +31,10 @@ import {
   DEFAULT_WIDGET_INSTANCES,
   DEFAULT_WIDGET_LAYOUT,
   DEFAULT_WIDGET_MIN_SIZE,
+  deleteImageData,
   detectCurrentSite,
   FAB_OPEN_EVENT,
-  isAnimatedBgUrl,
+  getImageDataUrl,
   isAnimatedCustomTheme,
   isAnimatedImage,
   MAX_FILE_BYTES,
@@ -42,6 +43,7 @@ import {
   sanitizeColor,
   sanitizeCustomBgOptions,
   sanitizeCustomBgUrl,
+  saveImageDataUrl,
   SELECTED_CUSTOM_THEME_ID_STORAGE_KEY,
   SELECTED_THEME_STORAGE_KEY,
   STOPWATCH_WIDGET_STATE_STORAGE_KEY,
@@ -518,8 +520,10 @@ const getCustomThemeData = async (): Promise<ThemeConfig> => {
   const { theme: customTheme } = await getSelectedCustomTheme()
   if (!customTheme) return EMPTY_THEME
 
+  const bgUrl = customTheme.bgImageId ? await getImageDataUrl(customTheme.bgImageId).catch(() => "") : ""
+
   return {
-    bgUrl: sanitizeCustomBgUrl(customTheme.bgUrl),
+    bgUrl,
     bgColor: sanitizeColor(customTheme.bgColor),
     accentColor: sanitizeColor(customTheme.accent),
     lightTextColor: sanitizeColor(customTheme.text),
@@ -677,7 +681,7 @@ const getStopwatchMilliseconds = (
   stopwatch: ReturnType<typeof useStopwatch>
 ) => stopwatch.totalSeconds * 1000 + stopwatch.milliseconds
 
-const resizePhotoWidgetImage = (file: File) =>
+const readImageFileAsDataUrl = (file: File) =>
   new Promise<string | null>((resolve) => {
     const reader = new FileReader()
     reader.onerror = () => resolve(null)
@@ -1309,7 +1313,26 @@ function PhotoWidgetContent({
     },
     DEFAULT_PHOTO_WIDGET_STATE
   )
-  const imageUrl = sanitizeCustomBgUrl(photoState?.imageUrl)
+  const [imageUrl, setImageUrl] = useState("")
+
+  React.useEffect(() => {
+    let active = true
+    const imageId = photoState?.imageId || ""
+    if (!imageId) {
+      setImageUrl("")
+      return
+    }
+
+    void getImageDataUrl(imageId)
+      .then((url) => {
+        if (active) setImageUrl(url)
+      })
+      .catch(() => {
+        if (active) setImageUrl("")
+      })
+
+    return () => { active = false }
+  }, [photoState?.imageId])
 
   const uploadImage = async (file?: File) => {
     if (!file) {
@@ -1333,9 +1356,11 @@ function PhotoWidgetContent({
         return
       }
     }
-    const nextImageUrl = await resizePhotoWidgetImage(file)
+    const nextImageUrl = await readImageFileAsDataUrl(file)
     if (!nextImageUrl) return
-    setPhotoState({ imageUrl: nextImageUrl })
+    const imageId = await saveImageDataUrl(nextImageUrl)
+    if (photoState?.imageId) void deleteImageData(photoState.imageId)
+    setPhotoState({ imageId, animated })
   }
 
   const uploadButton = createElement(
@@ -1459,7 +1484,7 @@ function WidgetOverlayApp() {
         const photoState = await localStorageInstance.get<PhotoWidgetState>(
           `${PHOTO_WIDGET_STATE_STORAGE_KEY}:${item.id}`
         )
-        if (isAnimatedBgUrl(photoState?.imageUrl || "")) removablePhotoWidgetIds.push(item.id)
+        if (photoState?.animated === true) removablePhotoWidgetIds.push(item.id)
       }
 
       if (!hasMultipleWidgets(items) && removablePhotoWidgetIds.length === 0) return
@@ -1479,6 +1504,8 @@ function WidgetOverlayApp() {
           return nextFrameMap
         })
         removablePhotoWidgetIds.forEach((id) => {
+          void localStorageInstance.get<PhotoWidgetState>(`${PHOTO_WIDGET_STATE_STORAGE_KEY}:${id}`)
+            .then((photoState) => { if (photoState?.imageId) void deleteImageData(photoState.imageId) })
           void localStorageInstance.remove(`${PHOTO_WIDGET_STATE_STORAGE_KEY}:${id}`)
         })
         toast.error(t("pro_animatedSticker"), { toastId: "normalizeSticker" })
@@ -1603,6 +1630,10 @@ function WidgetOverlayApp() {
     const stateKey = getWidgetStateKey(item)
     if (stateKey) {
       const stateStorage = item.type === "photo" ? localStorageInstance : storage
+      if (item.type === "photo") {
+        void localStorageInstance.get<PhotoWidgetState>(stateKey)
+          .then((photoState) => { if (photoState?.imageId) void deleteImageData(photoState.imageId) })
+      }
       void stateStorage.remove(stateKey)
     }
     if (item.type === "photo") {
@@ -1650,7 +1681,7 @@ function WidgetOverlayApp() {
     const photoState = await localStorageInstance.get<PhotoWidgetState>(
       `${PHOTO_WIDGET_STATE_STORAGE_KEY}:${item.id}`
     )
-    const imageUrl = sanitizeCustomBgUrl(photoState?.imageUrl)
+    const imageUrl = photoState?.imageId ? await getImageDataUrl(photoState.imageId).catch(() => "") : ""
     if (!imageUrl) {
       toast.error(t("error_fileRequired"))
       return
@@ -1689,7 +1720,9 @@ function WidgetOverlayApp() {
       )
       if (!latestPhotoState) return
 
-      await localStorageInstance.set(`${PHOTO_WIDGET_STATE_STORAGE_KEY}:${item.id}`, { imageUrl: result })
+      const imageId = await saveImageDataUrl(result)
+      if (latestPhotoState.imageId) void deleteImageData(latestPhotoState.imageId)
+      await localStorageInstance.set(`${PHOTO_WIDGET_STATE_STORAGE_KEY}:${item.id}`, { imageId, animated: false })
 
       toast.update(toastId, {
         render: t("success_removeBG"),

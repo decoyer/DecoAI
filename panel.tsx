@@ -38,10 +38,12 @@ import {
   DEFAULT_WIDGET_ENABLED,
   DEFAULT_WIDGET_INSTANCES,
   DEFAULT_WIDGET_LAYOUT,
+  deleteImageData,
   detectCurrentSite,
   FAB_OPEN_EVENT,
   getPositionXPercent,
   getPositionYPercent,
+  getImageDataUrl,
   hasAnimatedBackground,
   isAnimatedBgUrl,
   isAnimatedImage,
@@ -49,6 +51,7 @@ import {
   parseImportedThemes,
   renderImageToCanvas,
   sanitizeCustomBgUrl,
+  saveImageDataUrl,
   SELECTED_CUSTOM_THEME_ID_STORAGE_KEY,
   SELECTED_THEME_STORAGE_KEY,
   THEME_LOADING_EVENT,
@@ -241,8 +244,9 @@ const footerButtonStyle = {
   padding: 8
 } as const
 
-const downloadCustomTheme = (themeData: CustomTheme) => {
-  const blob = createThemeExportBlob(themeData)
+const downloadCustomTheme = async (themeData: CustomTheme) => {
+  const bgUrl = themeData.bgImageId ? await getImageDataUrl(themeData.bgImageId).catch(() => "") : ""
+  const blob = createThemeExportBlob({ ...themeData, ...(bgUrl ? { bgUrl } : {}) })
   const url = URL.createObjectURL(blob)
   const link = document.createElement("a")
   link.href = url
@@ -307,6 +311,7 @@ function CustomThemeSortableCard({
     customThemeItem: CustomTheme
   ) => void
 }) {
+  const [bgUrl, setBgUrl] = useState("")
   const {
     attributes,
     listeners,
@@ -315,11 +320,32 @@ function CustomThemeSortableCard({
     transition,
     isDragging
   } = useSortable({ id: item.id })
+
+  useEffect(() => {
+    let active = true
+    if (!item.bgImageId) {
+      setBgUrl("")
+      return
+    }
+
+    void getImageDataUrl(item.bgImageId)
+      .then((url) => {
+        if (active) setBgUrl(url)
+      })
+      .catch(() => {
+        if (active) setBgUrl("")
+      })
+
+    return () => {
+      active = false
+    }
+  }, [item.bgImageId])
+
   const bgStyle = {
-    "--custom-bg-scale-x": item.bgUrl && item.bgOptions.scaleX === -1 ? "-1" : "1",
-    backgroundImage: item.bgUrl ? `url(${item.bgUrl})` : "none",
+    "--custom-bg-scale-x": bgUrl && item.bgOptions.scaleX === -1 ? "-1" : "1",
+    backgroundImage: bgUrl ? `url(${bgUrl})` : "none",
     backgroundColor: item.bgColor || "transparent",
-    filter: item.bgUrl
+    filter: bgUrl
       ? `invert(${item.bgOptions.invert}) grayscale(${item.bgOptions.grayscale}) blur(${item.bgOptions.blur * 0.2}px) brightness(${item.bgOptions.brightness})`
       : "none"
   } as CSSProperties & { "--custom-bg-scale-x": string }
@@ -398,6 +424,8 @@ export function FabPanelApp() {
   const bgUploadRef = useRef<HTMLInputElement>(null)
   const importFileRef = useRef<HTMLInputElement>(null)
   const [draftBackgroundImageUrl, setDraftBackgroundImageUrl] = useState("")
+  const [draftBackgroundImageId, setDraftBackgroundImageId] = useState("")
+  const [draftBackgroundAnimated, setDraftBackgroundAnimated] = useState(false)
   const [customThemes, setCustomThemes] = useStorage<CustomTheme[]>(
     { key: CUSTOM_THEMES_STORAGE_KEY, instance: localStorageInstance },
     []
@@ -546,7 +574,8 @@ export function FabPanelApp() {
       name: draftCustomThemeName,
       text: draftTextColor,
       accent: draftAccentColor,
-      bgUrl: draftBackgroundImageUrl,
+      bgImageId: draftBackgroundImageId,
+      bgAnimated: draftBackgroundAnimated,
       bgColor: draftBackgroundColor,
       bgOptions: draftBackgroundOptions
     }
@@ -564,7 +593,14 @@ export function FabPanelApp() {
     if (!editingTheme) return
     setDraftTextColor(editingTheme.text || "")
     setDraftAccentColor(editingTheme.accent || "")
-    setDraftBackgroundImageUrl(editingTheme.bgUrl || "")
+    setDraftBackgroundImageId(editingTheme.bgImageId || "")
+    setDraftBackgroundAnimated(editingTheme.bgAnimated === true)
+    setDraftBackgroundImageUrl("")
+    if (editingTheme.bgImageId) {
+      void getImageDataUrl(editingTheme.bgImageId)
+        .then(setDraftBackgroundImageUrl)
+        .catch(() => setDraftBackgroundImageUrl(""))
+    }
     setDraftBackgroundColor(editingTheme.bgColor || "")
     setDraftBackgroundOptions(editingTheme.bgOptions || DEFAULT_CUSTOM_BG_OPTIONS)
     setDraftCustomThemeName(editingTheme.name || "")
@@ -590,7 +626,11 @@ export function FabPanelApp() {
       setEditingCustomThemeId("")
       setView("themes")
     }
-    if (draftBackgroundImageUrl && isAnimatedBgUrl(draftBackgroundImageUrl)) setDraftBackgroundImageUrl("")
+    if (draftBackgroundAnimated) {
+      setDraftBackgroundImageId("")
+      setDraftBackgroundImageUrl("")
+      setDraftBackgroundAnimated(false)
+    }
 
     return changed
   }
@@ -639,7 +679,7 @@ export function FabPanelApp() {
       toast.error(t("pro_widgetLimit"), { toastId: "normalizeWidget" })
     }
   }, [
-    draftBackgroundImageUrl,
+    draftBackgroundAnimated,
     customThemes,
     editingCustomThemeId,
     isFreeUser,
@@ -658,7 +698,8 @@ export function FabPanelApp() {
     draftCustomThemeName,
     draftTextColor,
     draftAccentColor,
-    draftBackgroundImageUrl,
+    draftBackgroundImageId,
+    draftBackgroundAnimated,
     draftBackgroundColor,
     draftBackgroundOptions
   ])
@@ -777,10 +818,10 @@ export function FabPanelApp() {
     }
   }
 
-  const onExportClick = () => {
+  const onExportClick = async () => {
     if (theme !== "custom" || !selectedCustomTheme) return
 
-    downloadCustomTheme(selectedCustomTheme)
+    await downloadCustomTheme(selectedCustomTheme)
     toast.success(t("success_themeExport"))
   }
 
@@ -805,7 +846,7 @@ export function FabPanelApp() {
       return
     }
 
-    let imported: CustomTheme[] = []
+    let imported: Array<CustomTheme & { bgUrl?: string }> = []
     try {
       const text = await file.text()
       imported = parseImportedThemes(text, (index) => `${t("custom")} ${index + 1}`)
@@ -820,6 +861,27 @@ export function FabPanelApp() {
       clearFileInput(importFileRef.current)
       return
     }
+
+    try {
+      imported = await Promise.all(
+        imported.map(async (themeData) => {
+          const { bgUrl: importedBgUrl, ...storageTheme } = themeData
+          const bgUrl = sanitizeCustomBgUrl(importedBgUrl)
+          if (!bgUrl) return storageTheme
+
+          return {
+            ...storageTheme,
+            bgImageId: await saveImageDataUrl(bgUrl),
+            bgAnimated: isAnimatedBgUrl(bgUrl)
+          }
+        })
+      )
+    } catch {
+      toast.error(t("error_fileInvalid", "JSON"))
+      clearFileInput(importFileRef.current)
+      return
+    }
+
     const hasAnimatedImportedTheme = hasAnimatedBackground(imported)
     if (hasAnimatedImportedTheme && !(await requirePremiumAccess("pro_animatedBG"))) {
       clearFileInput(importFileRef.current)
@@ -862,15 +924,23 @@ export function FabPanelApp() {
       return
     }
     const reader = new FileReader()
-    reader.onload = () => {
+    reader.onload = async () => {
       const result = sanitizeCustomBgUrl(reader.result)
       if (!result) {
         toast.error(t("error_fileInvalid", "IMG"))
         clearFileInput(bgUploadRef.current)
         return
       }
-      setDraftBackgroundImageUrl(result)
-      clearFileInput(bgUploadRef.current)
+      try {
+        const imageId = await saveImageDataUrl(result)
+        setDraftBackgroundImageId(imageId)
+        setDraftBackgroundAnimated(animated)
+        setDraftBackgroundImageUrl(result)
+      } catch {
+        toast.error(t("error_fileInvalid", "IMG"))
+      } finally {
+        clearFileInput(bgUploadRef.current)
+      }
     }
     reader.readAsDataURL(file)
   }
@@ -890,6 +960,8 @@ export function FabPanelApp() {
   const resetCustomText = () => setDraftTextColor("")
   const resetCustomAccent = () => setDraftAccentColor("")
   const resetDraftBackgroundImage = () => {
+    setDraftBackgroundImageId("")
+    setDraftBackgroundAnimated(false)
     setDraftBackgroundImageUrl("")
     setDraftBackgroundOptions(DEFAULT_CUSTOM_BG_OPTIONS)
   }
@@ -919,6 +991,9 @@ export function FabPanelApp() {
         )
       })
 
+      const imageId = await saveImageDataUrl(result)
+      setDraftBackgroundImageId(imageId)
+      setDraftBackgroundAnimated(false)
       setDraftBackgroundImageUrl(result)
 
       toast.update(toastId, {
@@ -1036,10 +1111,11 @@ export function FabPanelApp() {
 
   const deleteCustomTheme = (customThemeId: string) => {
     if (!customThemeId) return
-    const deletingSelected =
-      selectedCustomThemeId === customThemeId && theme === "custom"
+    const deletedTheme = customThemes.find((item) => item.id === customThemeId)
+    const deletingSelected = selectedCustomThemeId === customThemeId && theme === "custom"
     const nextThemes = customThemes.filter((item) => item.id !== customThemeId)
     setCustomThemes(nextThemes)
+    if (deletedTheme?.bgImageId) void deleteImageData(deletedTheme.bgImageId)
     if (deletingSelected) {
       setSelectedCustomThemeId("")
       setTheme("default")
@@ -1109,6 +1185,8 @@ export function FabPanelApp() {
   }
 
   const resetEditingThemeDraft = () => {
+    setDraftBackgroundImageId("")
+    setDraftBackgroundAnimated(false)
     setDraftBackgroundImageUrl("")
     setDraftBackgroundColor("")
     setDraftTextColor("")

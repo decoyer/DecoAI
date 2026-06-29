@@ -15,7 +15,8 @@ export type CustomTheme = {
   name: string
   text: string
   accent: string
-  bgUrl: string
+  bgImageId: string
+  bgAnimated: boolean
   bgColor: string
   bgOptions: CustomBgOptions
 }
@@ -52,7 +53,8 @@ export type StopwatchWidgetState = {
   stopwatchRunning: boolean
 }
 export type PhotoWidgetState = {
-  imageUrl: string
+  imageId: string
+  animated: boolean
 }
 export type WidgetFrame = {
   x: number
@@ -70,7 +72,7 @@ export type WidgetSize = {
 type ThemeImportData = {
   app?: string
   version?: number
-  customThemes?: Partial<CustomTheme>[]
+  customThemes?: Array<Partial<CustomTheme> & { bgUrl?: string }>
 }
 
 export const CUSTOM_THEMES_STORAGE_KEY = "custom-themes"
@@ -163,7 +165,8 @@ export const DEFAULT_STOPWATCH_WIDGET_STATE: StopwatchWidgetState = {
 }
 
 export const DEFAULT_PHOTO_WIDGET_STATE: PhotoWidgetState = {
-  imageUrl: ""
+  imageId: "",
+  animated: false
 }
 
 export const DEFAULT_WIDGET_MIN_SIZE: WidgetSize = {
@@ -211,15 +214,39 @@ export const sanitizeCustomBgUrl = (value: unknown) => {
   return /^data:image\/(?:png|jpe?g|gif|webp|avif);base64,/i.test(value) ? value : ""
 }
 
+const sendRuntimeMessage = <T>(message: Record<string, unknown>) =>
+  new Promise<T>((resolve, reject) => {
+    chrome.runtime.sendMessage(message, (response) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message))
+        return
+      }
+      if (!response?.success) {
+        reject(new Error(response?.error || "Runtime message failed"))
+        return
+      }
+      resolve(response as T)
+    })
+  })
+
+export const saveImageDataUrl = async (dataUrl: string) => {
+  const response = await sendRuntimeMessage<{ id: string }>({ type: "SAVE_IMAGE_DATA_URL", dataUrl })
+  if (typeof response.id !== "string") throw new Error("Failed to save image")
+  return response.id
+}
+
+export const getImageDataUrl = async (id: string) => {
+  const response = await sendRuntimeMessage<{ dataUrl: string }>({ type: "GET_IMAGE_DATA_URL", id })
+  return sanitizeCustomBgUrl(response.dataUrl)
+}
+
+export const deleteImageData = (id: string) =>
+  sendRuntimeMessage<void>({ type: "DELETE_IMAGE", id })
+
 export const sanitizePosition = (value: unknown) => {
   const position = String(value)
-  const percentMatch = position.match(
-    /^(-?\d+(?:\.\d+)?)%\s+(-?\d+(?:\.\d+)?)%$/
-  )
-  if (percentMatch) {
-    return `${clampNumber(percentMatch[1], 0, 100, 50)}% ${clampNumber(percentMatch[2], 0, 100, 50)}%`
-  }
-
+  const percentMatch = position.match(/^(-?\d+(?:\.\d+)?)%\s+(-?\d+(?:\.\d+)?)%$/)
+  if (percentMatch) return `${clampNumber(percentMatch[1], 0, 100, 50)}% ${clampNumber(percentMatch[2], 0, 100, 50)}%`
   return DEFAULT_CUSTOM_BG_OPTIONS.position
 }
 
@@ -312,24 +339,31 @@ export const renderImageToCanvas = async (
 }
 
 export const normalizeCustomTheme = (
-  themeData: Partial<CustomTheme>,
+  themeData: Partial<CustomTheme> & { bgUrl?: string },
   fallbackName: string
-): CustomTheme => ({
-  id: crypto.randomUUID(),
-  name: String(themeData.name || fallbackName).slice(0, 10),
-  text: sanitizeColor(themeData.text),
-  accent: sanitizeColor(themeData.accent),
-  bgUrl: sanitizeCustomBgUrl(themeData.bgUrl),
-  bgColor: sanitizeColor(themeData.bgColor),
-  bgOptions: sanitizeCustomBgOptions(themeData.bgOptions)
-})
+): CustomTheme & { bgUrl?: string } => {
+  const bgUrl = sanitizeCustomBgUrl(themeData.bgUrl)
+
+  return {
+    id: crypto.randomUUID(),
+    name: String(themeData.name || fallbackName).slice(0, 10),
+    text: sanitizeColor(themeData.text),
+    accent: sanitizeColor(themeData.accent),
+    bgImageId: typeof themeData.bgImageId === "string" ? themeData.bgImageId : "",
+    bgAnimated: themeData.bgAnimated === true || isAnimatedBgUrl(bgUrl),
+    bgColor: sanitizeColor(themeData.bgColor),
+    bgOptions: sanitizeCustomBgOptions(themeData.bgOptions),
+    ...(bgUrl ? { bgUrl } : {})
+  }
+}
 
 export const createCustomTheme = (name: string): CustomTheme => ({
   id: crypto.randomUUID(),
   name,
   text: "",
   accent: "",
-  bgUrl: "",
+  bgImageId: "",
+  bgAnimated: false,
   bgColor: "",
   bgOptions: { ...DEFAULT_CUSTOM_BG_OPTIONS }
 })
@@ -340,13 +374,11 @@ export const parseImportedThemes = (
 ) => {
   const data = JSON.parse(text) as ThemeImportData
   if (data.app !== THEME_FILE_APP_ID || data.version !== THEME_FILE_VERSION) return []
-
   const themes = Array.isArray(data.customThemes) ? data.customThemes : []
-
   return themes.map((theme, index) => normalizeCustomTheme(theme, getFallbackName(index)))
 }
 
-export const createThemeExportBlob = (themeData: CustomTheme) =>
+export const createThemeExportBlob = (themeData: CustomTheme & { bgUrl?: string }) =>
   new Blob(
     [
       JSON.stringify(
@@ -421,10 +453,10 @@ export const isAnimatedBgUrl = (value: string) =>
   value ? isAnimatedDataUrl(value) : false
 
 export const hasAnimatedBackground = (themes: CustomTheme[]) =>
-  themes.some((theme) => isAnimatedBgUrl(theme.bgUrl))
+  themes.some((theme) => theme.bgAnimated)
 
 export const isAnimatedCustomTheme = (theme: CustomTheme) =>
-  isAnimatedBgUrl(theme.bgUrl)
+  theme.bgAnimated
 
 export const clearAnimatedBgUrl = (theme: CustomTheme) =>
-  isAnimatedCustomTheme(theme) ? { ...theme, bgUrl: "" } : theme
+  isAnimatedCustomTheme(theme) ? { ...theme, bgImageId: "", bgAnimated: false } : theme
