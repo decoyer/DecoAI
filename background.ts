@@ -419,38 +419,15 @@ const blobToDataUrl = (blob: Blob) =>
     reader.readAsDataURL(blob)
   })
 
-const sanitizeImagePng = async (blob: Blob) => {
-  const image = await createImageBitmap(blob, { imageOrientation: "from-image" })
-  const canvas = new OffscreenCanvas(image.width, image.height)
-  const context = canvas.getContext("2d")
-
-  if (!context) throw new Error("Canvas unavailable")
-
-  context.drawImage(image, 0, 0)
-  image.close()
-
-  const pngBlob = await canvas.convertToBlob({ type: "image/png" })
-  const nonce = crypto.randomUUID()
-  const nonceBlob = new Blob([nonce], { type: "text/plain" })
-
-  return new Blob([pngBlob, nonceBlob], { type: "image/png" })
-}
-
 const removeBackgroundImage = async (
   imageUrl: string,
   sendResponse: (response?: unknown) => void
 ) => {
   try {
-    const response = await fetch(imageUrl)
-    const blob = await response.blob()
-    const requestBlob = await sanitizeImagePng(blob)
-
-    const formData = new FormData()
-    formData.append("image", requestBlob, "image.png")
-
-    const res = await fetch("https://clearbackdrop.com/api/v1/remove-background", {
+    const res = await fetch("https://decoai.cokr.workers.dev/remove-bg", {
       method: "POST",
-      body: formData
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ imageUrl })
     })
 
     if (!res.ok) throw new Error(`Remove background failed: ${res.status}`)
