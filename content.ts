@@ -520,7 +520,8 @@ const getCustomThemeData = async (): Promise<ThemeConfig> => {
   const { theme: customTheme } = await getSelectedCustomTheme()
   if (!customTheme) return EMPTY_THEME
 
-  const bgUrl = customTheme.bgImageId ? await getImageDataUrl(customTheme.bgImageId).catch(() => "") : ""
+  const bgUrl = sanitizeCustomBgUrl(customTheme.bgUrl) ||
+    (customTheme.bgImageId ? await getImageDataUrl(customTheme.bgImageId).catch(() => "") : "")
 
   return {
     bgUrl,

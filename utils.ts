@@ -16,6 +16,7 @@ export type CustomTheme = {
   text: string
   accent: string
   bgImageId: string
+  bgUrl?: string
   bgAnimated: boolean
   bgColor: string
   bgOptions: CustomBgOptions

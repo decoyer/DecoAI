@@ -566,6 +566,18 @@ export function FabPanelApp() {
 
   const editingTheme = customThemes.find((item) => item.id === editingCustomThemeId)
 
+  const isBackgroundImageUsed = (imageId: string, ignoredThemeId = "") =>
+    customThemes.some((item) => item.id !== ignoredThemeId && item.bgImageId === imageId)
+
+  const deleteBackgroundImage = (imageId: string, ignoredThemeId = "") => {
+    if (imageId && !isBackgroundImageUsed(imageId, ignoredThemeId)) void deleteImageData(imageId)
+  }
+
+  const deleteDraftBackgroundImage = (imageId = draftBackgroundImageId) => {
+    if (!imageId || imageId === editingTheme?.bgImageId) return
+    deleteBackgroundImage(imageId)
+  }
+
   const getEditingThemeDraft = () => {
     if (!editingTheme) return null
 
@@ -575,6 +587,9 @@ export function FabPanelApp() {
       text: draftTextColor,
       accent: draftAccentColor,
       bgImageId: draftBackgroundImageId,
+      ...(draftBackgroundImageUrl && !draftBackgroundImageId
+        ? { bgUrl: draftBackgroundImageUrl }
+        : {}),
       bgAnimated: draftBackgroundAnimated,
       bgColor: draftBackgroundColor,
       bgOptions: draftBackgroundOptions
@@ -620,13 +635,23 @@ export function FabPanelApp() {
     const themes = [theme]
     const changed = customThemes.length !== 1 || theme !== source
 
-    if (changed) setCustomThemes(themes)
+    if (changed) {
+      customThemes.forEach((item) => {
+        if (!themes.some((theme) => theme.id === item.id)) {
+          deleteBackgroundImage(item.bgImageId, item.id)
+        } else if (item.bgImageId !== theme.bgImageId) {
+          deleteBackgroundImage(item.bgImageId, item.id)
+        }
+      })
+      setCustomThemes(themes)
+    }
     if (selectedCustomThemeId !== theme.id) setSelectedCustomThemeId(theme.id)
     if (editingCustomThemeId && editingCustomThemeId !== theme.id) {
       setEditingCustomThemeId("")
       setView("themes")
     }
     if (draftBackgroundAnimated) {
+      deleteDraftBackgroundImage()
       setDraftBackgroundImageId("")
       setDraftBackgroundImageUrl("")
       setDraftBackgroundAnimated(false)
@@ -699,6 +724,7 @@ export function FabPanelApp() {
     draftTextColor,
     draftAccentColor,
     draftBackgroundImageId,
+    draftBackgroundImageUrl,
     draftBackgroundAnimated,
     draftBackgroundColor,
     draftBackgroundOptions
@@ -755,17 +781,10 @@ export function FabPanelApp() {
     return isPremium
   }
 
-  const requirePremiumAccess = async (
-    messageKey: string
-  ) => {
-    setIsLoading(true)
-    try {
-      const premium = await refreshPremiumStatus()
-      if (!premium) toast.error(t(messageKey))
-      return premium
-    } finally {
-      setIsLoading(false)
-    }
+  const requirePremiumAccess = async (messageKey: string) => {
+    const premium = await refreshPremiumStatus()
+    if (!premium) toast.error(t(messageKey))
+    return premium
   }
 
   const onProClick = async () => {
@@ -847,6 +866,7 @@ export function FabPanelApp() {
     }
 
     let imported: Array<CustomTheme & { bgUrl?: string }> = []
+    const importImageIds: string[] = []
     try {
       const text = await file.text()
       imported = parseImportedThemes(text, (index) => `${t("custom")} ${index + 1}`)
@@ -868,15 +888,18 @@ export function FabPanelApp() {
           const { bgUrl: importedBgUrl, ...storageTheme } = themeData
           const bgUrl = sanitizeCustomBgUrl(importedBgUrl)
           if (!bgUrl) return storageTheme
+          const bgImageId = await saveImageDataUrl(bgUrl)
+          importImageIds.push(bgImageId)
 
           return {
             ...storageTheme,
-            bgImageId: await saveImageDataUrl(bgUrl),
+            bgImageId,
             bgAnimated: isAnimatedBgUrl(bgUrl)
           }
         })
       )
     } catch {
+      importImageIds.forEach((imageId) => void deleteImageData(imageId))
       toast.error(t("error_fileInvalid", "JSON"))
       clearFileInput(importFileRef.current)
       return
@@ -884,6 +907,7 @@ export function FabPanelApp() {
 
     const hasAnimatedImportedTheme = hasAnimatedBackground(imported)
     if (hasAnimatedImportedTheme && !(await requirePremiumAccess("pro_animatedBG"))) {
+      importImageIds.forEach((imageId) => void deleteImageData(imageId))
       clearFileInput(importFileRef.current)
       return
     }
@@ -893,6 +917,10 @@ export function FabPanelApp() {
     if (premium) {
       setCustomThemes((prev) => [...prev, ...imported])
     } else {
+      const keepImageId = imported[0].bgImageId
+      importImageIds.forEach((imageId) => {
+        if (imageId !== keepImageId) void deleteImageData(imageId)
+      })
       setCustomThemes([imported[0]])
       setSelectedCustomThemeId(imported[0].id)
       setTheme("custom")
@@ -915,7 +943,7 @@ export function FabPanelApp() {
     }
     if (file.size > MAX_FILE_BYTES) {
       toast.error(t("error_fileExceed"))
-      clearFileInput(importFileRef.current)
+      clearFileInput(bgUploadRef.current)
       return
     }
     const animated = await isAnimatedImage(file)
@@ -932,8 +960,8 @@ export function FabPanelApp() {
         return
       }
       try {
-        const imageId = await saveImageDataUrl(result)
-        setDraftBackgroundImageId(imageId)
+        deleteDraftBackgroundImage()
+        setDraftBackgroundImageId("")
         setDraftBackgroundAnimated(animated)
         setDraftBackgroundImageUrl(result)
       } catch {
@@ -946,20 +974,44 @@ export function FabPanelApp() {
   }
 
   const onThemeClick = (key: string) => {
+    deleteDraftBackgroundImage()
     setTheme("")
     setTheme(key)
     setEditingCustomThemeId("")
     setView("themes")
   }
-  const onSaveClick = () => {
+  const onSaveClick = async () => {
+    if (isLoading) return
+
     const nextTheme = getEditingThemeDraft()
-    if (nextTheme) setCustomThemes((prev) => prev.map((item) => (item.id === nextTheme.id ? nextTheme : item)))
-    setView("themes")
-    toast.success(t("success_themeSave"))
+    const oldImageId = editingTheme?.bgImageId || ""
+
+    if (nextTheme) {
+      setIsLoading(true)
+
+      try {
+        const shouldSaveImage = Boolean(draftBackgroundImageUrl && !draftBackgroundImageId)
+        const bgImageId = shouldSaveImage ? await saveImageDataUrl(draftBackgroundImageUrl) : draftBackgroundImageId
+        const { bgUrl, ...storageTheme } = { ...nextTheme, bgImageId }
+
+        setCustomThemes((prev) => prev.map((item) => (item.id === storageTheme.id ? storageTheme : item)))
+        setDraftBackgroundImageId(bgImageId)
+        if (oldImageId && oldImageId !== bgImageId) deleteBackgroundImage(oldImageId, storageTheme.id)
+
+        setView("themes")
+        toast.success(t("success_themeSave"))
+      } catch {
+        toast.error(t("error_fileInvalid", "IMG"))
+        return
+      } finally {
+        setIsLoading(false)
+      }
+    }
   }
   const resetCustomText = () => setDraftTextColor("")
   const resetCustomAccent = () => setDraftAccentColor("")
   const resetDraftBackgroundImage = () => {
+    deleteDraftBackgroundImage()
     setDraftBackgroundImageId("")
     setDraftBackgroundAnimated(false)
     setDraftBackgroundImageUrl("")
@@ -968,10 +1020,15 @@ export function FabPanelApp() {
   const resetDraftBackgroundColor = () => setDraftBackgroundColor("")
 
   const onRemoveBGClick = async () => {
-    if (!draftBackgroundImageUrl || !(await requirePremiumAccess("pro_removeBG"))) return
+    if (isLoading || !draftBackgroundImageUrl) return
+    setIsLoading(true)
+
+    if (!(await requirePremiumAccess("pro_removeBG"))) {
+      setIsLoading(false)
+      return
+    }
 
     const toastId = toast.loading(t("loading_removeBG"))
-    setIsLoading(true)
 
     try {
       const result = await new Promise<string>((resolve, reject) => {
@@ -991,8 +1048,8 @@ export function FabPanelApp() {
         )
       })
 
-      const imageId = await saveImageDataUrl(result)
-      setDraftBackgroundImageId(imageId)
+      deleteDraftBackgroundImage()
+      setDraftBackgroundImageId("")
       setDraftBackgroundAnimated(false)
       setDraftBackgroundImageUrl(result)
 
@@ -1017,10 +1074,15 @@ export function FabPanelApp() {
   }
 
   const onColorMatchClick = async () => {
-    if (!draftBackgroundImageUrl || !(await requirePremiumAccess("pro_colorMatch"))) return
+    if (isLoading || !draftBackgroundImageUrl) return
+    setIsLoading(true)
+
+    if (!(await requirePremiumAccess("pro_colorMatch"))) {
+      setIsLoading(false)
+      return
+    }
 
     const toastId = toast.loading(t("loading_colorMatch"))
-    setIsLoading(true)
 
     try {
       await wait(2000)
@@ -1065,6 +1127,7 @@ export function FabPanelApp() {
       setView("custom")
       return
     }
+    deleteDraftBackgroundImage()
     setEditingCustomThemeId("")
     setSelectedCustomThemeId(customThemeItem.id)
     setTheme("custom")
@@ -1115,7 +1178,7 @@ export function FabPanelApp() {
     const deletingSelected = selectedCustomThemeId === customThemeId && theme === "custom"
     const nextThemes = customThemes.filter((item) => item.id !== customThemeId)
     setCustomThemes(nextThemes)
-    if (deletedTheme?.bgImageId) void deleteImageData(deletedTheme.bgImageId)
+    if (deletedTheme?.bgImageId) deleteBackgroundImage(deletedTheme.bgImageId, deletedTheme.id)
     if (deletingSelected) {
       setSelectedCustomThemeId("")
       setTheme("default")
@@ -1185,6 +1248,7 @@ export function FabPanelApp() {
   }
 
   const resetEditingThemeDraft = () => {
+    deleteDraftBackgroundImage()
     setDraftBackgroundImageId("")
     setDraftBackgroundAnimated(false)
     setDraftBackgroundImageUrl("")
