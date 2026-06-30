@@ -986,26 +986,25 @@ export function FabPanelApp() {
     const nextTheme = getEditingThemeDraft()
     const oldImageId = editingTheme?.bgImageId || ""
 
-    if (nextTheme) {
-      setIsLoading(true)
+    if (!nextTheme) return
 
-      try {
-        const shouldSaveImage = Boolean(draftBackgroundImageUrl && !draftBackgroundImageId)
-        const bgImageId = shouldSaveImage ? await saveImageDataUrl(draftBackgroundImageUrl) : draftBackgroundImageId
-        const { bgUrl, ...storageTheme } = { ...nextTheme, bgImageId }
+    setIsLoading(true)
 
-        setCustomThemes((prev) => prev.map((item) => (item.id === storageTheme.id ? storageTheme : item)))
-        setDraftBackgroundImageId(bgImageId)
-        if (oldImageId && oldImageId !== bgImageId) deleteBackgroundImage(oldImageId, storageTheme.id)
+    try {
+      const shouldSaveImage = Boolean(draftBackgroundImageUrl && !draftBackgroundImageId)
+      const bgImageId = shouldSaveImage ? await saveImageDataUrl(draftBackgroundImageUrl) : draftBackgroundImageId
+      const { bgUrl, ...storageTheme } = { ...nextTheme, bgImageId }
 
-        setView("themes")
-        toast.success(t("success_themeSave"))
-      } catch {
-        toast.error(t("error_fileInvalid", "IMG"))
-        return
-      } finally {
-        setIsLoading(false)
-      }
+      setCustomThemes((prev) => prev.map((item) => (item.id === storageTheme.id ? storageTheme : item)))
+      setDraftBackgroundImageId(bgImageId)
+      if (oldImageId && oldImageId !== bgImageId) deleteBackgroundImage(oldImageId, storageTheme.id)
+
+      setView("themes")
+      toast.success(t("success_themeSave"))
+    } catch {
+      toast.error(t("error_themeSave"))
+    } finally {
+      setIsLoading(false)
     }
   }
   const resetCustomText = () => setDraftTextColor("")

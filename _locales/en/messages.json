@@ -206,6 +206,9 @@
   "error_checkoutFail": {
     "message": "Unable to open checkout. Please try again later."
   },
+  "error_themeSave": {
+    "message": "Unable to save theme. Please try again later."
+  },
   "error_removeBG": {
     "message": "Unable to complete Remove BG. Please try again later."
   },
