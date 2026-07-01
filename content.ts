@@ -401,7 +401,6 @@ const mountToastContainer = () => {
 
   createRoot(root).render(
     createElement(ToastContainer, {
-      position: "top-right",
       theme: "colored",
       autoClose: 2000,
       closeOnClick: true,
@@ -1369,11 +1368,11 @@ function PhotoWidgetContent({
     {
       type: "button",
       className: "decoai-widget-control decoai-photo-widget-upload",
-      onPointerDown: (event) => event.stopPropagation(),
-      onPointerUp: (event) => event.stopPropagation(),
-      onClick: (event) => {
-        event.preventDefault()
-        event.stopPropagation()
+      onPointerDown: (e) => e.stopPropagation(),
+      onPointerUp: (e) => e.stopPropagation(),
+      onClick: (e) => {
+        e.preventDefault()
+        e.stopPropagation()
         uploadRef.current?.click()
       }
     },
@@ -1387,9 +1386,9 @@ function PhotoWidgetContent({
       ref: uploadRef,
       type: "file",
       accept: "image/*",
-      onChange: (event) => {
-        void uploadImage(event.currentTarget.files?.[0])
-        event.currentTarget.value = ""
+      onChange: (e) => {
+        void uploadImage(e.currentTarget.files?.[0])
+        e.currentTarget.value = ""
       },
       style: { display: "none" }
     }),
@@ -1945,10 +1944,10 @@ function WidgetOverlayApp() {
         bottom: Math.max(document.documentElement.clientHeight, 240)
       },
       onDragStart: () => interactionStartFrameRef.current = editingWidgetId ? frames[editingWidgetId] : null,
-      onDrag: (event) => {
+      onDrag: (e) => {
         if (!editingWidgetId) return
         const frame = interactionStartFrameRef.current || frames[editingWidgetId]
-        const [deltaX, deltaY] = event.beforeDist
+        const [deltaX, deltaY] = e.beforeDist
         const nextFrame = clampWidgetFrameToViewport(
           {
             ...frame,
@@ -1957,41 +1956,38 @@ function WidgetOverlayApp() {
           },
           getWidgetMinSize(editingWidgetId)
         )
-        event.target.style.transform = getWidgetTransform(nextFrame)
+        e.target.style.transform = getWidgetTransform(nextFrame)
         liveFrameRef.current[editingWidgetId] = nextFrame
       },
       onDragEnd: () => {
         persistLiveFrame(editingWidgetId)
         interactionStartFrameRef.current = null
       },
-      onResizeStart: (event) => {
+      onResizeStart: (e) => {
         interactionStartFrameRef.current = editingWidgetId ? frames[editingWidgetId] : null
         const viewportWidth = Math.max(document.documentElement.clientWidth, 320)
         const viewportHeight = Math.max(document.documentElement.clientHeight, 240)
         const minSize = getWidgetMinSize(editingWidgetId)
-        event.setMin([
-          Math.min(minSize.width, viewportWidth),
-          Math.min(minSize.height, viewportHeight)
-        ])
-        event.setMax([viewportWidth, viewportHeight])
+        e.setMin([Math.min(minSize.width, viewportWidth), Math.min(minSize.height, viewportHeight)])
+        e.setMax([viewportWidth, viewportHeight])
       },
-      onResize: (event) => {
+      onResize: (e) => {
         if (!editingWidgetId) return
         const frame = interactionStartFrameRef.current || frames[editingWidgetId]
-        const [deltaX, deltaY] = event.drag.beforeDist
+        const [deltaX, deltaY] = e.drag.beforeDist
         const nextFrame = clampWidgetFrameToViewport(
           {
             ...frame,
             x: frame.x + deltaX,
             y: frame.y + deltaY,
-            width: event.width,
-            height: event.height
+            width: e.width,
+            height: e.height
           },
           getWidgetMinSize(editingWidgetId)
         )
-        event.target.style.width = `${nextFrame.width}px`
-        event.target.style.height = `${nextFrame.height}px`
-        event.target.style.transform = getWidgetTransform(nextFrame)
+        e.target.style.width = `${nextFrame.width}px`
+        e.target.style.height = `${nextFrame.height}px`
+        e.target.style.transform = getWidgetTransform(nextFrame)
         liveFrameRef.current[editingWidgetId] = nextFrame
       },
       onResizeEnd: () => {
@@ -2001,11 +1997,11 @@ function WidgetOverlayApp() {
       onRotateStart: () => {
         interactionStartFrameRef.current = editingWidgetId ? frames[editingWidgetId] : null
       },
-      onRotate: (event) => {
+      onRotate: (e) => {
         if (!editingWidgetId) return
         const frame = interactionStartFrameRef.current || frames[editingWidgetId]
-        const nextFrame = { ...frame, rotation: normalizeWidgetRotation(event.rotation) }
-        event.target.style.transform = getWidgetTransform(nextFrame)
+        const nextFrame = { ...frame, rotation: normalizeWidgetRotation(e.rotation) }
+        e.target.style.transform = getWidgetTransform(nextFrame)
         liveFrameRef.current[editingWidgetId] = nextFrame
       },
       onRotateEnd: () => {
@@ -2541,8 +2537,8 @@ const mountFab = async () => {
     button.className = buttonClass
     const iconRoot = createRoot(button)
     iconRoot.render(iconComponent)
-    button.addEventListener("click", (event) => {
-      event.stopPropagation()
+    button.addEventListener("click", (e) => {
+      e.stopPropagation()
       if (fabOpen && fabPanelView === panelView) {
         closeFabDock()
       } else {
@@ -2871,8 +2867,8 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   })()
 })
 
-window.addEventListener(CUSTOM_THEME_PREVIEW_EVENT, (event) => {
-  const customEvent = event as CustomEvent<{ themeId: string; theme: CustomTheme } | null>
+window.addEventListener(CUSTOM_THEME_PREVIEW_EVENT, (e) => {
+  const customEvent = e as CustomEvent<{ themeId: string; theme: CustomTheme } | null>
   customThemePreview = customEvent.detail
   void (async () => {
     if (!(await isCustomThemeSelected())) return

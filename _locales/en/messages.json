@@ -35,6 +35,15 @@
   "plan": {
     "message": "Plan"
   },
+  "data": {
+    "message": "Data"
+  },
+  "restore": {
+    "message": "Restore"
+  },
+  "backup":  {
+    "message": "Backup"
+  },
   "addTheme": {
     "message": "Add Theme"
   },

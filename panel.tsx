@@ -13,6 +13,7 @@ import { CSS } from "@dnd-kit/utilities"
 import { Icon } from "@iconify/react"
 import { Vibrant } from "node-vibrant/browser"
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
+import Tilt from "react-parallax-tilt"
 import { toast } from "react-toastify"
 
 import { Storage } from "@plasmohq/storage"
@@ -41,9 +42,9 @@ import {
   deleteImageData,
   detectCurrentSite,
   FAB_OPEN_EVENT,
+  getImageDataUrl,
   getPositionXPercent,
   getPositionYPercent,
-  getImageDataUrl,
   hasAnimatedBackground,
   isAnimatedBgUrl,
   isAnimatedImage,
@@ -103,6 +104,15 @@ const WIDGET_LIST: Array<{ key: WidgetKey; labelKey: string; icon: string }> = [
   { key: "stopwatch", labelKey: "stopwatchWidget", icon: "timer" },
   { key: "photo", labelKey: "photoWidget", icon: "sticker" }
 ]
+
+const themeTiltProps = {
+  glareEnable: true,
+  glareBorderRadius: "12px",
+  glareMaxOpacity: 0.2,
+  glarePosition: "all" as const,
+  tiltMaxAngleX: 12,
+  tiltMaxAngleY: 12
+}
 
 const isSameWidgetLayout = (
   left: WidgetLayoutOptions,
@@ -201,10 +211,13 @@ const proButtonStyle = {
 } as const
 const iconLabelStyle = {
   display: "flex",
-  gap: 4,
-  alignItems: "center"
+  alignItems: "center",
+  gap: 4
 } as const
-const centeredHeadingStyle = { margin: 0, textAlign: "center" } as const
+const centeredHeadingStyle = {
+  margin: 0,
+  textAlign: "center"
+} as const
 const tabGridStyle = {
   display: "grid",
   gap: 8,
@@ -238,9 +251,8 @@ const textInputStyle = {
 const footerButtonStyle = {
   ...controlButtonStyle,
   display: "flex",
-  justifyContent: "center",
   flex: 1,
-  border: "none",
+  justifyContent: "center",
   padding: 8
 } as const
 
@@ -302,14 +314,8 @@ function CustomThemeSortableCard({
   selectedCustomThemeId: string
   draggingCustomThemeId: string
   onCustomCardClick: (customThemeItem: CustomTheme) => void
-  onCustomCardDuplicateClick: (
-    event: React.MouseEvent<HTMLButtonElement>,
-    customThemeItem: CustomTheme
-  ) => void
-  onCustomCardDeleteClick: (
-    event: React.MouseEvent<HTMLButtonElement>,
-    customThemeItem: CustomTheme
-  ) => void
+  onCustomCardDuplicateClick: (customThemeItem: CustomTheme) => void
+  onCustomCardDeleteClick: (customThemeItem: CustomTheme) => void
 }) {
   const [bgUrl, setBgUrl] = useState("")
   const {
@@ -360,43 +366,56 @@ function CustomThemeSortableCard({
         transition,
         zIndex: isDragging ? 2 : "auto"
       }}>
-      <button
-        type="button"
-        className={`custom-theme-card${draggingCustomThemeId === item.id ? " is-dragging" : ""}`}
-        onClick={() => onCustomCardClick(item)}
-        {...attributes}
-        {...listeners}
-        style={{
-          touchAction: "none",
-          boxShadow:
-            theme === "custom" && selectedCustomThemeId === item.id
-              ? "inset 2px 2px 5px rgba(0, 0, 0, 0.2), 0 0 0 3px #66cdaa"
+      <Tilt
+        {...themeTiltProps}
+        className="theme-card-tilt custom-theme-card-tilt"
+        style={themeTiltStyle(theme === "custom" && selectedCustomThemeId === item.id)}
+        tiltEnable={!isDragging}>
+        <button
+          type="button"
+          className={`custom-theme-card${draggingCustomThemeId === item.id ? " is-dragging" : ""}`}
+          onClick={() => onCustomCardClick(item)}
+          {...attributes}
+          {...listeners}
+          style={{
+            touchAction: "none",
+            boxShadow: theme === "custom" && selectedCustomThemeId === item.id
+              ? "inset 2px 2px 5px rgba(0, 0, 0, 0.2)"
               : "none"
-        }}>
-        <div
-          className="custom-theme-card__bg"
-          style={bgStyle}
-        />
-        <div className="custom-theme-card__title">{item.name}</div>
-      </button>
-      {!isDragging && (
-        <div className="custom-theme-card__actions">
-          <button
-            type="button"
-            className="custom-theme-card__action custom-theme-card__duplicate"
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => onCustomCardDuplicateClick(event, item)}>
-            <Icon icon="lucide:copy-plus" height={16} color="#fff" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="custom-theme-card__action custom-theme-card__delete"
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => onCustomCardDeleteClick(event, item)}>
-            <Icon icon="lucide:trash-2" height={16} color="#fff" aria-hidden="true" />
-          </button>
-        </div>
-      )}
+          }}>
+          <div
+            className="custom-theme-card__bg"
+            style={bgStyle}
+          />
+          <div className="custom-theme-card__title">{item.name}</div>
+        </button>
+        {!isDragging && (
+          <div className="custom-theme-card__actions">
+            <button
+              type="button"
+              className="custom-theme-card__action custom-theme-card__duplicate"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                onCustomCardDuplicateClick(item)
+              }}>
+              <Icon icon="lucide:copy-plus" height={16} color="#fff" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="custom-theme-card__action custom-theme-card__delete"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                onCustomCardDeleteClick(item)
+              }}>
+              <Icon icon="lucide:trash-2" height={16} color="#fff" aria-hidden="true" />
+            </button>
+          </div>
+        )}
+      </Tilt>
     </div>
   )
 }
@@ -859,11 +878,6 @@ export function FabPanelApp() {
       clearFileInput(importFileRef.current)
       return
     }
-    if (file.size > MAX_FILE_BYTES) {
-      toast.error(t("error_fileExceed"))
-      clearFileInput(importFileRef.current)
-      return
-    }
 
     let imported: Array<CustomTheme & { bgUrl?: string }> = []
     const importImageIds: string[] = []
@@ -1190,22 +1204,11 @@ export function FabPanelApp() {
     toast.success(t("success_themeDelete"))
   }
 
-  const onCustomCardDeleteClick = (
-    event: React.MouseEvent<HTMLButtonElement>,
-    customThemeItem: CustomTheme
-  ) => {
-    event.preventDefault()
-    event.stopPropagation()
+  const onCustomCardDeleteClick = (customThemeItem: CustomTheme) => {
     deleteCustomTheme(customThemeItem.id)
   }
 
-  const onCustomCardDuplicateClick = async (
-    event: React.MouseEvent<HTMLButtonElement>,
-    customThemeItem: CustomTheme
-  ) => {
-    event.preventDefault()
-    event.stopPropagation()
-
+  const onCustomCardDuplicateClick = async (customThemeItem: CustomTheme) => {
     if (customThemes.length > 0 && !(await requirePremiumAccess("pro_themeLimit"))) return
 
     const copiedTheme = {
@@ -1268,17 +1271,35 @@ export function FabPanelApp() {
         input.color-picker::-webkit-color-swatch { border: none; border-radius: 6px; }
         .preset-theme-card {
           position: relative;
+          width: 100%;
           overflow: hidden;
           isolation: isolate;
+        }
+        .theme-card-tilt {
+          display: block;
+          width: 100%;
+          height: 100px;
+          border-radius: 12px;
+          transform-style: preserve-3d;
+        }
+        .custom-theme-card-tilt {
+          position: relative;
         }
         .preset-theme-card__bg {
           position: absolute;
           inset: 0;
-          transform: scale(1);
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
           z-index: 0;
           background-position: center center;
           background-size: cover;
+        }
+        .preset-theme-card__emoji {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          z-index: 1;
+          font-size: 32px;
+          line-height: 1;
+          transform: translate(-50%, -75%);
         }
         .preset-theme-card__label {
           position: absolute;
@@ -1295,18 +1316,6 @@ export function FabPanelApp() {
           text-align: center;
           transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .preset-theme-card__emoji {
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -75%) scale(1);
-          z-index: 1;
-          font-size: 32px;
-          line-height: 1;
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .preset-theme-card:hover .preset-theme-card__bg { transform: scale(1.1); }
-        .preset-theme-card:hover .preset-theme-card__emoji { transform: translate(-50%, -75%) scale(1.1); }
         .preset-theme-card:hover .preset-theme-card__label { background-color: #0000004D; }
         .custom-theme-card {
           position: relative;
@@ -1328,9 +1337,7 @@ export function FabPanelApp() {
           background-position: center center;
           background-size: cover;
           background-repeat: no-repeat;
-          scale: 1;
           transform: scaleX(var(--custom-bg-scale-x, 1));
-          transition: scale 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .custom-theme-card__title {
           position: absolute;
@@ -1384,7 +1391,6 @@ export function FabPanelApp() {
         .custom-theme-card__delete:hover {
           background-color: #d32f2f;
         }
-        .custom-theme-card:hover .custom-theme-card__bg { scale: 1.1; }
         .custom-theme-card:hover .custom-theme-card__title { background-color: #0000004D; }
         .pro-button { animation: pro-gradient 10s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
         .footer button:hover { filter: brightness(1.1); }
@@ -1870,17 +1876,20 @@ export function FabPanelApp() {
   )
 }
 
-const themeCardBg = (color: string) =>
-  `linear-gradient(135deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.04) 48%, rgba(0,0,0,0.12) 100%), ${color}`
-
 const themeCardStyle = (color: string, active: boolean) => ({
+  display: "block",
+  width: "100%",
   height: 100,
   backgroundColor: color,
   border: "none",
   borderRadius: 12,
   cursor: "pointer",
-  boxShadow: active ? "inset 2px 2px 5px rgba(0, 0, 0, 0.2), 0 0 0 3px #66cdaa" : "none",
+  boxShadow: active ? "inset 2px 2px 5px rgba(0, 0, 0, 0.2)" : "none",
   transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
+})
+
+const themeTiltStyle = (active: boolean): CSSProperties => ({
+  boxShadow: active ? "0 0 0 3px #66cdaa" : "none"
 })
 
 function TabButton({
@@ -1923,15 +1932,17 @@ function ThemeCard({
   onClick: () => void
 }) {
   return (
-    <button
-      type="button"
-      className={`preset-theme-card${className ? ` ${className}` : ""}`}
-      onClick={onClick}
-      style={{ ...themeCardStyle(color, active), backgroundColor: "transparent", cursor: "pointer" }}>
-      <div className="preset-theme-card__bg" style={{ background: themeCardBg(color) }} />
-      <span className="preset-theme-card__emoji">{emoji}</span>
-      <span className="preset-theme-card__label">{label}</span>
-    </button>
+    <Tilt {...themeTiltProps} className="theme-card-tilt" style={themeTiltStyle(active)}>
+      <button
+        type="button"
+        className={`preset-theme-card${className ? ` ${className}` : ""}`}
+        onClick={onClick}
+        style={{ ...themeCardStyle(color, active), backgroundColor: "transparent", cursor: "pointer" }}>
+        <div className="preset-theme-card__bg" style={{ backgroundColor: color }} />
+        <span className="preset-theme-card__emoji">{emoji}</span>
+        <span className="preset-theme-card__label">{label}</span>
+      </button>
+    </Tilt>
   )
 }
 

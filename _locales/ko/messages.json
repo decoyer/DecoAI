@@ -35,6 +35,15 @@
   "plan": {
     "message": "플랜"
   },
+  "data": {
+    "message": "데이터"
+  },
+  "restore": {
+    "message": "복원"
+  },
+  "backup":  {
+    "message": "백업"
+  },
   "addTheme": {
     "message": "테마 추가"
   },

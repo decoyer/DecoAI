@@ -159,6 +159,7 @@ function IndexPopup() {
         .toggle-switch:checked::before {
           transform: translateX(16px);
         }
+        .footer button:hover { filter: brightness(1.1); }
       `}</style>
       <div style={rootStyle}>
         <div style={headerStyle}>
@@ -308,6 +309,34 @@ function IndexPopup() {
                 </div>
                 <span>{premiumStatus === "premium" ? "Pro" : "Free"}</span>
               </div>
+
+              <div style={{ ...sectionWrapperStyle, marginTop: 16 }}>
+                <div style={sectionHeaderStyle}>
+                  <Icon icon="lucide:database" height={24} aria-hidden="true" />
+                  <h3>{t("data")}</h3>
+                </div>
+              </div>
+
+              <div className="footer" style={rowStyle}>
+                <button
+                  type="button"
+                  onClick={() => alert("in development")}
+                  style={controlButtonStyle}>
+                  <div style={{ ...itemLabelStyle, gap: 4 }}>
+                    <Icon icon="lucide-hard-drive-download" height={16} aria-hidden="true" />
+                    <span>{t("restore")}</span>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => alert("in development")}
+                  style={controlButtonStyle}>
+                  <div style={{ ...itemLabelStyle, gap: 4 }}>
+                    <Icon icon="lucide-hard-drive-upload" height={16} aria-hidden="true" />
+                    <span>{t("backup")}</span>
+                  </div>
+                </button>
+              </div>
             </>
           )}
         </div>
@@ -344,10 +373,7 @@ function TabButton({
     <button
       type="button"
       onClick={onClick}
-      style={{
-        ...tabButtonStyle,
-        ...(active ? activeTabButtonStyle : inactiveTabButtonStyle)
-      }}>
+      style={{ ...tabButtonStyle, ...(active ? activeTabButtonStyle : inactiveTabButtonStyle) }}>
       {label}
     </button>
   )
@@ -371,8 +397,8 @@ function ToggleSwitch({
 }
 
 const rootStyle = {
-  width: 280,
-  maxHeight: 600,
+  width: 300,
+  height: 450,
   display: "flex",
   flexDirection: "column",
   backgroundColor: "#333",
@@ -438,7 +464,7 @@ const rowStyle = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
-  padding: "2px 8px",
+  padding: "4px 8px",
   gap: 8
 } as const
 
@@ -453,6 +479,17 @@ const actionButtonStyle = {
   height: 24,
   background: 0,
   border: 0,
+  cursor: "pointer"
+} as const
+
+const controlButtonStyle = {
+  flex: 1,
+  padding: 8,
+  backgroundColor: "#4b5563",
+  color: "#fff",
+  border: "none",
+  borderRadius: 8,
+  whiteSpace: "nowrap",
   cursor: "pointer"
 } as const
 
