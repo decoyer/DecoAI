@@ -1,23 +1,11 @@
-import {
-  closestCenter,
-  DndContext,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-  type DragStartEvent,
-  type Modifier
-} from "@dnd-kit/core"
-import { arrayMove, rectSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable"
-import { CSS } from "@dnd-kit/utilities"
 import { Icon } from "@iconify/react"
-import { Vibrant } from "node-vibrant/browser"
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
-import Tilt from "react-parallax-tilt"
-import { toast } from "react-toastify"
-
 import { Storage } from "@plasmohq/storage"
 import { useStorage } from "@plasmohq/storage/hook"
+import { Vibrant } from "node-vibrant/browser"
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react"
+import SortableList, { SortableItem } from "react-easy-sort"
+import Tilt from "react-parallax-tilt"
+import { toast } from "react-toastify"
 
 import {
   AUTH_REFRESH_MS,
@@ -162,21 +150,21 @@ const themeSectionStyle = {
 const themeGridScrollStyle = {
   flex: 1,
   minHeight: 0,
-  padding: "10px 5px",
+  margin: "10px 5px",
   overflow: "auto"
 } as const
 const sectionStyle = {
-  padding: "10px 5px",
   display: "flex",
   flexDirection: "column",
+  padding: "10px 5px",
   gap: 8
 } as const
 const editSectionScrollStyle = {
   ...sectionStyle,
   flex: 1,
   minHeight: 0,
-  overflowY: "auto",
-  overflowX: "hidden"
+  overflowX: "hidden",
+  overflowY: "auto"
 } as const
 const cardStyle = {
   backgroundColor: "#3f3f46",
@@ -228,11 +216,13 @@ const twoColumnGridStyle = {
   gridTemplateColumns: "repeat(2, 1fr)",
   gap: 8
 } as const
-const fieldLabelStyle = { padding: "4px 0px" } as const
+const fieldLabelStyle = {
+  padding: "4px 0px"
+} as const
 const inlineControlStyle = {
   display: "flex",
-  gap: 4,
-  alignItems: "center"
+  alignItems: "center",
+  gap: 4
 } as const
 const columnControlStyle = {
   display: "flex",
@@ -281,25 +271,6 @@ const isCurrentPageDarkMode = () => {
 
 const wait = (ms: number) => new Promise<void>((resolve) => { window.setTimeout(resolve, ms) })
 
-const restrictToParentElement: Modifier = ({
-  transform,
-  containerNodeRect,
-  draggingNodeRect
-}) => {
-  if (!containerNodeRect || !draggingNodeRect) return transform
-
-  const minX = containerNodeRect.left - draggingNodeRect.left
-  const maxX = containerNodeRect.right - draggingNodeRect.right
-  const minY = containerNodeRect.top - draggingNodeRect.top
-  const maxY = containerNodeRect.bottom - draggingNodeRect.bottom
-
-  return {
-    ...transform,
-    x: Math.min(Math.max(transform.x, minX), maxX),
-    y: Math.min(Math.max(transform.y, minY), maxY)
-  }
-}
-
 function CustomThemeSortableCard({
   item,
   theme,
@@ -318,14 +289,7 @@ function CustomThemeSortableCard({
   onCustomCardDeleteClick: (customThemeItem: CustomTheme) => void
 }) {
   const [bgUrl, setBgUrl] = useState("")
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging
-  } = useSortable({ id: item.id })
+  const isDragging = draggingCustomThemeId === item.id
 
   useEffect(() => {
     let active = true
@@ -358,30 +322,18 @@ function CustomThemeSortableCard({
 
   return (
     <div
-      ref={setNodeRef}
       className="custom-theme-card-wrap"
-      style={{
-        position: "relative",
-        transform: transform ? CSS.Transform.toString(transform) : undefined,
-        transition,
-        zIndex: isDragging ? 2 : "auto"
-      }}>
+      style={{ position: "relative", zIndex: isDragging ? 2 : "auto" }}>
       <Tilt
         {...themeTiltProps}
         className="theme-card-tilt custom-theme-card-tilt"
-        style={themeTiltStyle(theme === "custom" && selectedCustomThemeId === item.id)}
         tiltEnable={!isDragging}>
         <button
           type="button"
-          className={`custom-theme-card${draggingCustomThemeId === item.id ? " is-dragging" : ""}`}
+          className={`custom-theme-card${theme === "custom" && selectedCustomThemeId === item.id ? " is-active" : ""}${draggingCustomThemeId === item.id ? " is-dragging" : ""}`}
           onClick={() => onCustomCardClick(item)}
-          {...attributes}
-          {...listeners}
           style={{
-            touchAction: "none",
-            boxShadow: theme === "custom" && selectedCustomThemeId === item.id
-              ? "inset 2px 2px 5px rgba(0, 0, 0, 0.2)"
-              : "none"
+            touchAction: "none"
           }}>
           <div
             className="custom-theme-card__bg"
@@ -395,6 +347,7 @@ function CustomThemeSortableCard({
               type="button"
               className="custom-theme-card__action custom-theme-card__duplicate"
               onPointerDown={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
@@ -406,6 +359,7 @@ function CustomThemeSortableCard({
               type="button"
               className="custom-theme-card__action custom-theme-card__delete"
               onPointerDown={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
@@ -422,6 +376,7 @@ function CustomThemeSortableCard({
 
 export function FabPanelApp() {
   const panelRootRef = useRef<HTMLDivElement>(null)
+  const themeGridScrollRef = useRef<HTMLDivElement>(null)
   const [theme, setTheme] = useStorage(SELECTED_THEME_STORAGE_KEY, "default")
   const [panelMode, setPanelMode] = useState<PanelMode>("theme")
   const [view, setView] = useState<PanelView>("themes")
@@ -450,10 +405,7 @@ export function FabPanelApp() {
     []
   )
   const [selectedCustomThemeId, setSelectedCustomThemeId] = useStorage(
-    {
-      key: SELECTED_CUSTOM_THEME_ID_STORAGE_KEY,
-      instance: localStorageInstance
-    }, "")
+    { key: SELECTED_CUSTOM_THEME_ID_STORAGE_KEY, instance: localStorageInstance }, "")
   const [editingCustomThemeId, setEditingCustomThemeId] = useState("")
   const [premiumStatus, setPremiumStatus] = useState<PremiumStatus>("unknown")
   const [draftBackgroundOptions, setDraftBackgroundOptions] = useState<CustomBgOptions>(DEFAULT_CUSTOM_BG_OPTIONS)
@@ -464,7 +416,7 @@ export function FabPanelApp() {
   const [draftWidgetLayout, setDraftWidgetLayout] = useState<WidgetLayoutOptions>(DEFAULT_WIDGET_LAYOUT)
   const [isLoading, setIsLoading] = useState(false)
   const [draggingCustomThemeId, setDraggingCustomThemeId] = useState("")
-  const suppressCustomThemeClickIdRef = useRef("")
+  const customThemeClickRef = useRef("")
   const previousViewRef = useRef<PanelView>(view)
   const canResetText = Boolean((draftTextColor || "").trim())
   const canResetAccent = Boolean((draftAccentColor || "").trim())
@@ -472,17 +424,28 @@ export function FabPanelApp() {
   const isPremiumUser = premiumStatus === "premium"
   const isFreeUser = premiumStatus === "free"
   const selectedCustomTheme = customThemes.find((item) => item.id === selectedCustomThemeId)
-  const customThemeIds = useMemo(
-    () => customThemes.map((item) => item.id),
-    [customThemes]
-  )
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 }
-    })
-  )
   const hasWidgetType = (key: WidgetKey) =>
     (widgetItems || DEFAULT_WIDGET_INSTANCES).some((widget) => widget.type === key)
+
+  function stopCustomThemeDragClamp() {
+    document.removeEventListener("mousemove", clampCustomThemeDrag)
+  }
+
+  function clampCustomThemeDrag() {
+    const scrollArea = themeGridScrollRef.current
+    const dragged = panelRootRef.current?.querySelector<HTMLElement>(".custom-theme-card-dragged")
+    if (!scrollArea || !dragged) return
+
+    dragged.style.removeProperty("translate")
+
+    const dragRect = dragged.getBoundingClientRect()
+    const scrollRect = scrollArea.getBoundingClientRect()
+
+    const x = Math.min(Math.max(scrollRect.left - dragRect.left, 0), scrollRect.right - dragRect.right)
+    const y = Math.min(Math.max(scrollRect.top - dragRect.top, 0), scrollRect.bottom - dragRect.bottom)
+
+    dragged.style.setProperty("translate", `${x}px ${y}px`)
+  }
 
   useEffect(() => {
     if (!customThemes.length && selectedCustomThemeId)
@@ -1129,8 +1092,8 @@ export function FabPanelApp() {
   }
 
   const onCustomCardClick = (customThemeItem: CustomTheme) => {
-    if (suppressCustomThemeClickIdRef.current === customThemeItem.id) {
-      suppressCustomThemeClickIdRef.current = ""
+    if (customThemeClickRef.current === customThemeItem.id) {
+      customThemeClickRef.current = ""
       return
     }
     const isSelected = theme === "custom" && selectedCustomThemeId === customThemeItem.id
@@ -1147,36 +1110,37 @@ export function FabPanelApp() {
     setView("themes")
   }
 
-  const onCustomCardDragStart = (event: DragStartEvent) => {
-    setDraggingCustomThemeId(String(event.active.id))
+  const onCustomThemeSortStart = () => {
+    setDraggingCustomThemeId("")
+
+    const rect = panelRootRef.current?.getBoundingClientRect()
+    if (!rect) return
+    panelRootRef.current?.style.setProperty("--custom-theme-drag-left", `${-rect.left}px`)
+    panelRootRef.current?.style.setProperty("--custom-theme-drag-top", `${-rect.top}px`)
+
+    stopCustomThemeDragClamp()
+    document.addEventListener("mousemove", clampCustomThemeDrag)
+    document.addEventListener("mouseup", stopCustomThemeDragClamp, { once: true })
   }
 
-  const onCustomCardDragEnd = (event: DragEndEvent) => {
-    const activeId = String(event.active.id)
-    const overId = event.over ? String(event.over.id) : ""
+  const onCustomThemeSortEnd = (oldIndex: number, newIndex: number) => {
+    stopCustomThemeDragClamp()
+    const activeId = customThemes[oldIndex]?.id || ""
 
     if (activeId) {
-      suppressCustomThemeClickIdRef.current = activeId
+      customThemeClickRef.current = activeId
       window.setTimeout(() => {
-        if (suppressCustomThemeClickIdRef.current === activeId) {
-          suppressCustomThemeClickIdRef.current = ""
-        }
+        if (customThemeClickRef.current === activeId) customThemeClickRef.current = ""
       }, 0)
     }
-    if (activeId && overId && activeId !== overId) {
-      setCustomThemes((prev) => {
-        const oldIndex = prev.findIndex((item) => item.id === activeId)
-        const newIndex = prev.findIndex((item) => item.id === overId)
-        if (oldIndex < 0 || newIndex < 0) return prev
-        return arrayMove(prev, oldIndex, newIndex)
-      })
-    }
 
-    setDraggingCustomThemeId("")
-  }
-
-  const onCustomCardDragCancel = () => {
-    setDraggingCustomThemeId("")
+    if (oldIndex === newIndex) return
+    setCustomThemes((prev) => {
+      if (oldIndex < 0 || newIndex < 0 || oldIndex >= prev.length || newIndex >= prev.length) return prev
+      const next = prev.slice()
+      next.splice(newIndex, 0, next.splice(oldIndex, 1)[0])
+      return next
+    })
   }
 
   const onCustomPlusClick = async () => {
@@ -1317,6 +1281,16 @@ export function FabPanelApp() {
           transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .preset-theme-card:hover .preset-theme-card__label { background-color: #0000004D; }
+        .preset-theme-card.is-active::after,
+        .custom-theme-card.is-active::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          z-index: 3;
+          border-radius: 12px;
+          box-shadow: inset 0 0 0 2px #66cdaa;
+          pointer-events: none;
+        }
         .custom-theme-card {
           position: relative;
           width: 100%;
@@ -1357,7 +1331,7 @@ export function FabPanelApp() {
           position: absolute;
           top: 1px;
           right: 1px;
-          z-index: 3;
+          z-index: 5;
           display: flex;
           gap: 2px;
           opacity: 0;
@@ -1379,6 +1353,10 @@ export function FabPanelApp() {
         }
         .custom-theme-card-wrap {
           position: relative;
+        }
+        .custom-theme-card-dragged {
+          top: var(--custom-theme-drag-top, 0px) !important;
+          left: var(--custom-theme-drag-left, 0px) !important;
         }
         .custom-theme-card:hover .custom-theme-card__actions,
         .custom-theme-card-wrap:hover .custom-theme-card__actions {
@@ -1481,10 +1459,7 @@ export function FabPanelApp() {
                 <h3 style={centeredHeadingStyle}>{t("theme")} {t("setting")}</h3>
                 <div style={themeSectionStyle}>
                   <div
-                    style={{
-                      ...tabGridStyle,
-                      gridTemplateColumns: "1fr 1fr"
-                    }}>
+                    style={{ ...tabGridStyle, gridTemplateColumns: "1fr 1fr" }}>
                     {(["preset", "custom"] as const).map((tab) => (
                       <TabButton
                         key={tab}
@@ -1494,7 +1469,7 @@ export function FabPanelApp() {
                       />
                     ))}
                   </div>
-                  <div className="content-scroll" style={themeGridScrollStyle}>
+                  <div ref={themeGridScrollRef} className="content-scroll" style={themeGridScrollStyle}>
                     {themeTab === "preset" && (
                       <div style={twoColumnGridStyle}>
                         {THEME_LIST.map((item) => (
@@ -1510,20 +1485,18 @@ export function FabPanelApp() {
                       </div>
                     )}
                     {themeTab === "custom" && (
-                      <div style={twoColumnGridStyle}>
-                        <DndContext
-                          sensors={sensors}
-                          modifiers={[restrictToParentElement]}
-                          collisionDetection={closestCenter}
-                          onDragStart={onCustomCardDragStart}
-                          onDragEnd={onCustomCardDragEnd}
-                          onDragCancel={onCustomCardDragCancel}>
-                          <SortableContext
-                            items={customThemeIds}
-                            strategy={rectSortingStrategy}>
-                            {customThemes.map((item) => (
+                      <SortableList
+                        as="div"
+                        autoScroll
+                        customHolderRef={panelRootRef}
+                        draggedItemClassName="custom-theme-card-dragged"
+                        onSortStart={onCustomThemeSortStart}
+                        onSortEnd={onCustomThemeSortEnd}
+                        style={twoColumnGridStyle}>
+                        {customThemes.map((item) => (
+                          <SortableItem key={item.id}>
+                            <div>
                               <CustomThemeSortableCard
-                                key={item.id}
                                 item={item}
                                 theme={theme}
                                 selectedCustomThemeId={selectedCustomThemeId}
@@ -1532,17 +1505,17 @@ export function FabPanelApp() {
                                 onCustomCardDuplicateClick={onCustomCardDuplicateClick}
                                 onCustomCardDeleteClick={onCustomCardDeleteClick}
                               />
-                            ))}
-                          </SortableContext>
-                          <ThemeCard
-                            className="add-theme-card"
-                            color="#374151"
-                            emoji="✏️"
-                            label={t("addTheme")}
-                            onClick={onCustomPlusClick}
-                          />
-                        </DndContext>
-                      </div>
+                            </div>
+                          </SortableItem>
+                        ))}
+                        <ThemeCard
+                          className="add-theme-card"
+                          color="#374151"
+                          emoji="✏️"
+                          label={t("addTheme")}
+                          onClick={onCustomPlusClick}
+                        />
+                      </SortableList>
                     )}
                   </div>
                 </div>
@@ -1884,12 +1857,7 @@ const themeCardStyle = (color: string, active: boolean) => ({
   border: "none",
   borderRadius: 12,
   cursor: "pointer",
-  boxShadow: active ? "inset 2px 2px 5px rgba(0, 0, 0, 0.2)" : "none",
   transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
-})
-
-const themeTiltStyle = (active: boolean): CSSProperties => ({
-  boxShadow: active ? "0 0 0 3px #66cdaa" : "none"
 })
 
 function TabButton({
@@ -1932,10 +1900,10 @@ function ThemeCard({
   onClick: () => void
 }) {
   return (
-    <Tilt {...themeTiltProps} className="theme-card-tilt" style={themeTiltStyle(active)}>
+    <Tilt {...themeTiltProps} className="theme-card-tilt">
       <button
         type="button"
-        className={`preset-theme-card${className ? ` ${className}` : ""}`}
+        className={`preset-theme-card${active ? " is-active" : ""}${className ? ` ${className}` : ""}`}
         onClick={onClick}
         style={{ ...themeCardStyle(color, active), backgroundColor: "transparent", cursor: "pointer" }}>
         <div className="preset-theme-card__bg" style={{ backgroundColor: color }} />
@@ -2103,12 +2071,7 @@ function CheckboxControl({
         type="checkbox"
         checked={checked}
         disabled={disabled}
-        style={{
-          width: 20,
-          height: 20,
-          accentColor: "#66cdaa",
-          ...disabledControlStyle(!disabled)
-        }}
+        style={{ width: 20, height: 20, accentColor: "#66cdaa", ...disabledControlStyle(!disabled) }}
         onChange={(e) => onChange(e.target.checked)}
       />
     </label>

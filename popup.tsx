@@ -1,7 +1,6 @@
 import { Icon } from "@iconify/react"
-import { useEffect, useState } from "react"
-
 import { useStorage } from "@plasmohq/storage/hook"
+import { useEffect, useState } from "react"
 
 import {
   AUTH_REFRESH_MS,

@@ -1,4 +1,6 @@
 import { Icon } from "@iconify/react"
+import { Storage } from "@plasmohq/storage"
+import { useStorage } from "@plasmohq/storage/hook"
 import { ListKit } from "@tiptap/extension-list"
 import { Placeholder } from "@tiptap/extensions"
 import { EditorContent, useEditor, type JSONContent } from "@tiptap/react"
@@ -11,9 +13,6 @@ import { createRoot, type Root } from "react-dom/client"
 import Moveable from "react-moveable"
 import { useStopwatch, useTimer } from "react-timer-hook"
 import { toast, ToastContainer } from "react-toastify"
-
-import { Storage } from "@plasmohq/storage"
-import { useStorage } from "@plasmohq/storage/hook"
 
 import { AUTH_REFRESH_MS, AUTH_SESSION_STORAGE_KEY, getAuthSessionSnapshot, getVerifiedPremiumStatus } from "./auth"
 import { FabPanelApp } from "./panel"

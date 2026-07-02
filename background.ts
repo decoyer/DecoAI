@@ -1,6 +1,6 @@
+import type { User } from "firebase/auth"
 import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithCredential, signOut } from "firebase/auth/web-extension"
 
-import type { User } from "firebase/auth"
 import { app } from "./firebase"
 import { IMAGE_SOURCE_URLS, MAX_FILE_BYTES } from "./utils"
 
