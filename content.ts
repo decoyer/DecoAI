@@ -175,6 +175,12 @@ const THEME_BG_URLS: Partial<Record<ThemeName, string>> = {
 
 const t = (key: string, value?: string) => chrome.i18n.getMessage(key, value)
 
+const updateWidgetTitleOverflow = (title: HTMLElement) => {
+  const titleText = title.querySelector<HTMLElement>(".decoai-widget-title__text")
+  title.classList.remove("title-overflow")
+  title.classList.toggle("title-overflow", Boolean(titleText && titleText.scrollWidth > titleText.clientWidth + 1))
+}
+
 const THEME_STYLE_ID = "ai-theme-style"
 const FAB_STYLE_ID = "decoai-fab-style"
 const FAB_ROOT_ID = "decoai-fab-root"
@@ -1570,7 +1576,6 @@ function WidgetOverlayApp() {
       backdropFilter: `blur(${clampNumber(layout.glassBlur, 0, 50, 10)}px) saturate(140%)`,
       overflow: "hidden",
       pointerEvents: "auto",
-      touchAction: "none",
       zIndex: editingWidgetId === item.id ? 2 : 1,
       willChange: "transform, width, height"
     } as CSSProperties
@@ -1847,16 +1852,23 @@ function WidgetOverlayApp() {
               : createElement(
                 "div",
                 {
+                  className: "decoai-widget-title",
+                  onPointerEnter: (e) => updateWidgetTitleOverflow(e.currentTarget),
                   style: {
                     flex: 1,
                     minWidth: 0,
                     overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
                     userSelect: "none"
                   }
                 },
-                item.name ?? t(widgetMeta.labelKey)
+                createElement(
+                  "span",
+                  {
+                    className: "decoai-widget-title__text",
+                    "data-title": item.name ?? t(widgetMeta.labelKey)
+                  },
+                  item.name ?? t(widgetMeta.labelKey)
+                )
               )
             : null,
           createElement(
@@ -2074,6 +2086,23 @@ const mountWidgetOverlay = () => {
         opacity: 1;
         transform: scale(1);
       }
+      .decoai-widget-title__text {
+        display: block;
+        width: max-content;
+        max-width: 100%;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .decoai-widget-title.title-overflow:hover .decoai-widget-title__text {
+        display: inline-flex;
+        gap: 48px;
+        max-width: none;
+        animation: title-marquee 6s linear infinite;
+      }
+      .decoai-widget-title.title-overflow:hover .decoai-widget-title__text::after {
+        content: attr(data-title);
+      }
       .decoai-widget-card__action {
         width: 20px;
         height: 20px;
@@ -2096,6 +2125,11 @@ const mountWidgetOverlay = () => {
       }
       .decoai-widget-card__delete:hover {
         background-color: #d32f2f;
+      }
+      @keyframes title-marquee {
+        0% { transform: translateX(0); }
+        75% { transform: translateX(calc(-50% - 24px)); }
+        100% { transform: translateX(calc(-50% - 24px)); }
       }
       .decoai-photo-widget {
         position: relative;
@@ -2175,7 +2209,7 @@ const mountWidgetOverlay = () => {
         outline: none;
         color: inherit !important;
         font-size: max(16px, 8cqmin);
-        white-space: pre-wrap;
+        white-space: nowrap;
         font-weight: 400;
       }
       .decoai-text-editor p {

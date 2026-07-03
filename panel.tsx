@@ -219,11 +219,6 @@ const twoColumnGridStyle = {
 const fieldLabelStyle = {
   padding: "4px 0px"
 } as const
-const inlineControlStyle = {
-  display: "flex",
-  alignItems: "center",
-  gap: 4
-} as const
 const columnControlStyle = {
   display: "flex",
   flexDirection: "column",
@@ -236,7 +231,9 @@ const textInputStyle = {
   padding: "8px 4px",
   textAlign: "center",
   backgroundColor: "#4b5563",
-  color: "#fff"
+  color: "#fff",
+  userSelect: "text",
+  WebkitUserSelect: "text"
 } as const
 const footerButtonStyle = {
   ...controlButtonStyle,
@@ -270,6 +267,14 @@ const isCurrentPageDarkMode = () => {
 }
 
 const wait = (ms: number) => new Promise<void>((resolve) => { window.setTimeout(resolve, ms) })
+
+const updateCustomThemeTitleOverflow = (wrap: HTMLElement) => {
+  const card = wrap.querySelector<HTMLButtonElement>(".custom-theme-card")
+  const titleText = card?.querySelector<HTMLSpanElement>(".custom-theme-card__title span")
+  if (!card || !titleText) return
+  card.classList.remove("title-overflow")
+  card.classList.toggle("title-overflow", titleText.scrollWidth > titleText.clientWidth + 1)
+}
 
 function CustomThemeSortableCard({
   item,
@@ -323,6 +328,7 @@ function CustomThemeSortableCard({
   return (
     <div
       className="custom-theme-card-wrap"
+      onPointerEnter={(e) => updateCustomThemeTitleOverflow(e.currentTarget)}
       style={{ position: "relative", zIndex: isDragging ? 2 : "auto" }}>
       <Tilt
         {...themeTiltProps}
@@ -331,15 +337,11 @@ function CustomThemeSortableCard({
         <button
           type="button"
           className={`custom-theme-card${theme === "custom" && selectedCustomThemeId === item.id ? " is-active" : ""}${draggingCustomThemeId === item.id ? " is-dragging" : ""}`}
-          onClick={() => onCustomCardClick(item)}
-          style={{
-            touchAction: "none"
-          }}>
-          <div
-            className="custom-theme-card__bg"
-            style={bgStyle}
-          />
-          <div className="custom-theme-card__title">{item.name}</div>
+          onClick={() => onCustomCardClick(item)}>
+          <div className="custom-theme-card__bg" style={bgStyle} />
+          <div className="custom-theme-card__title">
+            <span data-title={item.name}>{item.name}</span>
+          </div>
         </button>
         {!isDragging && (
           <div className="custom-theme-card__actions">
@@ -1315,17 +1317,35 @@ export function FabPanelApp() {
         }
         .custom-theme-card__title {
           position: absolute;
-          display: flex;
-          justify-content: center;
-          align-items: center;
           left: 0;
           right: 0;
           bottom: 0;
           height: 24px;
+          padding: 0 4px;
           background-color: #0000008D;
           color: #fff;
-          text-align: center;
+          overflow: hidden;
           transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .custom-theme-card__title span {
+          display: block;
+          width: max-content;
+          max-width: 100%;
+          margin: 0 auto;
+          overflow: hidden;
+          line-height: 24px;
+          white-space: nowrap;
+          text-overflow: ellipsis;
+        }
+        .custom-theme-card-wrap:hover .title-overflow .custom-theme-card__title span {
+          display: inline-flex;
+          gap: 48px;
+          max-width: none;
+          margin: 0;
+          animation: title-marquee 6s linear infinite;
+        }
+        .custom-theme-card-wrap:hover .title-overflow .custom-theme-card__title span::after {
+          content: attr(data-title);
         }
         .custom-theme-card__actions {
           position: absolute;
@@ -1375,6 +1395,11 @@ export function FabPanelApp() {
         @keyframes pro-gradient {
           from { background-position: 500% 50%; }
           to { background-position: 0% 50%; }
+        }
+        @keyframes title-marquee {
+          0% { transform: translateX(0); }
+          60% { transform: translateX(calc(-50% - 24px)); }
+          100% { transform: translateX(calc(-50% - 24px)); }
         }
       `}</style>
       <div style={wrapperStyle}>
@@ -1550,10 +1575,10 @@ export function FabPanelApp() {
                             value={draftCustomThemeName}
                             spellCheck={false}
                             autoComplete="off"
-                            onChange={(e) => setDraftCustomThemeName(e.target.value.slice(0, 10))}
+                            onChange={(e) => setDraftCustomThemeName(e.target.value.slice(0, 20))}
                             onKeyDown={(e) => e.stopPropagation()}
                             onKeyUp={(e) => e.stopPropagation()}
-                            style={{ ...textInputStyle, userSelect: "text", WebkitUserSelect: "text" }}
+                            style={textInputStyle}
                           />
                         </div>
                       </Card>
@@ -1611,7 +1636,7 @@ export function FabPanelApp() {
                         <>
                           <Card>
                             <label style={rowStyle}>
-                              <div style={{ ...inlineControlStyle, gap: 8 }}>
+                              <div style={{ ...iconLabelStyle, gap: 8 }}>
                                 <Icon icon="lucide:sparkles" height={24} color="#66cdaa" aria-hidden="true" />
                                 <span style={fieldLabelStyle}>{t("removeBG")}</span>
                               </div>
@@ -1708,7 +1733,7 @@ export function FabPanelApp() {
                         <>
                           <Card>
                             <label style={rowStyle}>
-                              <div style={{ ...inlineControlStyle, gap: 8 }}>
+                              <div style={{ ...iconLabelStyle, gap: 8 }}>
                                 <Icon icon="lucide:sparkles" height={24} color="#66cdaa" aria-hidden="true" />
                                 <span style={fieldLabelStyle}>{t("colorMatch")}</span>
                               </div>
@@ -1976,7 +2001,7 @@ function ColorSettingCard({
     <Card>
       <label style={rowStyle}>
         <span style={fieldLabelStyle}>{label}</span>
-        <div style={inlineControlStyle}>
+        <div style={iconLabelStyle}>
           <input
             type="color"
             value={value || "#000000"}
@@ -2016,7 +2041,7 @@ function RangeControl({
           alignItems: "center"
         }}>
         <span style={fieldLabelStyle}>{label}</span>
-        <div style={{ ...inlineControlStyle, gap: 8 }}>
+        <div style={{ ...iconLabelStyle, gap: 8 }}>
           <span style={fieldLabelStyle}>{value}</span>
           {onReset && (
             <button
