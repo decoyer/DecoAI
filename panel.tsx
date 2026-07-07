@@ -36,6 +36,7 @@ import {
   hasAnimatedBackground,
   isAnimatedBgUrl,
   isAnimatedImage,
+  isJsonFile,
   MAX_FILE_BYTES,
   parseImportedThemes,
   renderImageToCanvas,
@@ -402,7 +403,7 @@ export function FabPanelApp() {
   const [draftBackgroundImageUrl, setDraftBackgroundImageUrl] = useState("")
   const [draftBackgroundImageId, setDraftBackgroundImageId] = useState("")
   const [draftBackgroundAnimated, setDraftBackgroundAnimated] = useState(false)
-  const [customThemes, setCustomThemes] = useStorage<CustomTheme[]>(
+  const [storedCustomThemes, setCustomThemes] = useStorage<CustomTheme[]>(
     { key: CUSTOM_THEMES_STORAGE_KEY, instance: localStorageInstance },
     []
   )
@@ -425,6 +426,7 @@ export function FabPanelApp() {
   const isPremiumChecked = premiumStatus !== "unknown"
   const isPremiumUser = premiumStatus === "premium"
   const isFreeUser = premiumStatus === "free"
+  const customThemes = Array.isArray(storedCustomThemes) ? storedCustomThemes : []
   const selectedCustomTheme = customThemes.find((item) => item.id === selectedCustomThemeId)
   const hasWidgetType = (key: WidgetKey) =>
     (widgetItems || DEFAULT_WIDGET_INSTANCES).some((widget) => widget.type === key)
@@ -838,7 +840,7 @@ export function FabPanelApp() {
       toast.error(t("error_fileRequired"))
       return
     }
-    if (file.type !== "application/json") {
+    if (!isJsonFile(file)) {
       toast.error(t("error_fileInvalid", "JSON"))
       clearFileInput(importFileRef.current)
       return
@@ -1796,22 +1798,22 @@ export function FabPanelApp() {
             {panelMode === "theme" && themeTab === "custom" && view !== "custom" && (
               <div style={{ ...rowStyle, gap: 8 }}>
                 <FooterButton
+                  onClick={onImportClick}
+                  style={footerButtonStyle}
+                  icon="download"
+                  label={t("import")}
+                />
+                <FooterButton
                   onClick={onExportClick}
                   disabled={theme !== "custom"}
                   style={{ ...footerButtonStyle, ...disabledControlStyle(theme === "custom") }}
                   icon="upload"
                   label={t("export")}
                 />
-                <FooterButton
-                  onClick={onImportClick}
-                  style={footerButtonStyle}
-                  icon="download"
-                  label={t("import")}
-                />
                 <input
                   ref={importFileRef}
                   type="file"
-                  accept="application/json"
+                  accept=".json,application/json"
                   onChange={(e) => onImportFile(e.target.files?.[0])}
                   style={{ display: "none" }}
                 />

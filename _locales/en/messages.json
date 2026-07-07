@@ -221,6 +221,12 @@
   "error_removeBG": {
     "message": "Unable to complete Remove BG. Please try again later."
   },
+  "error_backup": {
+    "message": "Unable to save data file. Please try again later."
+  },
+  "error_restore": {
+    "message": "Unable to load data file. Please try again later."
+  },
   "success_themeExport": {
     "message": "Theme exported successfully."
   },
@@ -241,6 +247,12 @@
   },
   "success_colorMatch": {
     "message": "Color Match completed successfully."
+  },
+  "success_backup": {
+    "message": "Data file saved successfully."
+  },
+  "success_restore": {
+    "message": "Data file loaded successfully."
   },
   "pro_themeLimit": {
     "message": "Upgrade to Pro for Unlimited Theme Presets."

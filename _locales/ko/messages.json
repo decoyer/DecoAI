@@ -221,6 +221,12 @@
   "error_removeBG": {
     "message": "배경 제거가 실패했습니다. 잠시 후에 다시 시도해 주세요."
   },
+  "error_backup": {
+    "message": "데이터 파일 백업이 실패했습니다. 잠시 후에 다시 시도해 주세요."
+  },
+  "error_restore": {
+    "message": "데이터 파일 복원이 실패했습니다. 잠시 후에 다시 시도해 주세요."
+  },
   "success_themeExport": {
     "message": "커스텀 테마를 내보냈습니다."
   },
@@ -241,6 +247,12 @@
   },
   "success_colorMatch": {
     "message": "색상 맞춤이 완료되었습니다."
+  },
+  "success_backup": {
+    "message": "데이터 파일을 백업했습니다."
+  },
+  "success_restore": {
+    "message": "데이터 파일을 복원했습니다."
   },
   "pro_themeLimit": {
     "message": "커스텀 테마를 더 추가하려면 Pro로 업그레이드하세요."

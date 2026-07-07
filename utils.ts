@@ -70,10 +70,22 @@ export type WidgetSize = {
   height: number
 }
 
-type ThemeImportData = {
+type ThemeImportFile = {
   app?: string
   version?: number
+  type?: string
+  sync?: Record<string, unknown>
+  local?: Record<string, unknown>
+  images?: Record<string, unknown>
   customThemes?: Array<Partial<CustomTheme> & { bgUrl?: string }>
+}
+
+export type DataImportFile = {
+  sync: Record<string, unknown>
+  local: Record<string, unknown>
+  images: Record<string, string>
+  customThemes: Array<CustomTheme & { bgUrl?: string }>
+  sourceThemeIds: string[]
 }
 
 export const CUSTOM_THEMES_STORAGE_KEY = "custom-themes"
@@ -183,6 +195,9 @@ export const IMAGE_SOURCE_URLS = new Set([
   "https://wallpaperaccess.com/full/1461802.jpg",
   "https://i.imgur.com/H1rtAbm.png"
 ])
+
+export const isJsonFile = (file: File) =>
+  file.type === "application/json" || file.name.toLowerCase().endsWith(".json")
 
 export const detectCurrentSite = (): SiteType | null => {
   const { hostname } = window.location
@@ -369,17 +384,62 @@ export const createCustomTheme = (name: string): CustomTheme => ({
   bgOptions: { ...DEFAULT_CUSTOM_BG_OPTIONS }
 })
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value)
+
+const parseFileData = (text: string) => {
+  try {
+    const data = JSON.parse(text) as ThemeImportFile
+    if (data.app !== THEME_FILE_APP_ID || data.version !== THEME_FILE_VERSION) return null
+    return data
+  } catch {
+    return null
+  }
+}
+
+const getThemeSources = (data: ThemeImportFile | null) =>
+  Array.isArray(data?.customThemes) ? data.customThemes : []
+
 export const parseImportedThemes = (
   text: string,
   getFallbackName: (index: number) => string
 ) => {
-  const data = JSON.parse(text) as ThemeImportData
-  if (data.app !== THEME_FILE_APP_ID || data.version !== THEME_FILE_VERSION) return []
-  const themes = Array.isArray(data.customThemes) ? data.customThemes : []
-  return themes.map((theme, index) => normalizeCustomTheme(theme, getFallbackName(index)))
+  const data = parseFileData(text)
+  if (data?.type !== "theme") return []
+  const theme = getThemeSources(data)[0]
+  return theme ? [normalizeCustomTheme(theme, getFallbackName(0))] : []
 }
 
-export const createThemeExportBlob = (themeData: CustomTheme & { bgUrl?: string }) =>
+export const parseDataImportFile = (
+  text: string,
+  getFallbackName: (index: number) => string
+): DataImportFile | null => {
+  const data = parseFileData(text)
+  if (data?.type !== "data" || !isRecord(data.sync) || !isRecord(data.local)) return null
+
+  const images = Object.fromEntries(
+    Object.entries(isRecord(data.images) ? data.images : {}).filter(
+      ([, value]) => typeof value === "string" && Boolean(sanitizeCustomBgUrl(value))
+    )
+  ) as Record<string, string>
+  const themeSources = getThemeSources(data)
+
+  return {
+    sync: data.sync,
+    local: data.local,
+    images,
+    customThemes: themeSources.map((theme, index) => normalizeCustomTheme(theme, getFallbackName(index))),
+    sourceThemeIds: themeSources.map((theme) => (typeof theme.id === "string" ? theme.id : ""))
+  }
+}
+
+export const createExportBlob = (data: {
+  type?: "data" | "theme"
+  sync?: Record<string, unknown>
+  local?: Record<string, unknown>
+  images?: Record<string, string>
+  customThemes: Array<CustomTheme & { bgUrl?: string }>
+}) =>
   new Blob(
     [
       JSON.stringify(
@@ -387,12 +447,18 @@ export const createThemeExportBlob = (themeData: CustomTheme & { bgUrl?: string 
           app: THEME_FILE_APP_ID,
           version: THEME_FILE_VERSION,
           exportedAt: new Date().toISOString(),
-          customThemes: [themeData]
+          ...data
         }
       )
     ],
     { type: "application/json" }
   )
+
+export const createThemeExportBlob = (themeData: CustomTheme & { bgUrl?: string }) =>
+  createExportBlob({
+    type: "theme",
+    customThemes: [themeData]
+  })
 
 const decoder = new TextDecoder("latin1")
 const GIF_SIGNATURE = [0x47, 0x49, 0x46] as const

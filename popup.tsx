@@ -1,6 +1,7 @@
 import { Icon } from "@iconify/react"
 import { useStorage } from "@plasmohq/storage/hook"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { toast, ToastContainer } from "react-toastify"
 
 import {
   AUTH_REFRESH_MS,
@@ -13,14 +14,26 @@ import {
   type PremiumStatus
 } from "./auth"
 import {
+  createExportBlob,
+  CUSTOM_THEMES_STORAGE_KEY,
   DEFAULT_MODEL_ENABLED,
+  deleteImageData,
+  getImageDataUrl,
+  isAnimatedBgUrl,
+  isJsonFile,
   MODEL_ENABLED_STORAGE_KEY,
+  parseDataImportFile,
+  PHOTO_WIDGET_STATE_STORAGE_KEY,
+  sanitizeCustomBgUrl,
+  saveImageDataUrl,
+  SELECTED_CUSTOM_THEME_ID_STORAGE_KEY,
   THEME_HIDDEN_STORAGE_KEY,
   WIDGET_HIDDEN_STORAGE_KEY,
+  type CustomTheme,
   type ModelEnabledMap
 } from "./utils"
 
-const t = (key: string) => chrome.i18n.getMessage(key)
+const t = (key: string, value?: string) => chrome.i18n.getMessage(key, value)
 type ModelKey = keyof ModelEnabledMap
 
 const MODEL_LIST = [
@@ -31,24 +44,128 @@ const MODEL_LIST = [
 ] as const
 
 type PopupTab = "settings" | "account"
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value)
+
+const parseStoredValue = <T,>(value: unknown): T | undefined => {
+  if (typeof value !== "string") return value as T | undefined
+  try {
+    return JSON.parse(value) as T
+  } catch {
+    return undefined
+  }
+}
+
+const clearFileInput = (input: HTMLInputElement | null) => {
+  if (input) input.value = ""
+}
+
+const downloadBlob = (blob: Blob, filename: string) => {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+const getExportableCustomThemes = async (themesValue: unknown) => {
+  const themes = parseStoredValue<unknown[]>(themesValue)
+  if (!Array.isArray(themes)) return []
+
+  return Promise.all(
+    themes.map(async (themeValue) => {
+      const theme = isRecord(themeValue) ? themeValue : {}
+      const bgImageId = typeof theme.bgImageId === "string" ? theme.bgImageId : ""
+      const bgUrl = bgImageId ? await getImageDataUrl(bgImageId).catch(() => "") : sanitizeCustomBgUrl(theme.bgUrl)
+
+      return { ...theme, ...(bgUrl ? { bgUrl } : {}) } as CustomTheme & { bgUrl?: string }
+    })
+  )
+}
+
+const getPortableImageData = async (localData: Record<string, unknown>) => {
+  const images: Record<string, string> = {}
+
+  for (const [key, value] of Object.entries(localData)) {
+    if (!key.startsWith(`${PHOTO_WIDGET_STATE_STORAGE_KEY}:`)) continue
+
+    const photoState = parseStoredValue<Record<string, unknown>>(value)
+    if (!isRecord(photoState)) continue
+
+    const imageId = typeof photoState.imageId === "string" ? photoState.imageId : ""
+    if (!imageId || images[imageId]) continue
+
+    const dataUrl = await getImageDataUrl(imageId).catch(() => "")
+    if (dataUrl) images[imageId] = dataUrl
+  }
+
+  return images
+}
+
+const saveImportedCustomThemes = async (
+  themes: Array<CustomTheme & { bgUrl?: string }>,
+  importedImageIds: string[]
+) =>
+  Promise.all(
+    themes.map(async (themeData) => {
+      const { bgUrl: importedBgUrl, ...storageTheme } = themeData
+      const bgUrl = sanitizeCustomBgUrl(importedBgUrl)
+      if (!bgUrl) return storageTheme
+
+      const bgImageId = await saveImageDataUrl(bgUrl)
+      importedImageIds.push(bgImageId)
+
+      return { ...storageTheme, bgImageId, bgAnimated: isAnimatedBgUrl(bgUrl) }
+    })
+  )
+
+const saveImportedImages = async (
+  images: Record<string, string>,
+  importedImageIds: string[]
+) => {
+  const imageIdMap: Record<string, string> = {}
+
+  for (const [sourceId, sourceDataUrl] of Object.entries(images)) {
+    const dataUrl = sanitizeCustomBgUrl(sourceDataUrl)
+    if (!sourceId || !dataUrl) continue
+
+    const imageId = await saveImageDataUrl(dataUrl)
+    importedImageIds.push(imageId)
+    imageIdMap[sourceId] = imageId
+  }
+
+  return imageIdMap
+}
+
+const replacePhotoImageIds = (
+  localData: Record<string, unknown>,
+  imageIdMap: Record<string, string>
+) => {
+  const nextLocalData = { ...localData }
+
+  for (const [key, value] of Object.entries(nextLocalData)) {
+    if (!key.startsWith(`${PHOTO_WIDGET_STATE_STORAGE_KEY}:`)) continue
+
+    const photoState = parseStoredValue<Record<string, unknown>>(value)
+    if (!isRecord(photoState)) continue
+
+    const imageId = typeof photoState.imageId === "string" ? photoState.imageId : ""
+    if (imageIdMap[imageId]) nextLocalData[key] = JSON.stringify({ ...photoState, imageId: imageIdMap[imageId] })
+  }
+
+  return nextLocalData
+}
 
 function IndexPopup() {
-  const [themeHidden, setThemeHidden] = useStorage<boolean>(
-    THEME_HIDDEN_STORAGE_KEY,
-    false
-  )
-  const [widgetHidden, setWidgetHidden] = useStorage<boolean>(
-    WIDGET_HIDDEN_STORAGE_KEY,
-    false
-  )
-  const [modelEnabled, setModelEnabled] = useStorage<ModelEnabledMap>(
-    MODEL_ENABLED_STORAGE_KEY,
-    DEFAULT_MODEL_ENABLED
-  )
+  const [themeHidden, setThemeHidden] = useStorage<boolean>(THEME_HIDDEN_STORAGE_KEY, false)
+  const [widgetHidden, setWidgetHidden] = useStorage<boolean>(WIDGET_HIDDEN_STORAGE_KEY, false)
+  const [modelEnabled, setModelEnabled] = useStorage<ModelEnabledMap>(MODEL_ENABLED_STORAGE_KEY, DEFAULT_MODEL_ENABLED)
   const [isLoading, setIsLoading] = useState(false)
   const [authSession, setAuthSession] = useState<AuthSessionSnapshot | null>(null)
   const [premiumStatus, setPremiumStatus] = useState<PremiumStatus>("unknown")
   const [activeTab, setActiveTab] = useState<PopupTab>("settings")
+  const restoreFileRef = useRef<HTMLInputElement>(null)
   const version = chrome.runtime.getManifest().version
   const updateModelEnabled = (key: ModelKey, checked: boolean) => setModelEnabled({ ...modelEnabled, [key]: checked })
 
@@ -121,8 +238,102 @@ function IndexPopup() {
 
   const onSubscriptionClick = () => window.open("https://polar.sh/kstm/portal")
 
+  const onBackupClick = async () => {
+    setIsLoading(true)
+
+    try {
+      const [syncData, localData] = await Promise.all([chrome.storage.sync.get(), chrome.storage.local.get()])
+      const localBackup = { ...localData }
+      delete localBackup[AUTH_SESSION_STORAGE_KEY]
+
+      const customThemes = await getExportableCustomThemes(localBackup[CUSTOM_THEMES_STORAGE_KEY])
+      const images = await getPortableImageData(localBackup)
+      const blob = createExportBlob({
+        type: "data",
+        sync: syncData,
+        local: localBackup,
+        images,
+        customThemes
+      })
+
+      downloadBlob(blob, `decoai-data-${Date.now()}.json`)
+      toast.success(t("success_backup"))
+    } catch {
+      toast.error(t("error_backup"))
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const onRestoreClick = () => restoreFileRef.current?.click()
+
+  const replaceStorageData = async (
+    nextSyncData: Record<string, unknown>,
+    nextLocalData: Record<string, unknown>
+  ) => {
+    const [currentSyncData, currentLocalData] = await Promise.all([chrome.storage.sync.get(), chrome.storage.local.get()])
+    const syncKeys = Object.keys(currentSyncData).filter((key) => !(key in nextSyncData))
+    const localKeys = Object.keys(currentLocalData).filter((key) => key !== AUTH_SESSION_STORAGE_KEY && !(key in nextLocalData))
+
+    if (Object.keys(nextSyncData).length) await chrome.storage.sync.set(nextSyncData)
+    if (Object.keys(nextLocalData).length) await chrome.storage.local.set(nextLocalData)
+    if (syncKeys.length) await chrome.storage.sync.remove(syncKeys)
+    if (localKeys.length) await chrome.storage.local.remove(localKeys)
+  }
+
+  const onRestoreFile = async (file?: File) => {
+    if (!file) {
+      toast.error(t("error_fileRequired"))
+      return
+    }
+    if (!isJsonFile(file)) {
+      toast.error(t("error_fileInvalid", "JSON"))
+      clearFileInput(restoreFileRef.current)
+      return
+    }
+
+    const importedImageIds: string[] = []
+    setIsLoading(true)
+
+    try {
+      const dataFile = parseDataImportFile(await file.text(), (index) => `${t("custom")} ${index + 1}`)
+      if (!dataFile) {
+        toast.error(t("error_fileInvalid", "JSON"))
+        return
+      }
+
+      const imageIdMap = await saveImportedImages(dataFile.images, importedImageIds)
+      const importedThemes = await saveImportedCustomThemes(dataFile.customThemes, importedImageIds)
+      const nextLocalData = replacePhotoImageIds(dataFile.local, imageIdMap)
+      delete nextLocalData[AUTH_SESSION_STORAGE_KEY]
+
+      nextLocalData[CUSTOM_THEMES_STORAGE_KEY] = JSON.stringify(importedThemes)
+
+      const selectedSourceThemeId = parseStoredValue<string>(dataFile.local[SELECTED_CUSTOM_THEME_ID_STORAGE_KEY]) || ""
+      const selectedThemeIndex = dataFile.sourceThemeIds.findIndex((id) => id === selectedSourceThemeId)
+
+      if (importedThemes.length && selectedThemeIndex >= 0) {
+        nextLocalData[SELECTED_CUSTOM_THEME_ID_STORAGE_KEY] = JSON.stringify(importedThemes[selectedThemeIndex].id)
+      } else if (importedThemes.length) {
+        nextLocalData[SELECTED_CUSTOM_THEME_ID_STORAGE_KEY] = JSON.stringify(importedThemes[0].id)
+      } else {
+        nextLocalData[SELECTED_CUSTOM_THEME_ID_STORAGE_KEY] = JSON.stringify("")
+      }
+
+      await replaceStorageData(dataFile.sync, nextLocalData)
+      toast.success(t("success_restore"))
+    } catch {
+      importedImageIds.forEach((imageId) => void deleteImageData(imageId))
+      toast.error(t("error_restore"))
+    } finally {
+      clearFileInput(restoreFileRef.current)
+      setIsLoading(false)
+    }
+  }
+
   return (
     <>
+      <link rel="stylesheet" href={chrome.runtime.getURL("assets/ReactToastify.css")} />
       <style>{`
         * { margin: 0; box-sizing: border-box; }
         .toggle-switch {
@@ -319,7 +530,7 @@ function IndexPopup() {
               <div className="footer" style={rowStyle}>
                 <button
                   type="button"
-                  onClick={() => alert("in development")}
+                  onClick={onRestoreClick}
                   style={controlButtonStyle}>
                   <div style={{ ...itemLabelStyle, gap: 4 }}>
                     <Icon icon="lucide-hard-drive-download" height={16} aria-hidden="true" />
@@ -328,13 +539,20 @@ function IndexPopup() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => alert("in development")}
+                  onClick={onBackupClick}
                   style={controlButtonStyle}>
                   <div style={{ ...itemLabelStyle, gap: 4 }}>
                     <Icon icon="lucide-hard-drive-upload" height={16} aria-hidden="true" />
                     <span>{t("backup")}</span>
                   </div>
                 </button>
+                <input
+                  ref={restoreFileRef}
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={(e) => onRestoreFile(e.target.files?.[0])}
+                  style={{ display: "none" }}
+                />
               </div>
             </>
           )}
@@ -354,6 +572,15 @@ function IndexPopup() {
             <Icon icon="line-md:loading-twotone-loop" height={48} color="#66cdaa" aria-hidden="true" />
           </div>
         )}
+        <ToastContainer
+          theme="colored"
+          position="top-center"
+          autoClose={2000}
+          closeOnClick
+          pauseOnFocusLoss={false}
+          newestOnTop
+          limit={1}
+        />
       </div>
     </>
   )
