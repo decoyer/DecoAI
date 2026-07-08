@@ -369,7 +369,7 @@ function IndexPopup() {
         .toggle-switch:checked::before {
           transform: translateX(16px);
         }
-        .footer button:hover { filter: brightness(1.1); }
+        .data button:hover { filter: brightness(1.1); }
       `}</style>
       <div style={rootStyle}>
         <div style={headerStyle}>
@@ -475,16 +475,12 @@ function IndexPopup() {
               </div>
 
               <div style={rowStyle}>
-                <div style={itemLabelStyle}>
-                  <span>{t("email")}</span>
-                </div>
+                <span>{t("email")}</span>
                 <span>{authSession?.email || "Guest"}</span>
               </div>
 
               <div style={rowStyle}>
-                <div style={itemLabelStyle}>
-                  <span>{t("name")}</span>
-                </div>
+                <span>{t("name")}</span>
                 <span>{authSession?.displayName || "Guest"}</span>
               </div>
 
@@ -502,9 +498,7 @@ function IndexPopup() {
               </div>
 
               <div style={rowStyle}>
-                <div style={itemLabelStyle}>
-                  <span>{t("status")}</span>
-                </div>
+                <span>{t("status")}</span>
                 <Icon
                   icon={`lucide:${authSession ? "circle-check-big" : "circle-question-mark"}`}
                   height={16}
@@ -514,9 +508,7 @@ function IndexPopup() {
               </div>
 
               <div style={rowStyle}>
-                <div style={itemLabelStyle}>
-                  <span>{t("plan")}</span>
-                </div>
+                <span>{t("plan")}</span>
                 <span>{premiumStatus === "premium" ? "Pro" : "Free"}</span>
               </div>
 
@@ -527,7 +519,7 @@ function IndexPopup() {
                 </div>
               </div>
 
-              <div className="footer" style={rowStyle}>
+              <div className="data" style={{ ...rowStyle, marginTop: 8 }}>
                 <button
                   type="button"
                   onClick={onRestoreClick}

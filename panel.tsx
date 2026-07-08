@@ -1800,14 +1800,14 @@ export function FabPanelApp() {
                 <FooterButton
                   onClick={onImportClick}
                   style={footerButtonStyle}
-                  icon="download"
+                  icon="file-down"
                   label={t("import")}
                 />
                 <FooterButton
                   onClick={onExportClick}
                   disabled={theme !== "custom"}
                   style={{ ...footerButtonStyle, ...disabledControlStyle(theme === "custom") }}
-                  icon="upload"
+                  icon="file-up"
                   label={t("export")}
                 />
                 <input
