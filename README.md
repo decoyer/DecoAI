@@ -58,6 +58,5 @@ Google OAuth client
   - Required for Chrome extension sign-in through ```chrome.identity```.
 
 ## Tasks
-- [ ] Enable account-level backup and restore
 - [ ] Improve cross-device sync stability
 - [ ] Add more Pro-only customization tools

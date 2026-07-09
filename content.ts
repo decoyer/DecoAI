@@ -769,7 +769,7 @@ const textWidgetButton = (
 
 function NoteWidgetContent({ widgetId }: { widgetId: string }) {
   const [content, setContent] = useStorage<JSONContent>(
-    `${TEXT_WIDGET_STATE_STORAGE_KEY}:${widgetId}`,
+    { key: `${TEXT_WIDGET_STATE_STORAGE_KEY}:${widgetId}`, instance: localStorageInstance },
     EMPTY_DOC
   )
   const pendingContentRef = useRef<JSONContent | null>(null)
@@ -834,7 +834,7 @@ function NoteWidgetContent({ widgetId }: { widgetId: string }) {
 function TodoWidgetContent({ widgetId }: { widgetId: string }) {
   const [inputValue, setInputValue] = useState("")
   const [content, setContent] = useStorage<JSONContent>(
-    `${TEXT_WIDGET_STATE_STORAGE_KEY}:${widgetId}`,
+    { key: `${TEXT_WIDGET_STATE_STORAGE_KEY}:${widgetId}`, instance: localStorageInstance },
     EMPTY_DOC
   )
   const editor = useEditor({
@@ -1312,10 +1312,7 @@ function PhotoWidgetContent({
 }) {
   const uploadRef = useRef<HTMLInputElement>(null)
   const [photoState, setPhotoState] = useStorage<PhotoWidgetState>(
-    {
-      key: `${PHOTO_WIDGET_STATE_STORAGE_KEY}:${widgetId}`,
-      instance: localStorageInstance
-    },
+    { key: `${PHOTO_WIDGET_STATE_STORAGE_KEY}:${widgetId}`, instance: localStorageInstance },
     DEFAULT_PHOTO_WIDGET_STATE
   )
   const [imageUrl, setImageUrl] = useState("")
@@ -1633,7 +1630,8 @@ function WidgetOverlayApp() {
     })
     const stateKey = getWidgetStateKey(item)
     if (stateKey) {
-      const stateStorage = item.type === "photo" ? localStorageInstance : storage
+      const stateStorage = item.type === "note" || item.type === "todo" || item.type === "photo"
+        ? localStorageInstance : storage
       if (item.type === "photo") {
         void localStorageInstance.get<PhotoWidgetState>(stateKey)
           .then((photoState) => { if (photoState?.imageId) void deleteImageData(photoState.imageId) })

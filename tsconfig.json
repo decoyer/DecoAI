@@ -4,11 +4,10 @@
   "include": [".plasmo/index.d.ts", "./**/*.ts", "./**/*.tsx"],
   "compilerOptions": {
     "jsx": "react-jsx",
+    "moduleResolution": "bundler",
     "paths": {
       "~*": ["./*"]
     },
-    "ignoreDeprecations": "6.0",
-    "baseUrl": ".",
     "types": ["node", "chrome"]
   }
 }
