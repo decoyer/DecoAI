@@ -1,5 +1,6 @@
 export type CustomBgOptions = {
   scaleX: number
+  rotation: number
   invert: number
   grayscale: number
   blur: number
@@ -37,7 +38,6 @@ export type WidgetLayoutOptions = {
   backgroundColor: string
   accentColor: string
   opacity: number
-  glassBlur: number
 }
 export type DdayWidgetState = {
   targetDate: string
@@ -116,6 +116,7 @@ export const MAX_FILE_BYTES = 10 * 1024 * 1024
 
 export const DEFAULT_CUSTOM_BG_OPTIONS: CustomBgOptions = {
   scaleX: 1,
+  rotation: 0,
   invert: 0,
   grayscale: 0,
   blur: 0,
@@ -156,8 +157,7 @@ export const DEFAULT_WIDGET_LAYOUT: WidgetLayoutOptions = {
   textColor: "",
   backgroundColor: "",
   accentColor: "",
-  opacity: DEFAULT_CUSTOM_BG_OPTIONS.opacity,
-  glassBlur: DEFAULT_CUSTOM_BG_OPTIONS.glassBlur
+  opacity: DEFAULT_CUSTOM_BG_OPTIONS.opacity
 }
 
 export const DEFAULT_DDAY_WIDGET_STATE: DdayWidgetState = {
@@ -284,10 +284,39 @@ export const getPositionYPercent = (value: unknown) => {
   return getSanitizedPositionPercentPair(value).y
 }
 
+export const normalizeBackgroundRotation = (value: unknown) => {
+  const rotation = Number(value)
+  if (!Number.isFinite(rotation)) return DEFAULT_CUSTOM_BG_OPTIONS.rotation
+  const normalized = (Math.round(rotation / 90) * 90) % 360
+  return normalized < 0 ? normalized + 360 : normalized
+}
+
+export const getRenderedBackgroundPosition = (
+  value: unknown,
+  rotationValue: unknown,
+  scaleXValue: unknown
+) => {
+  const { x, y } = getSanitizedPositionPercentPair(value)
+  const rotation = normalizeBackgroundRotation(rotationValue)
+  const isFlipped = scaleXValue === -1
+
+  switch (rotation) {
+    case 90:
+      return { x: isFlipped ? 100 - y : y, y: 100 - x }
+    case 180:
+      return { x: isFlipped ? x : 100 - x, y: 100 - y }
+    case 270:
+      return { x: isFlipped ? y : 100 - y, y: x }
+    default:
+      return { x: isFlipped ? 100 - x : x, y }
+  }
+}
+
 export const sanitizeCustomBgOptions = (
   options?: Partial<CustomBgOptions>
 ): CustomBgOptions => ({
   scaleX: options?.scaleX === -1 ? -1 : 1,
+  rotation: normalizeBackgroundRotation(options?.rotation),
   invert: clampNumber(options?.invert, 0, 1, DEFAULT_CUSTOM_BG_OPTIONS.invert),
   grayscale: clampNumber(options?.grayscale, 0, 1, DEFAULT_CUSTOM_BG_OPTIONS.grayscale),
   blur: clampNumber(options?.blur, 0, 50, DEFAULT_CUSTOM_BG_OPTIONS.blur),
@@ -308,7 +337,7 @@ export const renderImageToCanvas = async (
   const imageUrl = sanitizeCustomBgUrl(imageSource)
   const imageOptions = sanitizeCustomBgOptions(options)
   const canvasBgColor = sanitizeColor(backgroundColor)
-  const position = getSanitizedPositionPercentPair(imageOptions.position)
+  const position = getRenderedBackgroundPosition(imageOptions.position, imageOptions.rotation, imageOptions.scaleX)
 
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
     const nextImage = new Image()
@@ -339,10 +368,10 @@ export const renderImageToCanvas = async (
     sourceContext.fillRect(0, 0, sourceCanvas.width, sourceCanvas.height)
   }
   sourceContext.save()
-  if (imageOptions.scaleX === -1) {
-    sourceContext.translate(sourceCanvas.width, 0)
-    sourceContext.scale(-1, 1)
-  }
+  sourceContext.translate(sourceCanvas.width / 2, sourceCanvas.height / 2)
+  sourceContext.rotate((imageOptions.rotation * Math.PI) / 180)
+  sourceContext.scale(imageOptions.scaleX, 1)
+  sourceContext.translate(-sourceCanvas.width / 2, -sourceCanvas.height / 2)
   sourceContext.drawImage(image, drawX, drawY, drawWidth, drawHeight)
   sourceContext.restore()
 

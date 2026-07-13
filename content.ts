@@ -34,6 +34,7 @@ import {
   detectCurrentSite,
   FAB_OPEN_EVENT,
   getImageDataUrl,
+  getRenderedBackgroundPosition,
   isAnimatedCustomTheme,
   isAnimatedImage,
   MAX_FILE_BYTES,
@@ -409,6 +410,7 @@ const mountToastContainer = () => {
     createElement(ToastContainer, {
       theme: "colored",
       autoClose: 2000,
+      hideProgressBar: true,
       closeOnClick: true,
       pauseOnFocusLoss: false,
       newestOnTop: true,
@@ -571,6 +573,11 @@ const closeFabDock = () => {
   fabOpen = false
   const root = document.getElementById(FAB_ROOT_ID)
   root?.classList.remove(FAB_OPEN_CLASS)
+}
+
+const isFabThemeEditing = () => {
+  const panelHost = document.getElementById(FAB_THEME_MOUNT_ID)
+  return panelHost?.shadowRoot?.querySelector('[data-decoai-theme-editing="true"]') !== null
 }
 
 const setFabAccentColor = (accentColor?: string) => {
@@ -1553,9 +1560,9 @@ function WidgetOverlayApp() {
     const opacity = clampNumber(layout.opacity, 0, 1, 0.8)
     const textColor = layout.textColor
     const accentColor = layout.accentColor
-    const backgroundColor = layout.backgroundColor || (
-      isDarkMode ? `rgba(24, 24, 24, ${opacity})` : `rgba(255, 255, 255, ${opacity})`
-    )
+    const backgroundColor = layout.backgroundColor
+      ? `color-mix(in srgb, ${layout.backgroundColor} ${opacity * 100}%, transparent)`
+      : isDarkMode ? `rgba(24, 24, 24, ${opacity})` : `rgba(255, 255, 255, ${opacity})`
 
     return {
       position: "absolute",
@@ -1571,7 +1578,6 @@ function WidgetOverlayApp() {
       border: "none",
       borderRadius: 8,
       boxShadow: accentColor ? `inset 0 2px 16px ${accentColor}4D` : "none",
-      backdropFilter: `blur(${clampNumber(layout.glassBlur, 0, 50, 10)}px) saturate(140%)`,
       overflow: "hidden",
       pointerEvents: "auto",
       zIndex: editingWidgetId === item.id ? 2 : 1,
@@ -2063,22 +2069,16 @@ const mountWidgetOverlay = () => {
       }
       .decoai-widget-card {
         background-color: var(--decoai-widget-bg) !important;
-        opacity: 0.8;
-        transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       }
       .decoai-widget-card,
       .decoai-widget-card *:not(.moveable-control):not(.moveable-line) {
         color: var(--decoai-widget-text) !important;
-      }
-      .decoai-widget-card:hover {
-        opacity: 1;
       }
       .decoai-widget-card-photo:has(.decoai-photo-widget-image) {
         background-color: transparent !important;
         opacity: 1;
         border-radius: 0 !important;
         box-shadow: none !important;
-        backdrop-filter: none !important;
         overflow: visible !important;
       }
       .decoai-widget-card:hover .decoai-widget-card__actions {
@@ -2529,6 +2529,7 @@ const onOutsideFabClick = (event: MouseEvent) => {
   const panel = root.querySelector(`.${FAB_THEME_PANEL_CLASS}`)
   const actionButton = target instanceof Element ? target.closest(`.${FAB_ACTION_CLASS} button`) : null
   if (panel?.contains(target) || actionButton) return
+  if (isFabThemeEditing()) return
   closeFabDock()
 }
 
@@ -2666,6 +2667,23 @@ const generateCSS = (
 
   const position = customBgOptions?.position || "50% 50%"
   const scaleX = customBgOptions?.scaleX === -1 ? -1 : 1
+  const rotation = customBgOptions?.rotation || 0
+  const renderedPosition = getRenderedBackgroundPosition(position, rotation, scaleX)
+  const backgroundPosition = `${renderedPosition.x}% ${renderedPosition.y}%`
+  const isBackgroundSideways = rotation === 90 || rotation === 270
+  const isBackgroundFlipped = scaleX === -1
+  const backgroundTransform = (() => {
+    switch (rotation) {
+      case 90:
+        return `${isBackgroundFlipped ? "translate(100vw, 100vh)" : "translateX(100vw)"} rotate(90deg) scaleX(${scaleX}) translateZ(0)`
+      case 180:
+        return `${isBackgroundFlipped ? "translateY(100vh)" : "translate(100vw, 100vh)"} rotate(180deg) scaleX(${scaleX}) translateZ(0)`
+      case 270:
+        return `${isBackgroundFlipped ? "" : "translateY(100vh) "}rotate(270deg) scaleX(${scaleX}) translateZ(0)`
+      default:
+        return `${isBackgroundFlipped ? "translateX(100vw) " : ""}scaleX(${scaleX}) translateZ(0)`
+    }
+  })()
   const invert = clampNumber(customBgOptions?.invert, 0, 1, 0)
   const grayscale = clampNumber(customBgOptions?.grayscale, 0, 1, 0)
   const blur = clampNumber(customBgOptions?.blur, 0, 50, 0)
@@ -2684,15 +2702,17 @@ const generateCSS = (
     bgUrl || bgColor
       ? `
       body::before {
-        content: ""; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        content: ""; position: fixed; top: 0; left: 0;
+        width: ${isBackgroundSideways ? "100vh" : "100vw"};
+        height: ${isBackgroundSideways ? "100vw" : "100vh"};
         ${bgUrl ? `background-image: url("${bgUrl}") !important;` : "background-image: none !important;"}
         ${bgColor ? `background-color: ${bgColor} !important;` : ""}
-        background-position: ${position} !important;
+        background-position: ${backgroundPosition} !important;
         background-size: cover !important;
         background-repeat: no-repeat !important;
         z-index: 0 !important;
-        transform: scaleX(${scaleX}) translateZ(0) !important;
-        transform-origin: center center !important;
+        transform: ${backgroundTransform} !important;
+        transform-origin: top left !important;
         filter: invert(${invert}) grayscale(${grayscale}) blur(${blur}px) brightness(${brightness}) !important;
       }
       ${container} { background-color: transparent !important; }
@@ -2915,3 +2935,4 @@ window.addEventListener(CUSTOM_THEME_PREVIEW_EVENT, (e) => {
 
 watchLocationChange()
 scheduleApplyTheme()
+window.setInterval(scheduleApplyThemeOnLocationChange, 250)

@@ -568,6 +568,7 @@ function IndexPopup() {
           theme="colored"
           position="top-center"
           autoClose={2000}
+          hideProgressBar
           closeOnClick
           pauseOnFocusLoss={false}
           newestOnTop

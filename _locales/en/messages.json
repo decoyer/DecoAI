@@ -110,6 +110,9 @@
   "vertical": {
     "message": "Vertical"
   },
+  "rotation": {
+    "message": "Rotation"
+  },
   "flip": {
     "message": "Flip"
   },

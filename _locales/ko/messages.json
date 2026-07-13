@@ -110,6 +110,9 @@
   "vertical": {
     "message": "세로 위치"
   },
+  "rotation": {
+    "message": "회전 방향"
+  },
   "flip": {
     "message": "대칭 이동"
   },

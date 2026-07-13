@@ -110,8 +110,7 @@ const isSameWidgetLayout = (
   left.textColor === right.textColor &&
   left.backgroundColor === right.backgroundColor &&
   left.accentColor === right.accentColor &&
-  left.opacity === right.opacity &&
-  left.glassBlur === right.glassBlur
+  left.opacity === right.opacity
 
 const createWidgetInstance = (key: WidgetKey): WidgetInstance => {
   const widgetMeta = WIDGET_LIST.find((widget) => widget.key === key)
@@ -179,6 +178,9 @@ const rowStyle = {
   alignItems: "center"
 } as const
 const controlButtonStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
   paddingTop: 4,
   paddingBottom: 4,
   backgroundColor: "#4b5563",
@@ -194,8 +196,7 @@ const proButtonStyle = {
   border: "none",
   padding: 8,
   color: "#fff",
-  background:
-    "linear-gradient(90deg, #F472B6, #C084FC, #60A5FA, #C084FC, #F472B6)",
+  background: "linear-gradient(90deg, #F472B6, #C084FC, #60A5FA, #C084FC, #F472B6)",
   backgroundSize: "500% 100%"
 } as const
 const iconLabelStyle = {
@@ -317,14 +318,18 @@ function CustomThemeSortableCard({
     }
   }, [item.bgImageId])
 
+  const bgRotation = item.bgOptions.rotation || 0
+  const isBgSideways = bgRotation === 90 || bgRotation === 270
   const bgStyle = {
-    "--custom-bg-scale-x": bgUrl && item.bgOptions.scaleX === -1 ? "-1" : "1",
+    width: isBgSideways ? 100 : "100%",
+    height: isBgSideways ? 250 : "100%",
     backgroundImage: bgUrl ? `url(${bgUrl})` : "none",
     backgroundColor: item.bgColor || "transparent",
+    transform: `translate(-50%, -50%) rotate(${bgRotation}deg) scaleX(${bgUrl && item.bgOptions.scaleX === -1 ? -1 : 1})`,
     filter: bgUrl
       ? `invert(${item.bgOptions.invert}) grayscale(${item.bgOptions.grayscale}) blur(${item.bgOptions.blur * 0.2}px) brightness(${item.bgOptions.brightness})`
       : "none"
-  } as CSSProperties & { "--custom-bg-scale-x": string }
+  } as CSSProperties
 
   return (
     <div
@@ -612,6 +617,13 @@ export function FabPanelApp() {
     key: keyof CustomBgOptions,
     value: string | number | boolean
   ) => setDraftBackgroundOptions((prev) => ({ ...prev, [key]: value }))
+
+  const rotateDraftBackground = (degrees: -90 | 90) => {
+    setDraftBackgroundOptions((prev) => {
+      const nextRotation = ((Number(prev.rotation) || 0) + degrees) % 360
+      return { ...prev, rotation: nextRotation < 0 ? nextRotation + 360 : nextRotation }
+    })
+  }
 
   const normalizeCustomThemes = () => {
     if (!customThemes.length) return false
@@ -1228,8 +1240,6 @@ export function FabPanelApp() {
     setDraftBackgroundOptions(DEFAULT_CUSTOM_BG_OPTIONS)
   }
 
-  const resetWidgetLayoutDraft = () => setDraftWidgetLayout(DEFAULT_WIDGET_LAYOUT)
-
   return (
     <>
       <style>{`
@@ -1311,11 +1321,14 @@ export function FabPanelApp() {
         }
         .custom-theme-card__bg {
           position: absolute;
-          inset: 0;
+          top: 50%;
+          left: 50%;
+          width: 100%;
+          height: 100%;
           background-position: center center;
           background-size: cover;
           background-repeat: no-repeat;
-          transform: scaleX(var(--custom-bg-scale-x, 1));
+          transform-origin: center center;
         }
         .custom-theme-card__title {
           position: absolute;
@@ -1393,7 +1406,9 @@ export function FabPanelApp() {
         }
         .custom-theme-card:hover .custom-theme-card__title { background-color: #0000004D; }
         .pro-button { animation: pro-gradient 10s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
-        .footer button:hover { filter: brightness(1.1); }
+        .decoai-control-button { transition: filter 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .decoai-control-button:not(:disabled):hover,
+        .footer button:not(:disabled):hover { filter: brightness(1.1); }
         @keyframes pro-gradient {
           from { background-position: 500% 50%; }
           to { background-position: 0% 50%; }
@@ -1405,7 +1420,10 @@ export function FabPanelApp() {
         }
       `}</style>
       <div style={wrapperStyle}>
-        <div ref={panelRootRef} style={rootStyle}>
+        <div
+          ref={panelRootRef}
+          data-decoai-theme-editing={panelMode === "theme" && view === "custom" && editingTheme ? "true" : "false"}
+          style={rootStyle}>
           <div style={contentStyle}>
             {panelMode === "widget" && (
               <>
@@ -1466,15 +1484,6 @@ export function FabPanelApp() {
                         value={draftWidgetLayout.opacity}
                         onChange={(value) => updateWidgetLayout("opacity", Number(value))}
                         onReset={() => resetWidgetLayout("opacity")}
-                      />
-                      <RangeCard
-                        label={t("glassBlur")}
-                        min={0}
-                        max={50}
-                        step={1}
-                        value={draftWidgetLayout.glassBlur}
-                        onChange={(value) => updateWidgetLayout("glassBlur", Number(value))}
-                        onReset={() => resetWidgetLayout("glassBlur")}
                       />
                     </>
                   )}
@@ -1551,12 +1560,7 @@ export function FabPanelApp() {
             {panelMode === "theme" && view === "custom" && (
               <>
                 <h3 style={centeredHeadingStyle}>{t("editTheme")}</h3>
-                <div
-                  style={{
-                    ...tabGridStyle,
-                    marginTop: 20,
-                    gridTemplateColumns: "1fr 1fr 1fr"
-                  }}>
+                <div style={{ ...tabGridStyle, marginTop: 20, gridTemplateColumns: "1fr 1fr 1fr" }}>
                   {(["general", "background", "layout"] as const).map((tab) => (
                     <TabButton
                       key={tab}
@@ -1620,12 +1624,14 @@ export function FabPanelApp() {
                             />
                             <button
                               type="button"
+                              className="decoai-control-button"
                               onClick={() => bgUploadRef.current?.click()}
                               style={controlButtonStyle}>
                               {t("upload")}
                             </button>
                             <button
                               type="button"
+                              className="decoai-control-button"
                               onClick={resetDraftBackgroundImage}
                               disabled={!draftBackgroundImageUrl}
                               style={{ ...controlButtonStyle, ...disabledControlStyle(Boolean(draftBackgroundImageUrl)) }}>
@@ -1644,6 +1650,7 @@ export function FabPanelApp() {
                               </div>
                               <button
                                 type="button"
+                                className="decoai-control-button"
                                 onClick={onRemoveBGClick}
                                 style={controlButtonStyle}>
                                 {t("apply")}
@@ -1690,6 +1697,27 @@ export function FabPanelApp() {
                                   )
                                 }
                               />
+                            </div>
+                          </Card>
+                          <Card>
+                            <div style={rowStyle}>
+                              <span style={fieldLabelStyle}>{t("rotation")}</span>
+                              <div style={iconLabelStyle}>
+                                <button
+                                  type="button"
+                                  className="decoai-control-button"
+                                  onClick={() => rotateDraftBackground(-90)}
+                                  style={controlButtonStyle}>
+                                  <Icon icon="lucide:undo-dot" height={20} aria-hidden="true" />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="decoai-control-button"
+                                  onClick={() => rotateDraftBackground(90)}
+                                  style={controlButtonStyle}>
+                                  <Icon icon="lucide:redo-dot" height={20} aria-hidden="true" />
+                                </button>
+                              </div>
                             </div>
                           </Card>
                           <CheckboxCard
@@ -1741,6 +1769,7 @@ export function FabPanelApp() {
                               </div>
                               <button
                                 type="button"
+                                className="decoai-control-button"
                                 onClick={onColorMatchClick}
                                 style={controlButtonStyle}>
                                 {t("apply")}
@@ -1789,12 +1818,7 @@ export function FabPanelApp() {
           </div>
           <div
             className="footer"
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              padding: "10px 20px",
-              gap: 8
-            }}>
+            style={{ display: "flex", flexDirection: "column", padding: "10px 20px", gap: 8 }}>
             {panelMode === "theme" && themeTab === "custom" && view !== "custom" && (
               <div style={{ ...rowStyle, gap: 8 }}>
                 <FooterButton
@@ -1835,17 +1859,8 @@ export function FabPanelApp() {
                 />
               </div>
             )}
-            {panelMode === "widget" && widgetTab === "layout" && (
-              <FooterButton
-                onClick={resetWidgetLayoutDraft}
-                style={footerButtonStyle}
-                icon="rotate-ccw"
-                label={t("reset")}
-              />
-            )}
             {!isPremiumUser &&
-              ((panelMode === "theme" && view !== "custom") ||
-                (panelMode === "widget" && widgetTab !== "layout")) && (
+              ((panelMode === "theme" && view !== "custom") || panelMode === "widget") && (
                 <FooterButton
                   className="pro-button"
                   onClick={onProClick}
@@ -1899,6 +1914,7 @@ function TabButton({
   return (
     <button
       type="button"
+      className="decoai-control-button"
       onClick={onClick}
       style={{
         ...controlButtonStyle,
@@ -2013,6 +2029,7 @@ function ColorSettingCard({
           />
           <button
             type="button"
+            className="decoai-control-button"
             onClick={onReset}
             disabled={!canReset}
             style={{ ...controlButtonStyle, ...disabledControlStyle(canReset) }}>
@@ -2048,6 +2065,7 @@ function RangeControl({
           {onReset && (
             <button
               type="button"
+              className="decoai-control-button"
               onClick={onReset}
               disabled={disabled}
               style={{ ...controlButtonStyle, ...disabledControlStyle(!disabled) }}>
