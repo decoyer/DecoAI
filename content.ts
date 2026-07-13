@@ -104,9 +104,9 @@ type ThemeName =
 const SITE_SELECTORS = {
   chatgpt: {
     container: "body",
-    header: "header",
-    footer: "#thread-bottom-container > div:is(.mt-auto, .-mt-4) > div > div > div > div, .leading-none",
-    elements: '[data-testid="use-case-prompt-chips"] button, .btn-secondary, .agent-turn, .user-message-bubble-color, .shadow-short-composer',
+    header: "#page-header",
+    footer: 'div[data-testid="thread-disclaimer"] > div > div > div > div > div',
+    elements: '.btn-secondary, .agent-turn, .user-message-bubble-color, .shadow-short-composer, .origin-top-right > aside',
     darkClass: "html.dark"
   },
   gemini: {
@@ -137,6 +137,7 @@ const localStorageInstance = new Storage({ area: "local" })
 let applyThemeQueued = false
 let applyThemeRunning = false
 let applyThemeRequestId = 0
+let applyThemeFrameId: number | null = null
 let currentLocation = location.href
 let fabMounted = false
 let fabOpen = false
@@ -2834,8 +2835,13 @@ const flushApplyTheme = async () => {
 
 const scheduleApplyTheme = () => {
   applyThemeQueued = true
-  requestAnimationFrame(() => void flushApplyTheme())
-  window.setTimeout(() => scheduleApplyTheme(), 250)
+
+  if (applyThemeRunning || applyThemeFrameId !== null) return
+
+  applyThemeFrameId = requestAnimationFrame(() => {
+    applyThemeFrameId = null
+    void flushApplyTheme()
+  })
 }
 
 const scheduleApplyThemeOnLocationChange = () => {

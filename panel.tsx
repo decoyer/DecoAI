@@ -1351,8 +1351,8 @@ export function FabPanelApp() {
         }
         .custom-theme-card__actions {
           position: absolute;
-          top: 1px;
-          right: 1px;
+          top: 4px;
+          right: 4px;
           z-index: 5;
           display: flex;
           gap: 2px;
