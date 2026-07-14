@@ -32,7 +32,6 @@ export type WidgetInstance = {
   type: WidgetKey
   name?: string
 }
-export type WidgetEnabledMap = Record<WidgetKey, boolean>
 export type WidgetLayoutOptions = {
   textColor: string
   backgroundColor: string
@@ -58,16 +57,16 @@ export type PhotoWidgetState = {
   animated: boolean
 }
 export type WidgetFrame = {
-  x: number
-  y: number
-  width: number
-  height: number
+  xRatio: number
+  yRatio: number
+  widthRatio: number
+  heightRatio: number
   rotation?: number
 }
 export type WidgetFrameMap = Record<string, WidgetFrame>
 export type WidgetSize = {
-  width: number
-  height: number
+  widthRatio: number
+  heightRatio: number
 }
 
 type ThemeImportFile = {
@@ -95,7 +94,6 @@ export const FAB_HIDDEN_STORAGE_KEY = "fab-hidden"
 export const THEME_HIDDEN_STORAGE_KEY = "theme-hidden"
 export const WIDGET_HIDDEN_STORAGE_KEY = "widget-hidden"
 export const MODEL_ENABLED_STORAGE_KEY = "model-enabled-map"
-export const WIDGET_ENABLED_STORAGE_KEY = "widget-enabled-map"
 export const WIDGET_LAYOUT_STORAGE_KEY = "widget-layout"
 export const WIDGET_FRAME_STORAGE_KEY = "widget-frame-map"
 export const WIDGET_INSTANCES_STORAGE_KEY = "widget-instances"
@@ -135,23 +133,7 @@ export const DEFAULT_MODEL_ENABLED: ModelEnabledMap = {
   grok: true
 }
 
-export const DEFAULT_WIDGET_INSTANCES: WidgetInstance[] = [
-  { id: "note", type: "note" },
-  { id: "todo", type: "todo" },
-  { id: "dday", type: "dday" },
-  { id: "timer", type: "timer" },
-  { id: "stopwatch", type: "stopwatch" },
-  { id: "photo", type: "photo" }
-]
-
-export const DEFAULT_WIDGET_ENABLED: WidgetEnabledMap = {
-  note: false,
-  todo: false,
-  dday: false,
-  timer: false,
-  stopwatch: false,
-  photo: false
-}
+export const DEFAULT_WIDGET_INSTANCES: WidgetInstance[] = []
 
 export const DEFAULT_WIDGET_LAYOUT: WidgetLayoutOptions = {
   textColor: "",
@@ -183,8 +165,8 @@ export const DEFAULT_PHOTO_WIDGET_STATE: PhotoWidgetState = {
 }
 
 export const DEFAULT_WIDGET_MIN_SIZE: WidgetSize = {
-  width: 250,
-  height: 150
+  widthRatio: 0.12,
+  heightRatio: 0.15
 }
 
 export const IMAGE_SOURCE_URLS = new Set([

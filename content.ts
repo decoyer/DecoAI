@@ -26,7 +26,6 @@ import {
   DEFAULT_PHOTO_WIDGET_STATE,
   DEFAULT_STOPWATCH_WIDGET_STATE,
   DEFAULT_TIMER_WIDGET_STATE,
-  DEFAULT_WIDGET_ENABLED,
   DEFAULT_WIDGET_INSTANCES,
   DEFAULT_WIDGET_LAYOUT,
   DEFAULT_WIDGET_MIN_SIZE,
@@ -50,7 +49,6 @@ import {
   THEME_HIDDEN_STORAGE_KEY,
   THEME_LOADING_EVENT,
   TIMER_WIDGET_STATE_STORAGE_KEY,
-  WIDGET_ENABLED_STORAGE_KEY,
   WIDGET_FRAME_STORAGE_KEY,
   WIDGET_HIDDEN_STORAGE_KEY,
   WIDGET_INSTANCES_STORAGE_KEY,
@@ -251,9 +249,7 @@ const getPremiumStatus = async ({
   try {
     const isPremium = await getVerifiedPremiumStatus(forceRefresh, interactiveFallback)
     const nextSnapshot = await getAuthSessionSnapshot()
-    const hasVerifiedNewStatus =
-      Boolean(nextSnapshot?.checkedAt) &&
-      nextSnapshot?.checkedAt !== snapshot?.checkedAt
+    const hasVerifiedNewStatus = Boolean(nextSnapshot?.checkedAt) && nextSnapshot?.checkedAt !== snapshot?.checkedAt
 
     if (
       !isPremium &&
@@ -295,13 +291,13 @@ const getFABStyle = () => {
     style.textContent = `
       .${FAB_ROOT_CLASS} {
         position: fixed;
-        right: 48px;
-        bottom: 78px;
+        right: clamp(1rem, 2vw, 3rem);
+        bottom: clamp(2rem, 10vh, 5rem);
         z-index: 2;
         display: flex;
         flex-direction: column;
         align-items: flex-end;
-        gap: 10px;
+        gap: 0.75rem;
         pointer-events: none;
       }
 
@@ -602,41 +598,68 @@ const clampWidgetFrameToViewport = (
   frame: WidgetFrame,
   minSize: WidgetSize
 ): WidgetFrame => {
-  const viewportWidth = Math.max(document.documentElement.clientWidth, 320)
-  const viewportHeight = Math.max(document.documentElement.clientHeight, 240)
-  const minWidth = Math.min(minSize.width, viewportWidth)
-  const minHeight = Math.min(minSize.height, viewportHeight)
-  const width = clampNumber(frame.width, minWidth, viewportWidth, minWidth)
-  const height = clampNumber(frame.height, minHeight, viewportHeight, minHeight)
+  const widthRatio = clampNumber(frame.widthRatio, minSize.widthRatio, 1, minSize.widthRatio)
+  const heightRatio = clampNumber(frame.heightRatio, minSize.heightRatio, 1, minSize.heightRatio)
   return {
-    width,
-    height,
-    x: clampNumber(frame.x, 0, Math.max(0, viewportWidth - width), 0),
-    y: clampNumber(frame.y, 0, Math.max(0, viewportHeight - height), 0),
+    widthRatio,
+    heightRatio,
+    xRatio: clampNumber(frame.xRatio, 0, Math.max(0, 1 - widthRatio), 0),
+    yRatio: clampNumber(frame.yRatio, 0, Math.max(0, 1 - heightRatio), 0),
     rotation: normalizeWidgetRotation(frame.rotation)
   }
 }
 
 const PHOTO_WIDGET_MIN_SIZE: WidgetSize = {
-  width: 100,
-  height: 100
+  widthRatio: 0.05,
+  heightRatio: 0.1
 }
 
 const getInitialWidgetFrame = (index: number): WidgetFrame => {
-  const viewportWidth = Math.max(document.documentElement.clientWidth, 320)
-  const viewportHeight = Math.max(document.documentElement.clientHeight, 240)
-  const width = Math.min(DEFAULT_WIDGET_MIN_SIZE.width, viewportWidth)
-  const height = Math.min(DEFAULT_WIDGET_MIN_SIZE.height, viewportHeight)
-  const maxX = Math.max(0, viewportWidth - width)
-  const maxY = Math.max(0, viewportHeight - height)
-  const x = Math.min(maxX, 300)
-  const y = Math.min(maxY, index * 100 + 25)
+  const widthRatio = 0.12
+  const heightRatio = 0.15
+  const xRatio = Math.min(1 - widthRatio, 0.16)
+  const yRatio = Math.min(1 - heightRatio, index * 0.1 + 0.025)
 
-  return { x, y, width, height, rotation: 0 }
+  return { xRatio, yRatio, widthRatio, heightRatio, rotation: 0 }
 }
 
-const getWidgetTransform = (frame: WidgetFrame) =>
-  `translate(${frame.x}px, ${frame.y}px) rotate(${normalizeWidgetRotation(frame.rotation)}deg)`
+type ViewportSize = { width: number; height: number }
+type PixelWidgetFrame = { x: number; y: number; width: number; height: number; rotation?: number }
+type PixelWidgetFrameMap = Record<string, PixelWidgetFrame>
+
+const getViewportSize = (): ViewportSize => ({
+  width: Math.max(document.documentElement.clientWidth, 1),
+  height: Math.max(document.documentElement.clientHeight, 1)
+})
+
+const toPixelWidgetFrame = (frame: WidgetFrame, viewport: ViewportSize): PixelWidgetFrame => ({
+  x: frame.xRatio * viewport.width,
+  y: frame.yRatio * viewport.height,
+  width: frame.widthRatio * viewport.width,
+  height: frame.heightRatio * viewport.height,
+  rotation: frame.rotation
+})
+
+const toRelativeWidgetFrame = (
+  frame: PixelWidgetFrame,
+  viewport: ViewportSize,
+  minSize: WidgetSize
+): WidgetFrame => clampWidgetFrameToViewport({
+  xRatio: frame.x / viewport.width,
+  yRatio: frame.y / viewport.height,
+  widthRatio: frame.width / viewport.width,
+  heightRatio: frame.height / viewport.height,
+  rotation: frame.rotation
+}, minSize)
+
+const clampPixelWidgetFrameToViewport = (
+  frame: PixelWidgetFrame,
+  minSize: WidgetSize,
+  viewport: ViewportSize
+) => toPixelWidgetFrame(toRelativeWidgetFrame(frame, viewport, minSize), viewport)
+
+const getWidgetTransform = (frame: PixelWidgetFrame, viewport: ViewportSize) =>
+  `translate(${frame.x / viewport.width * 100}vw, ${frame.y / viewport.height * 100}vh) rotate(${normalizeWidgetRotation(frame.rotation)}deg)`
 
 const normalizeWidgetRotation = (rotation: number) => {
   const normalized = rotation % 360
@@ -840,7 +863,7 @@ function NoteWidgetContent({ widgetId }: { widgetId: string }) {
 }
 
 function TodoWidgetContent({ widgetId }: { widgetId: string }) {
-  const [inputValue, setInputValue] = useState("")
+  const composerRef = useRef<HTMLSpanElement | null>(null)
   const [content, setContent] = useStorage<JSONContent>(
     { key: `${TEXT_WIDGET_STATE_STORAGE_KEY}:${widgetId}`, instance: localStorageInstance },
     EMPTY_DOC
@@ -872,11 +895,14 @@ function TodoWidgetContent({ widgetId }: { widgetId: string }) {
     editor?.commands.setContent(nextContent)
   }
 
-  const addTodo = () => {
-    const text = inputValue.trim()
-    if (!text) return
-    setTodoItems([...todoItems, { checked: false, text }])
-    setInputValue("")
+  const addTodo = (keepFocus = false) => {
+    const composer = composerRef.current
+    const text = (composer?.textContent || "").trim()
+    if (text) {
+      setTodoItems([...todoItems, { checked: false, text }])
+      if (composer) composer.textContent = ""
+    }
+    if (keepFocus) requestAnimationFrame(() => composerRef.current?.focus())
   }
 
   return createElement(
@@ -887,41 +913,13 @@ function TodoWidgetContent({ widgetId }: { widgetId: string }) {
     },
     createElement(
       "div",
-      { className: "decoai-todo-input-row" },
-      createElement("input", {
-        className: "decoai-todo-input",
-        value: inputValue,
-        placeholder: t("place_todoWidget"),
-        onChange: (e) => setInputValue(e.currentTarget.value),
-        onKeyDown: (e) => {
-          e.stopPropagation()
-          if (e.key === "Enter") addTodo()
-        },
-        onKeyUp: (e) => e.stopPropagation()
-      }),
-      createElement(
-        "button",
-        {
-          type: "button",
-          className: "decoai-todo-add",
-          disabled: inputValue.trim().length === 0,
-          onClick: (e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            addTodo()
-          }
-        },
-        createElement(Icon, { icon: "lucide:pencil", height: "75%", "aria-hidden": "true" })
-      )
-    ),
-    createElement(
-      "div",
       { className: "decoai-todo-list" },
       todoItems.map((item, index) =>
         createElement(
           "div",
           { key: `${index}:${item.text}`, className: "decoai-todo-item" },
-          createElement("label",
+          createElement(
+            "div",
             { className: "decoai-todo-check-label" },
             createElement("input", {
               type: "checkbox",
@@ -935,9 +933,27 @@ function TodoWidgetContent({ widgetId }: { widgetId: string }) {
             }),
             createElement(
               "span",
-              { className: item.checked ? "is-done" : "" },
+              {
+                className: item.checked ? "is-done" : "",
+                contentEditable: true,
+                suppressContentEditableWarning: true,
+                onKeyDown: (e) => {
+                  e.stopPropagation()
+                  if (e.key === "Enter") {
+                    e.preventDefault()
+                    e.currentTarget.blur()
+                  }
+                },
+                onBlur: (e) => {
+                  const text = (e.currentTarget.textContent || "").trim()
+                  if (!text) return
+                  const nextItems = [...todoItems]
+                  nextItems[index] = { ...item, text }
+                  setTodoItems(nextItems)
+                }
+              },
               item.text
-            ),
+            )
           ),
           createElement(
             "button",
@@ -950,8 +966,47 @@ function TodoWidgetContent({ widgetId }: { widgetId: string }) {
                 setTodoItems(todoItems.filter((_, itemIndex) => itemIndex !== index))
               }
             },
-            createElement(Icon, { icon: "lucide:eraser", height: "75%", "aria-hidden": "true" })
+            createElement(Icon, { icon: "lucide:circle-minus", height: "50%", "aria-hidden": "true" })
           )
+        )
+      ),
+      createElement(
+        "div",
+        { key: "todo-composer", className: "decoai-todo-item decoai-todo-composer" },
+        createElement(
+          "div",
+          { className: "decoai-todo-check-label" },
+          createElement("span", {
+            ref: composerRef,
+            contentEditable: true,
+            suppressContentEditableWarning: true,
+            "data-placeholder": t("place_todoWidget"),
+            onKeyDown: (e) => {
+              e.stopPropagation()
+              if (e.key === "Enter") {
+                e.preventDefault()
+                addTodo(true)
+              }
+            },
+            onBlur: () => addTodo()
+          })
+        ),
+        createElement(
+          "button",
+          {
+            type: "button",
+            className: "decoai-todo-add",
+            onPointerDown: (e) => {
+              e.preventDefault()
+              e.stopPropagation()
+            },
+            onClick: (e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              addTodo(true)
+            }
+          },
+          createElement(Icon, { icon: "lucide:circle-plus", height: "50%", "aria-hidden": "true" })
         )
       )
     )
@@ -1434,10 +1489,6 @@ function WidgetOverlayApp() {
     WIDGET_INSTANCES_STORAGE_KEY,
     DEFAULT_WIDGET_INSTANCES
   )
-  const [enabledMap] = useStorage(
-    WIDGET_ENABLED_STORAGE_KEY,
-    DEFAULT_WIDGET_ENABLED
-  )
   const [layoutOptions] = useStorage<WidgetLayoutOptions>(
     WIDGET_LAYOUT_STORAGE_KEY,
     DEFAULT_WIDGET_LAYOUT
@@ -1446,6 +1497,7 @@ function WidgetOverlayApp() {
     WIDGET_FRAME_STORAGE_KEY,
     {}
   )
+  const [viewportSize, setViewportSize] = useState(getViewportSize)
   const [editingWidgetId, setEditingWidgetId] = useState<string | null>(null)
   const [titleEditingWidgetId, setTitleEditingWidgetId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState("")
@@ -1453,30 +1505,47 @@ function WidgetOverlayApp() {
   const [selectedTarget, setSelectedTarget] = useState<HTMLDivElement | null>(null)
   const widgetRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const removeBGToastIdsRef = useRef<Record<string, ReturnType<typeof toast.loading>>>({})
-  const liveFrameRef = useRef<Partial<WidgetFrameMap>>({})
-  const interactionStartFrameRef = useRef<WidgetFrame | null>(null)
+  const liveFrameRef = useRef<Partial<PixelWidgetFrameMap>>({})
+  const interactionStartFrameRef = useRef<PixelWidgetFrame | null>(null)
   const layout = { ...DEFAULT_WIDGET_LAYOUT, ...(previewLayout || layoutOptions) }
-  const visibleWidgetItems = useMemo(
-    () => (widgetItems || DEFAULT_WIDGET_INSTANCES).filter(
-      (item) => (enabledMap?.[item.type] ?? DEFAULT_WIDGET_ENABLED[item.type]) !== false
-    ),
-    [enabledMap, widgetItems]
-  )
+  const visibleWidgetItems = widgetItems || DEFAULT_WIDGET_INSTANCES
   const frames = useMemo(
     () =>
       visibleWidgetItems.reduce(
         (nextFrames, item, index) => {
           const fallback = getInitialWidgetFrame(index)
-          nextFrames[item.id] = clampWidgetFrameToViewport(
+          const relativeFrame = clampWidgetFrameToViewport(
             { ...fallback, ...frameMap?.[item.id] },
             item.type === "photo" ? PHOTO_WIDGET_MIN_SIZE : DEFAULT_WIDGET_MIN_SIZE
           )
+          nextFrames[item.id] = toPixelWidgetFrame(relativeFrame, viewportSize)
           return nextFrames
         },
-        {} as WidgetFrameMap
+        {} as PixelWidgetFrameMap
       ),
-    [frameMap, visibleWidgetItems]
+    [frameMap, viewportSize, visibleWidgetItems]
   )
+  React.useLayoutEffect(() => {
+    let animationFrame = 0
+    const updateViewportSize = () => {
+      window.cancelAnimationFrame(animationFrame)
+      animationFrame = window.requestAnimationFrame(() => {
+        const next = getViewportSize()
+        setViewportSize((current) =>
+          current.width === next.width && current.height === next.height ? current : next
+        )
+      })
+    }
+    const observer = new ResizeObserver(updateViewportSize)
+    observer.observe(document.documentElement)
+    window.addEventListener("resize", updateViewportSize)
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame)
+      observer.disconnect()
+      window.removeEventListener("resize", updateViewportSize)
+    }
+  }, [])
   React.useLayoutEffect(() => {
     setSelectedTarget(editingWidgetId ? widgetRefs.current[editingWidgetId] ?? null : null)
   }, [editingWidgetId, visibleWidgetItems])
@@ -1568,20 +1637,20 @@ function WidgetOverlayApp() {
       position: "absolute",
       left: 0,
       top: 0,
-      width: frame.width,
-      height: frame.height,
-      transform: getWidgetTransform(frame),
+      width: `${frame.width / viewportSize.width * 100}vw`,
+      height: `${frame.height / viewportSize.height * 100}vh`,
+      transform: getWidgetTransform(frame, viewportSize),
       backgroundColor,
       color: textColor,
-      "--decoai-widget-bg": backgroundColor,
-      "--decoai-widget-text": textColor || "inherit",
       border: "none",
       borderRadius: 8,
       boxShadow: accentColor ? `inset 0 2px 16px ${accentColor}4D` : "none",
       overflow: "hidden",
       pointerEvents: "auto",
       zIndex: editingWidgetId === item.id ? 2 : 1,
-      willChange: "transform, width, height"
+      willChange: "transform, width, height",
+      "--decoai-widget-bg": backgroundColor,
+      "--decoai-widget-text": textColor || "inherit"
     } as CSSProperties
   }
 
@@ -1592,10 +1661,10 @@ function WidgetOverlayApp() {
 
   const persistLiveFrame = (id: string | null) => {
     if (!id || !liveFrameRef.current[id]) return
-    const nextFrame = liveFrameRef.current[id] as WidgetFrame
+    const nextFrame = liveFrameRef.current[id] as PixelWidgetFrame
     setFrameMap((prev) => ({
       ...prev,
-      [id]: clampWidgetFrameToViewport(nextFrame, getWidgetMinSize(id))
+      [id]: toRelativeWidgetFrame(nextFrame, viewportSize, getWidgetMinSize(id))
     }))
   }
 
@@ -1609,42 +1678,41 @@ function WidgetOverlayApp() {
     const copiedId = `${item.type}-${crypto.randomUUID()}`
     const sourceFrame = frames[item.id]
     const widgetMeta = WIDGET_LIST.find((widget) => widget.key === item.type)
-    setWidgetItems((prev) =>
-      [
-        ...(prev || DEFAULT_WIDGET_INSTANCES),
-        {
-          id: copiedId,
-          type: item.type,
-          name: t(widgetMeta?.labelKey)
-        }
-      ]
-    )
+    const baseName = t(widgetMeta?.labelKey)
+    const items = widgetItems || DEFAULT_WIDGET_INSTANCES
+    setWidgetItems([...items, {
+      id: copiedId,
+      type: item.type,
+      name: `${baseName} ${items.filter((widget) => widget.type === item.type).length + 1}`
+    }])
     if (sourceFrame) {
       setFrameMap((prev) => ({
         ...(prev || {}),
-        [copiedId]: { ...sourceFrame, x: sourceFrame.x + 32, y: sourceFrame.y + 32 }
+        [copiedId]: clampWidgetFrameToViewport({
+          ...toRelativeWidgetFrame(sourceFrame, viewportSize, getWidgetMinSize(item.id)),
+          xRatio: sourceFrame.x / viewportSize.width + 0.025,
+          yRatio: sourceFrame.y / viewportSize.height + 0.04
+        }, getWidgetMinSize(item.id))
       }))
     }
     setEditingWidgetId(copiedId)
     setTitleEditingWidgetId(null)
   }
 
-  const deleteWidget = (item: WidgetInstance) => {
+  const deleteWidget = async (item: WidgetInstance) => {
+    const stateKey = getWidgetStateKey(item)
+    if (stateKey) {
+      const stateStorage = item.type === "note" || item.type === "todo" || item.type === "photo"
+        ? localStorageInstance : storage
+      const photoState = item.type === "photo" ? await localStorageInstance.get<PhotoWidgetState>(stateKey) : null
+      await stateStorage.remove(stateKey)
+      if (photoState?.imageId) void deleteImageData(photoState.imageId)
+    }
     setWidgetItems((prev) => (prev || DEFAULT_WIDGET_INSTANCES).filter((widget) => widget.id !== item.id))
     setFrameMap((prev) => {
       const { [item.id]: _removed, ...nextFrameMap } = prev || {}
       return nextFrameMap
     })
-    const stateKey = getWidgetStateKey(item)
-    if (stateKey) {
-      const stateStorage = item.type === "note" || item.type === "todo" || item.type === "photo"
-        ? localStorageInstance : storage
-      if (item.type === "photo") {
-        void localStorageInstance.get<PhotoWidgetState>(stateKey)
-          .then((photoState) => { if (photoState?.imageId) void deleteImageData(photoState.imageId) })
-      }
-      void stateStorage.remove(stateKey)
-    }
     if (item.type === "photo") {
       const toastId = removeBGToastIdsRef.current[item.id]
       if (toastId) {
@@ -1782,7 +1850,8 @@ function WidgetOverlayApp() {
         position: "fixed",
         inset: 0,
         zIndex: 4,
-        pointerEvents: "none"
+        pointerEvents: "none",
+        "--decoai-widget-accent": layout.accentColor || "#66cdaa"
       } as CSSProperties
     },
     visibleWidgetItems.map((item) => {
@@ -1956,23 +2025,24 @@ function WidgetOverlayApp() {
       bounds: {
         left: 0,
         top: 0,
-        right: Math.max(document.documentElement.clientWidth, 320),
-        bottom: Math.max(document.documentElement.clientHeight, 240)
+        right: viewportSize.width,
+        bottom: viewportSize.height
       },
       onDragStart: () => interactionStartFrameRef.current = editingWidgetId ? frames[editingWidgetId] : null,
       onDrag: (e) => {
         if (!editingWidgetId) return
         const frame = interactionStartFrameRef.current || frames[editingWidgetId]
         const [deltaX, deltaY] = e.beforeDist
-        const nextFrame = clampWidgetFrameToViewport(
+        const nextFrame = clampPixelWidgetFrameToViewport(
           {
             ...frame,
             x: frame.x + deltaX,
             y: frame.y + deltaY
           },
-          getWidgetMinSize(editingWidgetId)
+          getWidgetMinSize(editingWidgetId),
+          viewportSize
         )
-        e.target.style.transform = getWidgetTransform(nextFrame)
+        e.target.style.transform = getWidgetTransform(nextFrame, viewportSize)
         liveFrameRef.current[editingWidgetId] = nextFrame
       },
       onDragEnd: () => {
@@ -1981,17 +2051,18 @@ function WidgetOverlayApp() {
       },
       onResizeStart: (e) => {
         interactionStartFrameRef.current = editingWidgetId ? frames[editingWidgetId] : null
-        const viewportWidth = Math.max(document.documentElement.clientWidth, 320)
-        const viewportHeight = Math.max(document.documentElement.clientHeight, 240)
         const minSize = getWidgetMinSize(editingWidgetId)
-        e.setMin([Math.min(minSize.width, viewportWidth), Math.min(minSize.height, viewportHeight)])
-        e.setMax([viewportWidth, viewportHeight])
+        e.setMin([
+          minSize.widthRatio * viewportSize.width,
+          minSize.heightRatio * viewportSize.height
+        ])
+        e.setMax([viewportSize.width, viewportSize.height])
       },
       onResize: (e) => {
         if (!editingWidgetId) return
         const frame = interactionStartFrameRef.current || frames[editingWidgetId]
         const [deltaX, deltaY] = e.drag.beforeDist
-        const nextFrame = clampWidgetFrameToViewport(
+        const nextFrame = clampPixelWidgetFrameToViewport(
           {
             ...frame,
             x: frame.x + deltaX,
@@ -1999,11 +2070,12 @@ function WidgetOverlayApp() {
             width: e.width,
             height: e.height
           },
-          getWidgetMinSize(editingWidgetId)
+          getWidgetMinSize(editingWidgetId),
+          viewportSize
         )
-        e.target.style.width = `${nextFrame.width}px`
-        e.target.style.height = `${nextFrame.height}px`
-        e.target.style.transform = getWidgetTransform(nextFrame)
+        e.target.style.width = `${nextFrame.width / viewportSize.width * 100}vw`
+        e.target.style.height = `${nextFrame.height / viewportSize.height * 100}vh`
+        e.target.style.transform = getWidgetTransform(nextFrame, viewportSize)
         liveFrameRef.current[editingWidgetId] = nextFrame
       },
       onResizeEnd: () => {
@@ -2017,7 +2089,7 @@ function WidgetOverlayApp() {
         if (!editingWidgetId) return
         const frame = interactionStartFrameRef.current || frames[editingWidgetId]
         const nextFrame = { ...frame, rotation: normalizeWidgetRotation(e.rotation) }
-        e.target.style.transform = getWidgetTransform(nextFrame)
+        e.target.style.transform = getWidgetTransform(nextFrame, viewportSize)
         liveFrameRef.current[editingWidgetId] = nextFrame
       },
       onRotateEnd: () => {
@@ -2054,6 +2126,7 @@ const mountWidgetOverlay = () => {
       .moveable-control-box,
       .moveable-line,
       .moveable-control {
+        --moveable-color: var(--decoai-widget-accent);
         pointer-events: auto !important;
         z-index: 4 !important;
       }
@@ -2066,13 +2139,6 @@ const mountWidgetOverlay = () => {
       }
       .moveable-bold {
         display: none !important;
-      }
-      .decoai-widget-card {
-        background-color: var(--decoai-widget-bg) !important;
-      }
-      .decoai-widget-card,
-      .decoai-widget-card *:not(.moveable-control):not(.moveable-line) {
-        color: var(--decoai-widget-text) !important;
       }
       .decoai-widget-card-photo:has(.decoai-photo-widget-image) {
         background-color: transparent !important;
@@ -2257,6 +2323,7 @@ const mountWidgetOverlay = () => {
         display: inline-flex;
         align-items: center;
         justify-content: center;
+        padding: 0;
         border: none;
         color: inherit !important;
         background-color: transparent;
@@ -2265,46 +2332,16 @@ const mountWidgetOverlay = () => {
       .decoai-text-tool {
         width: max(28px, 14cqmin);
         height: max(28px, 14cqmin);
-        padding: 0;
         border-radius: 8px;
       }
       .decoai-todo-widget {
         padding: 0 10px 10px;
       }
-      .decoai-todo-input-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .decoai-todo-input {
-        flex: 1;
-        min-width: 0;
-        min-height: 24px;
-        padding: max(4px, 2cqmin) max(8px, 4cqmin);
-        border: 1px solid #4b5563;
-        border-radius: 8px;
-        background-color: transparent;
-        outline: none;
-        font-size: max(16px, 8cqmin);
-        -webkit-text-fill-color: #fff !important;
-      }
-      .decoai-todo-input::placeholder {
-        -webkit-text-fill-color: rgba(255, 255, 255, 0.35);
-      }
       .decoai-todo-add,
       .decoai-todo-delete {
         width: max(32px, 16cqmin);
         height: max(32px, 16cqmin);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border: none;
         border-radius: 999px;
-        padding: 0;
-      }
-      .decoai-todo-add:disabled {
-        opacity: 0.5;
-        pointer-events: none;
       }
       .decoai-todo-list {
         flex: 1;
@@ -2317,12 +2354,11 @@ const mountWidgetOverlay = () => {
       .decoai-todo-item {
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: max(8px, 4cqmin) 0;
         font-size: max(16px, 8cqmin);
+        gap: max(4px, 2cqw);
       }
       .decoai-todo-item:not(:first-child) {
-        border-top: 1px solid #4b5563;
+        margin-top: max(4px, 2cqmin);
       }
       .decoai-todo-check-label {
         display: flex;
@@ -2330,10 +2366,11 @@ const mountWidgetOverlay = () => {
         flex: 1;
         min-width: 0;
         height: 100%;
-        padding: max(4px, 2cqmin) max(8px, 4cqmin);
         border-radius: 8px;
         gap: max(8px, 4cqw);
-        cursor: pointer;
+      }
+      .decoai-todo-item:not(.decoai-todo-composer) .decoai-todo-check-label {
+        padding-left: max(8px, 4cqmin);
       }
       .decoai-todo-checkbox {
         width: max(16px, 8cqmin);
@@ -2342,20 +2379,28 @@ const mountWidgetOverlay = () => {
         cursor: pointer;
       }
       .decoai-todo-checkbox:checked {
-        accent-color: #66cdaa;
-        background-color: #66cdaa;
+        accent-color: var(--decoai-widget-text);
+        background-color: var(--decoai-widget-text);
       }
       .decoai-todo-item span {
         flex: 1;
-        min-width: 0;
+        padding: max(8px, 4cqmin) max(4px, 2cqmin);
+        border-radius: 8px;
+        outline: none;
+        overflow-wrap: anywhere;
+      }
+      .decoai-todo-item span[data-placeholder]:empty::before {
+        content: attr(data-placeholder);
+        color: rgba(255, 255, 255, 0.35);
+        pointer-events: none;
       }
       .decoai-todo-item span.is-done {
         text-decoration: line-through;
         opacity: 0.5;
-      } 
+      }
       .decoai-text-tool:hover,
       .decoai-text-tool.is-active,
-      .decoai-todo-check-label:hover,
+      .decoai-todo-item span:hover,
       .decoai-todo-add:hover,
       .decoai-todo-delete:hover {
         background-color: #0000004D;

@@ -2,8 +2,8 @@ import { Icon } from "@iconify/react"
 import { Storage } from "@plasmohq/storage"
 import { useStorage } from "@plasmohq/storage/hook"
 import { Vibrant } from "node-vibrant/browser"
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react"
-import SortableList, { SortableItem } from "react-easy-sort"
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react"
+import SortableList, { SortableItem, SortableKnob } from "react-easy-sort"
 import Tilt from "react-parallax-tilt"
 import { toast } from "react-toastify"
 
@@ -24,9 +24,9 @@ import {
   CUSTOM_THEME_PREVIEW_EVENT,
   CUSTOM_THEMES_STORAGE_KEY,
   DEFAULT_CUSTOM_BG_OPTIONS,
-  DEFAULT_WIDGET_ENABLED,
   DEFAULT_WIDGET_INSTANCES,
   DEFAULT_WIDGET_LAYOUT,
+  DDAY_WIDGET_STATE_STORAGE_KEY,
   deleteImageData,
   detectCurrentSite,
   FAB_OPEN_EVENT,
@@ -39,27 +39,33 @@ import {
   isJsonFile,
   MAX_FILE_BYTES,
   parseImportedThemes,
+  PHOTO_WIDGET_STATE_STORAGE_KEY,
   renderImageToCanvas,
   sanitizeCustomBgUrl,
   saveImageDataUrl,
   SELECTED_CUSTOM_THEME_ID_STORAGE_KEY,
   SELECTED_THEME_STORAGE_KEY,
+  STOPWATCH_WIDGET_STATE_STORAGE_KEY,
   THEME_LOADING_EVENT,
-  WIDGET_ENABLED_STORAGE_KEY,
+  TIMER_WIDGET_STATE_STORAGE_KEY,
+  WIDGET_FRAME_STORAGE_KEY,
   WIDGET_INSTANCES_STORAGE_KEY,
   WIDGET_LAYOUT_PREVIEW_EVENT,
   WIDGET_LAYOUT_STORAGE_KEY,
   type CustomBgOptions,
   type CustomTheme,
+  type PhotoWidgetState,
   type SiteType,
-  type WidgetEnabledMap,
+  type WidgetFrameMap,
   type WidgetInstance,
   type WidgetKey,
   type WidgetLayoutOptions
 } from "./utils"
 
 const t = (key: string, value?: string) => chrome.i18n.getMessage(key, value)
+const storage = new Storage()
 const localStorageInstance = new Storage({ area: "local" })
+const TEXT_WIDGET_STATE_STORAGE_KEY = "text-widget-state"
 
 const THEME_LIST = [
   { key: "random", color: "#ddd", emoji: "🎲" },
@@ -112,20 +118,14 @@ const isSameWidgetLayout = (
   left.accentColor === right.accentColor &&
   left.opacity === right.opacity
 
-const createWidgetInstance = (key: WidgetKey): WidgetInstance => {
-  const widgetMeta = WIDGET_LIST.find((widget) => widget.key === key)
-
-  return {
-    id: key === "photo" ? `${key}-${crypto.randomUUID()}` : key,
-    type: key,
-    name: t(widgetMeta?.labelKey)
-  }
-}
-
-const wrapperStyle = { position: "relative", width: 250, height: 500 } as const
+const wrapperStyle = {
+  position: "relative",
+  width: "min(16rem, 32vw)",
+  height: "min(32rem, 64vh)"
+} as const
 const rootStyle = {
-  width: 250,
-  height: 500,
+  width: "100%",
+  height: "100%",
   display: "flex",
   flexDirection: "column",
   fontFamily: "sans-serif",
@@ -183,12 +183,19 @@ const controlButtonStyle = {
   justifyContent: "center",
   paddingTop: 4,
   paddingBottom: 4,
-  backgroundColor: "#4b5563",
-  color: "#fff",
   border: "none",
   borderRadius: 8,
   whiteSpace: "nowrap",
+  color: "#fff",
+  backgroundColor: "#4b5563",
   cursor: "pointer"
+} as const
+const widgetActionButtonStyle = {
+  ...controlButtonStyle,
+  width: 24,
+  height: 24,
+  padding: 0,
+  borderRadius: 999
 } as const
 const proButtonStyle = {
   ...controlButtonStyle,
@@ -270,12 +277,11 @@ const isCurrentPageDarkMode = () => {
 
 const wait = (ms: number) => new Promise<void>((resolve) => { window.setTimeout(resolve, ms) })
 
-const updateCustomThemeTitleOverflow = (wrap: HTMLElement) => {
-  const card = wrap.querySelector<HTMLButtonElement>(".custom-theme-card")
-  const titleText = card?.querySelector<HTMLSpanElement>(".custom-theme-card__title span")
-  if (!card || !titleText) return
-  card.classList.remove("title-overflow")
-  card.classList.toggle("title-overflow", titleText.scrollWidth > titleText.clientWidth + 1)
+const updateTitleOverflow = (title: HTMLElement) => {
+  const text = title.querySelector<HTMLElement>(".decoai-marquee-title__text")
+  if (!text) return
+  title.classList.remove("title-overflow")
+  title.classList.toggle("title-overflow", text.scrollWidth > text.clientWidth + 1)
 }
 
 function CustomThemeSortableCard({
@@ -334,7 +340,6 @@ function CustomThemeSortableCard({
   return (
     <div
       className="custom-theme-card-wrap"
-      onPointerEnter={(e) => updateCustomThemeTitleOverflow(e.currentTarget)}
       style={{ position: "relative", zIndex: isDragging ? 2 : "auto" }}>
       <Tilt
         {...themeTiltProps}
@@ -342,11 +347,12 @@ function CustomThemeSortableCard({
         tiltEnable={!isDragging}>
         <button
           type="button"
-          className={`custom-theme-card${theme === "custom" && selectedCustomThemeId === item.id ? " is-active" : ""}${draggingCustomThemeId === item.id ? " is-dragging" : ""}`}
+          className={`custom-theme-card decoai-marquee-title${theme === "custom" && selectedCustomThemeId === item.id ? " is-active" : ""}${draggingCustomThemeId === item.id ? " is-dragging" : ""}`}
+          onPointerEnter={(e) => updateTitleOverflow(e.currentTarget)}
           onClick={() => onCustomCardClick(item)}>
           <div className="custom-theme-card__bg" style={bgStyle} />
           <div className="custom-theme-card__title">
-            <span data-title={item.name}>{item.name}</span>
+            <span className="decoai-marquee-title__text" data-title={item.name}>{item.name}</span>
           </div>
         </button>
         {!isDragging && (
@@ -382,22 +388,163 @@ function CustomThemeSortableCard({
   )
 }
 
+function WidgetGroup({
+  item,
+  widgets,
+  expanded,
+  onToggle,
+  onAdd,
+  holderRef,
+  onSortStart,
+  onSortEnd,
+  onRename,
+  onDelete
+}: {
+  item: (typeof WIDGET_LIST)[number]
+  widgets: WidgetInstance[]
+  expanded: boolean
+  onToggle: () => void
+  onAdd: () => void
+  holderRef: RefObject<HTMLDivElement>
+  onSortStart: (bounds: HTMLElement | null) => void
+  onSortEnd: (oldIndex: number, newIndex: number) => void
+  onRename: (widget: WidgetInstance, name: string) => void
+  onDelete: (widget: WidgetInstance) => void
+}) {
+  const [editingWidgetId, setEditingWidgetId] = useState("")
+  const [editingTitle, setEditingTitle] = useState("")
+  const listRef = useRef<HTMLDivElement>(null)
+
+  const startTitleEditing = (widget: WidgetInstance) => {
+    setEditingWidgetId(widget.id)
+    setEditingTitle(widget.name || t(item.labelKey))
+  }
+
+  const finishTitleEditing = (widget: WidgetInstance) => {
+    onRename(widget, editingTitle)
+    setEditingWidgetId("")
+  }
+
+  return (
+    <Card>
+      <div style={rowStyle}>
+        <span style={iconLabelStyle}>
+          <Icon icon={`lucide:${item.icon}`} height={16} aria-hidden="true" />
+          <span style={fieldLabelStyle}>{t(item.labelKey)}</span>
+        </span>
+        <div style={iconLabelStyle}>
+          <button
+            type="button"
+            className="decoai-widget-action__add"
+            onClick={onAdd}
+            style={widgetActionButtonStyle}>
+            <Icon icon="lucide:plus" height={16} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="decoai-control-button"
+            onClick={onToggle}
+            style={widgetActionButtonStyle}>
+            <Icon icon={`lucide:chevron-${expanded ? "up" : "down"}`} height={16} aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+      {expanded && widgets.length > 0 && (
+        <div ref={listRef}>
+          <SortableList
+            as="div"
+            lockAxis="y"
+            customHolderRef={holderRef}
+            draggedItemClassName="widget-group-row-dragged"
+            onSortStart={() => onSortStart(listRef.current)}
+            onSortEnd={onSortEnd}
+            style={{ ...sectionStyle, padding: 4 }}>
+            {widgets.map((widget) => (
+              <SortableItem key={widget.id}>
+                <div className="widget-group-row" style={{ ...rowStyle, gap: 8 }}>
+                  <SortableKnob>
+                    <button
+                      type="button"
+                      className="decoai-control-button"
+                      style={widgetActionButtonStyle}>
+                      <Icon icon="lucide:grip-horizontal" height={16} aria-hidden="true" />
+                    </button>
+                  </SortableKnob>
+                  {editingWidgetId === widget.id ? (
+                    <input
+                      autoFocus
+                      type="text"
+                      value={editingTitle}
+                      maxLength={20}
+                      spellCheck={false}
+                      autoComplete="off"
+                      onChange={(e) => setEditingTitle(e.target.value.slice(0, 20))}
+                      onBlur={() => finishTitleEditing(widget)}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => {
+                        e.stopPropagation()
+                        if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur()
+                      }}
+                      onKeyUp={(e) => e.stopPropagation()}
+                      style={{
+                        flex: 1,
+                        width: 0,
+                        minWidth: 0,
+                        padding: 0,
+                        border: "none",
+                        outline: "none",
+                        background: "transparent",
+                        font: "inherit",
+                        color: "inherit",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap"
+                      }}
+                    />
+                  ) : (
+                    <div
+                      className="decoai-widget-title decoai-marquee-title"
+                      onClick={() => startTitleEditing(widget)}
+                      onPointerEnter={(e) => updateTitleOverflow(e.currentTarget)}>
+                      <span className="decoai-marquee-title__text" data-title={widget.name}>
+                        {widget.name}
+                      </span>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    className="decoai-widget-action__delete"
+                    style={widgetActionButtonStyle}
+                    onClick={() => onDelete(widget)}>
+                    <Icon icon="lucide:trash-2" height={16} aria-hidden="true" />
+                  </button>
+                </div>
+              </SortableItem>
+            ))}
+          </SortableList>
+        </div>
+      )}
+    </Card>
+  )
+}
+
 export function FabPanelApp() {
   const panelRootRef = useRef<HTMLDivElement>(null)
   const themeGridScrollRef = useRef<HTMLDivElement>(null)
+  const widgetSortScrollRef = useRef<HTMLElement>(null)
   const [theme, setTheme] = useStorage(SELECTED_THEME_STORAGE_KEY, "default")
   const [panelMode, setPanelMode] = useState<PanelMode>("theme")
   const [view, setView] = useState<PanelView>("themes")
   const [themeTab, setThemeTab] = useState<ThemeTab>("preset")
   const [widgetTab, setWidgetTab] = useState<WidgetTab>("visibility")
   const [customEditTab, setCustomEditTab] = useState<CustomEditTab>("general")
-  const [widgetEnabled, setWidgetEnabled] = useStorage<WidgetEnabledMap>(
-    WIDGET_ENABLED_STORAGE_KEY,
-    DEFAULT_WIDGET_ENABLED
-  )
   const [widgetItems, setWidgetItems] = useStorage<WidgetInstance[]>(
     WIDGET_INSTANCES_STORAGE_KEY,
     DEFAULT_WIDGET_INSTANCES
+  )
+  const [, setWidgetFrameMap] = useStorage<WidgetFrameMap>(
+    WIDGET_FRAME_STORAGE_KEY,
+    {}
   )
   const [widgetLayout, setWidgetLayout] = useStorage<WidgetLayoutOptions>(
     WIDGET_LAYOUT_STORAGE_KEY,
@@ -409,11 +556,11 @@ export function FabPanelApp() {
   const [draftBackgroundImageId, setDraftBackgroundImageId] = useState("")
   const [draftBackgroundAnimated, setDraftBackgroundAnimated] = useState(false)
   const [storedCustomThemes, setCustomThemes] = useStorage<CustomTheme[]>(
-    { key: CUSTOM_THEMES_STORAGE_KEY, instance: localStorageInstance },
-    []
+    { key: CUSTOM_THEMES_STORAGE_KEY, instance: localStorageInstance }, []
   )
   const [selectedCustomThemeId, setSelectedCustomThemeId] = useStorage(
-    { key: SELECTED_CUSTOM_THEME_ID_STORAGE_KEY, instance: localStorageInstance }, "")
+    { key: SELECTED_CUSTOM_THEME_ID_STORAGE_KEY, instance: localStorageInstance }, ""
+  )
   const [editingCustomThemeId, setEditingCustomThemeId] = useState("")
   const [premiumStatus, setPremiumStatus] = useState<PremiumStatus>("unknown")
   const [draftBackgroundOptions, setDraftBackgroundOptions] = useState<CustomBgOptions>(DEFAULT_CUSTOM_BG_OPTIONS)
@@ -424,6 +571,7 @@ export function FabPanelApp() {
   const [draftWidgetLayout, setDraftWidgetLayout] = useState<WidgetLayoutOptions>(DEFAULT_WIDGET_LAYOUT)
   const [isLoading, setIsLoading] = useState(false)
   const [draggingCustomThemeId, setDraggingCustomThemeId] = useState("")
+  const [expandedWidgetTypes, setExpandedWidgetTypes] = useState<Partial<Record<WidgetKey, boolean>>>({})
   const customThemeClickRef = useRef("")
   const previousViewRef = useRef<PanelView>(view)
   const canResetText = Boolean((draftTextColor || "").trim())
@@ -433,16 +581,15 @@ export function FabPanelApp() {
   const isFreeUser = premiumStatus === "free"
   const customThemes = Array.isArray(storedCustomThemes) ? storedCustomThemes : []
   const selectedCustomTheme = customThemes.find((item) => item.id === selectedCustomThemeId)
-  const hasWidgetType = (key: WidgetKey) =>
-    (widgetItems || DEFAULT_WIDGET_INSTANCES).some((widget) => widget.type === key)
-
   function stopCustomThemeDragClamp() {
     document.removeEventListener("mousemove", clampCustomThemeDrag)
   }
 
   function clampCustomThemeDrag() {
-    const scrollArea = themeGridScrollRef.current
-    const dragged = panelRootRef.current?.querySelector<HTMLElement>(".custom-theme-card-dragged")
+    const dragged = panelRootRef.current?.querySelector<HTMLElement>(".custom-theme-card-dragged, .widget-group-row-dragged")
+    const scrollArea = dragged?.classList.contains("widget-group-row-dragged")
+      ? widgetSortScrollRef.current
+      : themeGridScrollRef.current
     if (!scrollArea || !dragged) return
 
     dragged.style.removeProperty("translate")
@@ -500,7 +647,7 @@ export function FabPanelApp() {
 
     const timeoutId = window.setTimeout(() => {
       setWidgetLayout(draftWidgetLayout)
-    }, 1000)
+    }, 250)
 
     return () => window.clearTimeout(timeoutId)
   }, [draftWidgetLayout, panelMode, setWidgetLayout, widgetLayout])
@@ -1126,7 +1273,8 @@ export function FabPanelApp() {
     setView("themes")
   }
 
-  const onCustomThemeSortStart = () => {
+  const onCustomThemeSortStart = (widgetBounds: HTMLElement | null = null) => {
+    widgetSortScrollRef.current = widgetBounds
     setDraggingCustomThemeId("")
 
     const rect = panelRootRef.current?.getBoundingClientRect()
@@ -1141,6 +1289,7 @@ export function FabPanelApp() {
 
   const onCustomThemeSortEnd = (oldIndex: number, newIndex: number) => {
     stopCustomThemeDragClamp()
+    widgetSortScrollRef.current = null
     const activeId = customThemes[oldIndex]?.id || ""
 
     if (activeId) {
@@ -1207,15 +1356,75 @@ export function FabPanelApp() {
     toast.success(t("success_themeDuplicate"))
   }
 
-  const updateWidgetEnabled = (key: WidgetKey, checked: boolean) => {
+  const addWidget = async (key: WidgetKey) => {
     const items = widgetItems || DEFAULT_WIDGET_INSTANCES
-    setWidgetEnabled({
-      ...DEFAULT_WIDGET_ENABLED,
-      ...widgetEnabled,
-      [key]: checked
+    if (items.some((widget) => widget.type === key) && !(await requirePremiumAccess("pro_widgetLimit"))) {
+      return
+    }
+
+    const widgetMeta = WIDGET_LIST.find((widget) => widget.key === key)
+    const count = items.filter((widget) => widget.type === key).length
+    setWidgetItems([...items, {
+      id: `${key}-${crypto.randomUUID()}`,
+      type: key,
+      name: `${t(widgetMeta?.labelKey)} ${count + 1}`
+    }])
+    setExpandedWidgetTypes((prev) => ({ ...prev, [key]: true }))
+  }
+
+  const sortWidgets = (key: WidgetKey, oldIndex: number, newIndex: number) => {
+    stopCustomThemeDragClamp()
+    widgetSortScrollRef.current = null
+    if (oldIndex === newIndex) return
+
+    setWidgetItems((prev) => {
+      const items = prev || DEFAULT_WIDGET_INSTANCES
+      const typeItems = items.filter((widget) => widget.type === key)
+      typeItems.splice(newIndex, 0, typeItems.splice(oldIndex, 1)[0])
+      let index = 0
+      return items.map((widget) => widget.type === key ? typeItems[index++] : widget)
     })
-    if (!checked || items.some((widget) => widget.type === key)) return
-    setWidgetItems([...items, createWidgetInstance(key)])
+  }
+
+  const renameWidget = (widget: WidgetInstance, name: string) => {
+    setWidgetItems((prev) => (prev || DEFAULT_WIDGET_INSTANCES).map((item) =>
+      item.id === widget.id ? { ...item, name } : item
+    ))
+  }
+
+  const getWidgetStateKey = (widget: WidgetInstance) => {
+    switch (widget.type) {
+      case "note":
+      case "todo":
+        return `${TEXT_WIDGET_STATE_STORAGE_KEY}:${widget.id}`
+      case "dday":
+        return `${DDAY_WIDGET_STATE_STORAGE_KEY}:${widget.id}`
+      case "timer":
+        return `${TIMER_WIDGET_STATE_STORAGE_KEY}:${widget.id}`
+      case "stopwatch":
+        return `${STOPWATCH_WIDGET_STATE_STORAGE_KEY}:${widget.id}`
+      case "photo":
+        return `${PHOTO_WIDGET_STATE_STORAGE_KEY}:${widget.id}`
+      default:
+        return null
+    }
+  }
+
+  const deleteWidget = async (widget: WidgetInstance) => {
+    const stateKey = getWidgetStateKey(widget)
+    if (stateKey) {
+      const stateStorage = widget.type === "note" || widget.type === "todo" || widget.type === "photo"
+        ? localStorageInstance : storage
+      const photoState = widget.type === "photo" ? await localStorageInstance.get<PhotoWidgetState>(stateKey) : null
+      await stateStorage.remove(stateKey)
+      if (photoState?.imageId) void deleteImageData(photoState.imageId)
+    }
+
+    setWidgetItems((prev) => (prev || DEFAULT_WIDGET_INSTANCES).filter((item) => item.id !== widget.id))
+    setWidgetFrameMap((prev) => {
+      const { [widget.id]: _removed, ...nextFrameMap } = prev || {}
+      return nextFrameMap
+    })
   }
 
   const updateWidgetLayout = (
@@ -1342,25 +1551,12 @@ export function FabPanelApp() {
           overflow: hidden;
           transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .custom-theme-card__title span {
-          display: block;
-          width: max-content;
-          max-width: 100%;
+        .custom-theme-card__title .decoai-marquee-title__text {
           margin: 0 auto;
-          overflow: hidden;
           line-height: 24px;
-          white-space: nowrap;
-          text-overflow: ellipsis;
         }
-        .custom-theme-card-wrap:hover .title-overflow .custom-theme-card__title span {
-          display: inline-flex;
-          gap: 48px;
-          max-width: none;
+        .custom-theme-card.title-overflow:hover .decoai-marquee-title__text {
           margin: 0;
-          animation: title-marquee 6s linear infinite;
-        }
-        .custom-theme-card-wrap:hover .title-overflow .custom-theme-card__title span::after {
-          content: attr(data-title);
         }
         .custom-theme-card__actions {
           position: absolute;
@@ -1389,24 +1585,50 @@ export function FabPanelApp() {
         .custom-theme-card-wrap {
           position: relative;
         }
-        .custom-theme-card-dragged {
+        .custom-theme-card-dragged,
+        .widget-group-row-dragged {
           top: var(--custom-theme-drag-top, 0px) !important;
           left: var(--custom-theme-drag-left, 0px) !important;
+        }
+        .decoai-widget-title {
+          flex: 1;
+          min-width: 0;
+          overflow: hidden;
+          user-select: none;
+        }
+        .decoai-marquee-title__text {
+          display: block;
+          width: max-content;
+          max-width: 100%;
+          overflow: hidden;
+          white-space: nowrap;
+          text-overflow: ellipsis;
+        }
+        .decoai-marquee-title.title-overflow:hover .decoai-marquee-title__text {
+          display: inline-flex;
+          gap: 48px;
+          max-width: none;
+          animation: title-marquee 6s linear infinite;
+        }
+        .decoai-marquee-title.title-overflow:hover .decoai-marquee-title__text::after {
+          content: attr(data-title);
         }
         .custom-theme-card:hover .custom-theme-card__actions,
         .custom-theme-card-wrap:hover .custom-theme-card__actions {
           opacity: 1;
           transform: scale(1);
         }
-        .custom-theme-card__duplicate:hover {
-          background-color: #1976d2;
-        }
-        .custom-theme-card__delete:hover {
-          background-color: #d32f2f;
-        }
+        .decoai-control-button,
+        .custom-theme-card__duplicate,
+        .custom-theme-card__delete,
+        .decoai-widget-action__add,
+        .decoai-widget-action__delete { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .custom-theme-card__duplicate:hover,
+        .decoai-widget-action__add:hover { background-color: #1976d2 !important; }
+        .custom-theme-card__delete:hover,
+        .decoai-widget-action__delete:hover { background-color: #d32f2f !important; }
         .custom-theme-card:hover .custom-theme-card__title { background-color: #0000004D; }
         .pro-button { animation: pro-gradient 10s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
-        .decoai-control-button { transition: filter 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
         .decoai-control-button:not(:disabled):hover,
         .footer button:not(:disabled):hover { filter: brightness(1.1); }
         @keyframes pro-gradient {
@@ -1442,15 +1664,27 @@ export function FabPanelApp() {
                 <div className="content-scroll" style={editSectionScrollStyle}>
                   {widgetTab === "visibility" && (
                     <>
-                      {WIDGET_LIST.map((item) => (
-                        <CheckboxCard
-                          key={item.key}
-                          label={t(item.labelKey)}
-                          icon={item.icon}
-                          checked={(widgetEnabled?.[item.key] ?? DEFAULT_WIDGET_ENABLED[item.key]) && hasWidgetType(item.key)}
-                          onChange={(checked) => updateWidgetEnabled(item.key, checked)}
-                        />
-                      ))}
+                      {WIDGET_LIST.map((item) => {
+                        const typeWidgets = (widgetItems || DEFAULT_WIDGET_INSTANCES).filter(
+                          (widget) => widget.type === item.key
+                        )
+
+                        return (
+                          <WidgetGroup
+                            key={item.key}
+                            item={item}
+                            widgets={typeWidgets}
+                            expanded={Boolean(expandedWidgetTypes[item.key])}
+                            holderRef={panelRootRef}
+                            onToggle={() => setExpandedWidgetTypes((prev) => ({ ...prev, [item.key]: !prev[item.key] }))}
+                            onAdd={() => void addWidget(item.key)}
+                            onSortStart={onCustomThemeSortStart}
+                            onSortEnd={(oldIndex, newIndex) => sortWidgets(item.key, oldIndex, newIndex)}
+                            onRename={renameWidget}
+                            onDelete={deleteWidget}
+                          />
+                        )
+                      })}
                     </>
                   )}
                   {widgetTab === "layout" && (
