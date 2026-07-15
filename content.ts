@@ -362,10 +362,9 @@ const getFABStyle = () => {
         position: relative;
         display: block;
         overflow: hidden;
-        background-color: rgba(24, 24, 24, var(--decoai-surface-opacity, 0.8));
+        background-color: rgba(24, 24, 24, 0.8);
         border-radius: 16px;
-        backdrop-filter: blur(var(--decoai-glass-blur, 10px)) saturate(140%);
-        box-shadow: var(--decoai-accent-shadow, none);
+        backdrop-filter: blur(10px) saturate(140%);
         opacity: 0;
         pointer-events: none;
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -576,24 +575,6 @@ const isFabThemeEditing = () => {
   return panelHost?.shadowRoot?.querySelector('[data-decoai-theme-editing="true"]') !== null
 }
 
-const setFabAccentColor = (accentColor?: string) => {
-  const root = document.getElementById(FAB_ROOT_ID)
-  if (!root) return
-  root.style.setProperty(
-    "--decoai-accent-shadow",
-    accentColor ? `inset 0 2px 16px ${accentColor}4D` : "none"
-  )
-}
-
-const setFabSurfaceOptions = (customBgOptions?: CustomBgOptions) => {
-  const glassBlur = clampNumber(customBgOptions?.glassBlur, 0, 50, 10)
-  const opacity = clampNumber(customBgOptions?.opacity, 0, 1, 0.8)
-  const root = document.getElementById(FAB_ROOT_ID)
-  if (!root) return
-  root.style.setProperty("--decoai-glass-blur", `${glassBlur}px`)
-  root.style.setProperty("--decoai-surface-opacity", `${opacity}`)
-}
-
 const clampWidgetFrameToViewport = (
   frame: WidgetFrame,
   minSize: WidgetSize
@@ -675,6 +656,18 @@ const isWidgetDarkMode = () => {
   return document.querySelector(SITE_SELECTORS[currentSite].darkClass) !== null
 }
 
+const getSiteDefaultTextColor = () => {
+  const style = document.getElementById(THEME_STYLE_ID) as HTMLStyleElement | null
+  const wasDisabled = style?.disabled ?? false
+
+  if (style) style.disabled = true
+  try {
+    return getComputedStyle(document.body || document.documentElement).color
+  } finally {
+    if (style) style.disabled = wasDisabled
+  }
+}
+
 const getSyncedTimerSeconds = (state: TimerWidgetState) => {
   if (!state.timerRunning || !state.timerEndAt) {
     return Math.max(0, state.timerRemainingSeconds)
@@ -704,7 +697,7 @@ const expiryTimestamp = (seconds: number) => {
 }
 
 const getTimerDisplayParts = (timer: ReturnType<typeof useTimer>) => {
-  const totalSeconds = Math.max(0, Math.floor(timer.totalMilliseconds / 1000))
+  const totalSeconds = Math.max(0, Math.ceil(timer.totalMilliseconds / 1000))
 
   return {
     hours: Math.floor(totalSeconds / 3600),
@@ -1165,55 +1158,19 @@ function TimerWidgetContent({ widgetId }: { widgetId: string }) {
     }))
   }
 
-  const changeTimerTimePart = (
-    part: "hours" | "minutes" | "seconds",
-    delta: number
-  ) => {
-    const currentValue = timerDisplay[part]
-    const nextValue = (currentValue + delta + 60) % 60
-
-    setTimerTimePart(part, String(nextValue))
-  }
-
   const timeInput = (
     part: "hours" | "minutes" | "seconds",
     value: number
-  ) => {
-    const stepButton = (icon: string, delta: number) =>
-      createElement(
-        "button",
-        {
-          type: "button",
-          className: "decoai-time-step",
-          disabled: timer.isRunning,
-          onPointerDown: (e) => e.stopPropagation(),
-          onPointerUp: (e) => e.stopPropagation(),
-          onClick: (e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            changeTimerTimePart(part, delta)
-          }
-        },
-        createElement(Icon, { icon, height: "50%", "aria-hidden": "true" })
-      )
-
-    return createElement(
-      "div",
-      { className: "decoai-time-stepper" },
-      stepButton("lucide:chevron-up", 1),
-      createElement("input", {
-        className: "decoai-time-input",
-        type: "text",
-        min: 0,
-        max: 59,
-        value: String(value).padStart(2, "0"),
-        disabled: timer.isRunning,
-        onChange: (e) => setTimerTimePart(part, e.target.value),
-        onClick: (e) => e.currentTarget.select()
-      }),
-      stepButton("lucide:chevron-down", -1)
-    )
-  }
+  ) => createElement("input", {
+    className: "decoai-time-input decoai-timer-input",
+    type: "number",
+    min: 0,
+    max: 59,
+    value: String(value).padStart(2, "0"),
+    disabled: timer.isRunning,
+    onChange: (e) => setTimerTimePart(part, e.target.value),
+    onClick: (e) => e.currentTarget.select()
+  })
 
   return createElement(
     "div",
@@ -1499,8 +1456,6 @@ function WidgetOverlayApp() {
   )
   const [viewportSize, setViewportSize] = useState(getViewportSize)
   const [editingWidgetId, setEditingWidgetId] = useState<string | null>(null)
-  const [titleEditingWidgetId, setTitleEditingWidgetId] = useState<string | null>(null)
-  const [editingTitle, setEditingTitle] = useState("")
   const [removingBGWidgetIds, setRemovingBGWidgetIds] = useState<Record<string, boolean>>({})
   const [selectedTarget, setSelectedTarget] = useState<HTMLDivElement | null>(null)
   const widgetRefs = useRef<Record<string, HTMLDivElement | null>>({})
@@ -1508,7 +1463,9 @@ function WidgetOverlayApp() {
   const liveFrameRef = useRef<Partial<PixelWidgetFrameMap>>({})
   const interactionStartFrameRef = useRef<PixelWidgetFrame | null>(null)
   const layout = { ...DEFAULT_WIDGET_LAYOUT, ...(previewLayout || layoutOptions) }
+  const siteDefaultTextColor = useMemo(getSiteDefaultTextColor, [isDarkMode])
   const visibleWidgetItems = widgetItems || DEFAULT_WIDGET_INSTANCES
+  const selectedWidget = visibleWidgetItems.find((item) => item.id === editingWidgetId)
   const frames = useMemo(
     () =>
       visibleWidgetItems.reduce(
@@ -1547,9 +1504,8 @@ function WidgetOverlayApp() {
     }
   }, [])
   React.useLayoutEffect(() => {
-    setSelectedTarget(editingWidgetId ? widgetRefs.current[editingWidgetId] ?? null : null)
-  }, [editingWidgetId, visibleWidgetItems])
-  const selectedWidget = visibleWidgetItems.find((item) => item.id === editingWidgetId)
+    setSelectedTarget(editingWidgetId && !selectedWidget?.locked ? widgetRefs.current[editingWidgetId] ?? null : null)
+  }, [editingWidgetId, selectedWidget?.locked, visibleWidgetItems])
 
   React.useEffect(() => {
     const items = widgetItems || DEFAULT_WIDGET_INSTANCES
@@ -1593,8 +1549,8 @@ function WidgetOverlayApp() {
   }, [setFrameMap, setWidgetItems, widgetItems])
 
   React.useEffect(() => {
-    const onWidgetLayoutPreview = (event: Event) => {
-      const customEvent = event as CustomEvent<WidgetLayoutOptions | null>
+    const onWidgetLayoutPreview = (e: Event) => {
+      const customEvent = e as CustomEvent<WidgetLayoutOptions | null>
       setPreviewLayout(customEvent.detail)
     }
     window.addEventListener(WIDGET_LAYOUT_PREVIEW_EVENT, onWidgetLayoutPreview)
@@ -1613,9 +1569,9 @@ function WidgetOverlayApp() {
   }, [])
 
   React.useEffect(() => {
-    const onDocumentPointerDown = (event: PointerEvent) => {
+    const onDocumentPointerDown = (e: PointerEvent) => {
       if (!editingWidgetId) return
-      const target = event.target as Element | null
+      const target = e.target as Element | null
       if (target?.closest(".decoai-widget-card") || target?.closest(".moveable-control-box")) return
       setEditingWidgetId(null)
     }
@@ -1627,11 +1583,11 @@ function WidgetOverlayApp() {
   const getWidgetStyle = (item: WidgetInstance): CSSProperties => {
     const frame = frames[item.id]
     const opacity = clampNumber(layout.opacity, 0, 1, 0.8)
-    const textColor = layout.textColor
+    const textColor = layout.textColor || siteDefaultTextColor
     const accentColor = layout.accentColor
     const backgroundColor = layout.backgroundColor
       ? `color-mix(in srgb, ${layout.backgroundColor} ${opacity * 100}%, transparent)`
-      : isDarkMode ? `rgba(24, 24, 24, ${opacity})` : `rgba(255, 255, 255, ${opacity})`
+      : isDarkMode ? `rgba(24, 24, 24, ${opacity})` : `rgba(231, 231, 231, ${opacity})`
 
     return {
       position: "absolute",
@@ -1650,7 +1606,7 @@ function WidgetOverlayApp() {
       zIndex: editingWidgetId === item.id ? 2 : 1,
       willChange: "transform, width, height",
       "--decoai-widget-bg": backgroundColor,
-      "--decoai-widget-text": textColor || "inherit"
+      "--decoai-widget-text": textColor
     } as CSSProperties
   }
 
@@ -1666,37 +1622,6 @@ function WidgetOverlayApp() {
       ...prev,
       [id]: toRelativeWidgetFrame(nextFrame, viewportSize, getWidgetMinSize(id))
     }))
-  }
-
-  const addWidget = async (item: WidgetInstance) => {
-    const { isPremium, isChecked } = await getPremiumStatus()
-    if (!isPremium) {
-      if (isChecked) toast.error(t("pro_widgetLimit"))
-      return
-    }
-
-    const copiedId = `${item.type}-${crypto.randomUUID()}`
-    const sourceFrame = frames[item.id]
-    const widgetMeta = WIDGET_LIST.find((widget) => widget.key === item.type)
-    const baseName = t(widgetMeta?.labelKey)
-    const items = widgetItems || DEFAULT_WIDGET_INSTANCES
-    setWidgetItems([...items, {
-      id: copiedId,
-      type: item.type,
-      name: `${baseName} ${items.filter((widget) => widget.type === item.type).length + 1}`
-    }])
-    if (sourceFrame) {
-      setFrameMap((prev) => ({
-        ...(prev || {}),
-        [copiedId]: clampWidgetFrameToViewport({
-          ...toRelativeWidgetFrame(sourceFrame, viewportSize, getWidgetMinSize(item.id)),
-          xRatio: sourceFrame.x / viewportSize.width + 0.025,
-          yRatio: sourceFrame.y / viewportSize.height + 0.04
-        }, getWidgetMinSize(item.id))
-      }))
-    }
-    setEditingWidgetId(copiedId)
-    setTitleEditingWidgetId(null)
   }
 
   const deleteWidget = async (item: WidgetInstance) => {
@@ -1725,7 +1650,12 @@ function WidgetOverlayApp() {
       })
     }
     if (editingWidgetId === item.id) setEditingWidgetId(null)
-    if (titleEditingWidgetId === item.id) setTitleEditingWidgetId(null)
+  }
+
+  const toggleWidgetLock = (id: string) => {
+    setWidgetItems((prev) => (prev || DEFAULT_WIDGET_INSTANCES).map((item) =>
+      item.id === id ? { ...item, locked: !item.locked } : item
+    ))
   }
 
   const getWidgetStateKey = (item: WidgetInstance) => {
@@ -1744,12 +1674,6 @@ function WidgetOverlayApp() {
       default:
         return null
     }
-  }
-
-  const updateWidgetName = (id: string, name: string) => {
-    setWidgetItems((prev) => (prev || DEFAULT_WIDGET_INSTANCES).map((item) =>
-      item.id === id ? { ...item, name } : item)
-    )
   }
 
   const onRemoveBGClick = async (item: WidgetInstance) => {
@@ -1831,18 +1755,6 @@ function WidgetOverlayApp() {
     }
   }
 
-  const startTitleEditing = (item: WidgetInstance) => {
-    const widgetMeta = WIDGET_LIST.find((widget) => widget.key === item.type)
-    setEditingWidgetId(item.id)
-    setEditingTitle(item.name ?? t(widgetMeta?.labelKey))
-    setTitleEditingWidgetId(item.id)
-  }
-
-  const finishTitleEditing = (item: WidgetInstance) => {
-    updateWidgetName(item.id, editingTitle)
-    setTitleEditingWidgetId(null)
-  }
-
   return createElement(
     "div",
     {
@@ -1859,7 +1771,7 @@ function WidgetOverlayApp() {
       if (!widgetMeta) return null
       const isPhotoWidget = item.type === "photo"
       const isRemovingBG = isPhotoWidget && Boolean(removingBGWidgetIds[item.id])
-      const isTitleEditing = titleEditingWidgetId === item.id
+      const isPositionLocked = item.locked === true
       return createElement(
         "div",
         {
@@ -1892,96 +1804,71 @@ function WidgetOverlayApp() {
               "aria-hidden": "true"
             }) : null,
           !isPhotoWidget
-            ? isTitleEditing
-              ? createElement("input", {
-                autoFocus: true,
-                type: "text",
-                value: editingTitle,
-                maxLength: 20,
-                spellCheck: false,
-                autoComplete: "off",
-                onChange: (e) => setEditingTitle(e.target.value.slice(0, 20)),
-                onBlur: () => finishTitleEditing(item),
-                onPointerDown: (e) => e.stopPropagation(),
-                onKeyDown: (e) => {
-                  e.stopPropagation()
-                  if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur()
-                },
-                onKeyUp: (e) => e.stopPropagation(),
+            ? createElement(
+              "div",
+              {
+                className: "decoai-widget-title",
+                onPointerEnter: (e) => updateWidgetTitleOverflow(e.currentTarget),
                 style: {
                   flex: 1,
-                  width: 0,
                   minWidth: 0,
-                  padding: 0,
-                  border: "none",
-                  outline: "none",
-                  background: "transparent",
-                  font: "inherit",
-                  color: "inherit",
                   overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap"
+                  userSelect: "none"
                 }
-              })
-              : createElement(
-                "div",
+              },
+              createElement(
+                "span",
                 {
-                  className: "decoai-widget-title",
-                  onPointerEnter: (e) => updateWidgetTitleOverflow(e.currentTarget),
-                  style: {
-                    flex: 1,
-                    minWidth: 0,
-                    overflow: "hidden",
-                    userSelect: "none"
-                  }
+                  className: "decoai-widget-title__text",
+                  "data-title": item.name ?? t(widgetMeta.labelKey)
                 },
-                createElement(
-                  "span",
-                  {
-                    className: "decoai-widget-title__text",
-                    "data-title": item.name ?? t(widgetMeta.labelKey)
-                  },
-                  item.name ?? t(widgetMeta.labelKey)
-                )
+                item.name ?? t(widgetMeta.labelKey)
               )
+            )
             : null,
           createElement(
             "div",
             { className: "decoai-widget-card__actions" },
+            isPhotoWidget
+              ? createElement(
+                "button",
+                {
+                  type: "button",
+                  className: "decoai-widget-card__action decoai-widget-card__edit",
+                  style: isRemovingBG ? { pointerEvents: "none" } : undefined,
+                  onPointerDown: (e) => e.stopPropagation(),
+                  onPointerUp: (e) => e.stopPropagation(),
+                  onClick: (e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    void onRemoveBGClick(item)
+                  }
+                },
+                createElement(Icon, {
+                  icon: isRemovingBG ? "line-md:loading-twotone-loop" : "lucide:sparkles",
+                  height: 16,
+                  "aria-hidden": "true"
+                })
+              )
+              : null,
             createElement(
               "button",
               {
                 type: "button",
-                className: "decoai-widget-card__action decoai-widget-card__edit",
-                style: isRemovingBG ? { pointerEvents: "none" } : undefined,
+                className: `decoai-widget-card__action decoai-widget-card__lock`,
                 onPointerDown: (e) => e.stopPropagation(),
                 onPointerUp: (e) => e.stopPropagation(),
                 onClick: (e) => {
                   e.preventDefault()
                   e.stopPropagation()
-                  isPhotoWidget ? void onRemoveBGClick(item) : startTitleEditing(item)
+                  toggleWidgetLock(item.id)
                 }
               },
               createElement(Icon, {
-                icon: isRemovingBG ? "line-md:loading-twotone-loop" : `lucide:${isPhotoWidget ? "sparkles" : "square-pen"}`,
+                icon: `lucide:${isPositionLocked ? "lock-keyhole" : "lock-keyhole-open"}`,
                 height: 16,
                 "aria-hidden": "true"
               })
-            ),
-            createElement(
-              "button",
-              {
-                type: "button",
-                className: "decoai-widget-card__action decoai-widget-card__add",
-                onPointerDown: (e) => e.stopPropagation(),
-                onPointerUp: (e) => e.stopPropagation(),
-                onClick: (e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  void addWidget(item)
-                }
-              },
-              createElement(Icon, { icon: "lucide:square-plus", height: 16, "aria-hidden": "true" })
             ),
             createElement(
               "button",
@@ -2010,9 +1897,9 @@ function WidgetOverlayApp() {
     }),
     createElement(Moveable, {
       target: selectedTarget,
-      draggable: true,
-      resizable: true,
-      rotatable: selectedWidget?.type === "photo",
+      draggable: !selectedWidget?.locked,
+      resizable: !selectedWidget?.locked,
+      rotatable: !selectedWidget?.locked && selectedWidget?.type === "photo",
       snapRotationDegrees: WIDGET_ROTATION_DEGREES,
       snapRotationThreshold: 4,
       checkInput: true,
@@ -2185,8 +2072,8 @@ const mountWidgetOverlay = () => {
       .decoai-widget-card__edit:hover {
         background-color: #198754;
       }
-      .decoai-widget-card__add:hover {
-        background-color: #1976d2;
+      .decoai-widget-card__lock:hover {
+        background-color: #ffc107;
       }
       .decoai-widget-card__delete:hover {
         background-color: #d32f2f;
@@ -2283,9 +2170,9 @@ const mountWidgetOverlay = () => {
       .decoai-text-editor p.is-editor-empty:first-child::before {
         content: attr(data-placeholder);
         float: left;
-        color: rgba(255, 255, 255, 0.35);
-        pointer-events: none;
         height: 0;
+        opacity: 0.35;
+        pointer-events: none;
       }
       .decoai-text-editor strong {
         font-weight: 700 !important;
@@ -2379,8 +2266,8 @@ const mountWidgetOverlay = () => {
         cursor: pointer;
       }
       .decoai-todo-checkbox:checked {
-        accent-color: var(--decoai-widget-text);
-        background-color: var(--decoai-widget-text);
+        accent-color: var(--decoai-widget-text, #66cdaa);
+        background-color: var(--decoai-widget-text, #66cdaa);
       }
       .decoai-todo-item span {
         flex: 1;
@@ -2391,19 +2278,20 @@ const mountWidgetOverlay = () => {
       }
       .decoai-todo-item span[data-placeholder]:empty::before {
         content: attr(data-placeholder);
-        color: rgba(255, 255, 255, 0.35);
+        opacity: 0.35;
         pointer-events: none;
       }
       .decoai-todo-item span.is-done {
         text-decoration: line-through;
         opacity: 0.5;
       }
+      .decoai-widget-control:hover,
       .decoai-text-tool:hover,
       .decoai-text-tool.is-active,
       .decoai-todo-item span:hover,
       .decoai-todo-add:hover,
       .decoai-todo-delete:hover {
-        background-color: #0000004D;
+        backdrop-filter: brightness(0.9);
       }
       .decoai-dday-widget {
         height: calc(100% - 32px);
@@ -2485,28 +2373,6 @@ const mountWidgetOverlay = () => {
         justify-content: center;
         gap: max(4px, 2cqw);
       }
-      .decoai-time-stepper {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-      }
-      .decoai-time-step {
-        width: max(36px, 18cqmin);
-        height: max(36px, 18cqmin);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border: none;
-        border-radius: 999px;
-        padding: 0;
-        background-color: transparent;
-        color: inherit !important;
-        cursor: pointer;
-      }
-      .decoai-widget-control:hover,
-      .decoai-time-step:hover {
-        background-color: #0000004D;
-      }
       .decoai-time-input {
         width: 100%;
         border: none;
@@ -2567,10 +2433,10 @@ const syncFabVisibility = async () => {
   }
 }
 
-const onOutsideFabClick = (event: MouseEvent) => {
+const onOutsideFabClick = (e: MouseEvent) => {
   const root = document.getElementById(FAB_ROOT_ID)
   if (!root) return
-  const target = event.target as Node
+  const target = e.target as Node
   const panel = root.querySelector(`.${FAB_THEME_PANEL_CLASS}`)
   const actionButton = target instanceof Element ? target.closest(`.${FAB_ACTION_CLASS} button`) : null
   if (panel?.contains(target) || actionButton) return
@@ -2769,7 +2635,7 @@ const generateCSS = (
 
   const getElStyle = () => `
     ${elements} {
-      background-color: rgba(255, 255, 255, ${opacity}) !important;
+      background-color: rgba(231, 231, 231, ${opacity}) !important;
       ${accentColor ? `box-shadow: inset 0 2px 16px ${accentColor}4D !important;` : ""}
       border: none !important;
       backdrop-filter: blur(${glassBlur}px) saturate(140%) !important;
@@ -2827,8 +2693,8 @@ const generateCSS = (
   const getTextStyle = () =>
     lightTextColor && darkTextColor
       ? `
-      *:not(pre *) { color: ${lightTextColor} !important; }
-      ${darkClass} *:not(pre *) { color: ${darkTextColor} !important; }
+      *:not(pre *):not(#${WIDGET_ROOT_ID}):not(#${WIDGET_ROOT_ID} *) { color: ${lightTextColor} !important; }
+      ${darkClass} *:not(pre *):not(#${WIDGET_ROOT_ID}):not(#${WIDGET_ROOT_ID} *) { color: ${darkTextColor} !important; }
     ` : ""
 
   return [
@@ -2848,8 +2714,6 @@ const applyTheme = async (requestId: number) => {
   const style = getThemeStyle()
   if (!isAllowedRoute(currentSite)) {
     style.textContent = ""
-    setFabAccentColor("")
-    setFabSurfaceOptions()
     setRouteScopedUiVisibility(currentSite)
     return
   }
@@ -2867,8 +2731,6 @@ const applyTheme = async (requestId: number) => {
   if (!isModelEnabled || !currentTheme || currentTheme === "default") {
     if (requestId !== applyThemeRequestId) return
     style.textContent = ""
-    setFabAccentColor("")
-    setFabSurfaceOptions()
     setRouteScopedUiVisibility(currentSite)
     return
   }
@@ -2880,8 +2742,6 @@ const applyTheme = async (requestId: number) => {
 
   if (requestId !== applyThemeRequestId) return
   style.textContent = generateCSS(currentSite, themeData, customBgOptions)
-  setFabAccentColor(themeData.accentColor)
-  setFabSurfaceOptions(customBgOptions)
 }
 
 const flushApplyTheme = async () => {

@@ -31,6 +31,7 @@ export type WidgetInstance = {
   id: string
   type: WidgetKey
   name?: string
+  locked?: boolean
 }
 export type WidgetLayoutOptions = {
   textColor: string

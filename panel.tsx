@@ -67,6 +67,13 @@ const storage = new Storage()
 const localStorageInstance = new Storage({ area: "local" })
 const TEXT_WIDGET_STATE_STORAGE_KEY = "text-widget-state"
 
+const getUniqueNumber = (baseName: string, names: Array<string | undefined>) => {
+  const existingNames = new Set(names)
+  let number = 1
+  while (existingNames.has(`${baseName} ${number}`)) number += 1
+  return `${baseName} ${number}`
+}
+
 const THEME_LIST = [
   { key: "random", color: "#ddd", emoji: "🎲" },
   { key: "nasa", color: "#0b3d91", emoji: "🪐" },
@@ -414,10 +421,20 @@ function WidgetGroup({
   const [editingWidgetId, setEditingWidgetId] = useState("")
   const [editingTitle, setEditingTitle] = useState("")
   const listRef = useRef<HTMLDivElement>(null)
+  const titleInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const input = titleInputRef.current
+    if (!input) return
+
+    const stopPropagation = (e: KeyboardEvent) => e.stopPropagation()
+    input.addEventListener("keypress", stopPropagation)
+    return () => input.removeEventListener("keypress", stopPropagation)
+  }, [editingWidgetId])
 
   const startTitleEditing = (widget: WidgetInstance) => {
     setEditingWidgetId(widget.id)
-    setEditingTitle(widget.name || t(item.labelKey))
+    setEditingTitle(widget.name ?? t(item.labelKey))
   }
 
   const finishTitleEditing = (widget: WidgetInstance) => {
@@ -472,6 +489,7 @@ function WidgetGroup({
                   </SortableKnob>
                   {editingWidgetId === widget.id ? (
                     <input
+                      ref={titleInputRef}
                       autoFocus
                       type="text"
                       value={editingTitle}
@@ -680,8 +698,8 @@ export function FabPanelApp() {
   }, [])
 
   useEffect(() => {
-    const onThemeLoading = (event: Event) => {
-      const customEvent = event as CustomEvent<{ loading?: boolean }>
+    const onThemeLoading = (e: Event) => {
+      const customEvent = e as CustomEvent<{ loading?: boolean }>
       setIsLoading(customEvent.detail?.loading === true)
     }
     window.addEventListener(THEME_LOADING_EVENT, onThemeLoading)
@@ -689,8 +707,8 @@ export function FabPanelApp() {
   }, [])
 
   useEffect(() => {
-    const onFabOpen = (event: Event) => {
-      const customEvent = event as CustomEvent<{ view?: PanelMode }>
+    const onFabOpen = (e: Event) => {
+      const customEvent = e as CustomEvent<{ view?: PanelMode }>
       void syncGoogleSession()
       setPanelMode(customEvent.detail?.view === "widget" ? "widget" : "theme")
       if (customEvent.detail?.view === "widget") {
@@ -1310,8 +1328,8 @@ export function FabPanelApp() {
 
   const onCustomPlusClick = async () => {
     if (customThemes.length > 0 && !(await requirePremiumAccess("pro_themeLimit"))) return
-    const created = createCustomTheme(`${t("custom")} ${customThemes.length + 1}`)
-    setCustomThemes((prev) => [...prev, created])
+    const baseName = t("custom")
+    setCustomThemes((prev) => [...prev, createCustomTheme(getUniqueNumber(baseName, prev.map((item) => item.name)))])
   }
 
   const deleteCustomTheme = (customThemeId: string) => {
@@ -1363,12 +1381,19 @@ export function FabPanelApp() {
     }
 
     const widgetMeta = WIDGET_LIST.find((widget) => widget.key === key)
-    const count = items.filter((widget) => widget.type === key).length
-    setWidgetItems([...items, {
-      id: `${key}-${crypto.randomUUID()}`,
-      type: key,
-      name: `${t(widgetMeta?.labelKey)} ${count + 1}`
-    }])
+    const baseName = t(widgetMeta?.labelKey)
+    setWidgetItems((prev) => {
+      const currentItems = prev || DEFAULT_WIDGET_INSTANCES
+      const sameTypeNames = currentItems
+        .filter((widget) => widget.type === key)
+        .map((widget) => widget.name)
+
+      return [...currentItems, {
+        id: `${key}-${crypto.randomUUID()}`,
+        type: key,
+        name: getUniqueNumber(baseName, sameTypeNames)
+      }]
+    })
     setExpandedWidgetTypes((prev) => ({ ...prev, [key]: true }))
   }
 
@@ -1592,8 +1617,10 @@ export function FabPanelApp() {
         }
         .decoai-widget-title {
           flex: 1;
-          min-width: 0;
+          width: 100%;
+          min-height: 1em;
           overflow: hidden;
+          cursor: text;
           user-select: none;
         }
         .decoai-marquee-title__text {
