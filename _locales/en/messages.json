@@ -71,6 +71,9 @@
   "reset": {
     "message": "Reset"
   },
+  "cancel": {
+    "message": "Cancel"
+  },
   "apply": {
     "message": "Apply"
   },
@@ -97,6 +100,12 @@
   },
   "backgroundColor": {
     "message": "Color"
+  },
+  "solid": {
+    "message": "Solid"
+  },
+  "gradient": {
+    "message": "Gradient"
   },
   "backgroundImage": {
     "message": "Image"

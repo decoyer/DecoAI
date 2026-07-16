@@ -203,9 +203,21 @@ export const clampNumber = (
   return Math.min(max, Math.max(min, numberValue))
 }
 
-export const sanitizeColor = (value: unknown) => {
-  if (typeof value !== "string") return ""
-  return /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value) ? value : ""
+const CSS_GRADIENT_PATTERN = /^(?:repeating-)?(?:linear|radial)-gradient\(/i
+
+export const isGradient = (value: unknown) => typeof value === "string" && CSS_GRADIENT_PATTERN.test(value.trim())
+
+const sanitizeCssValue = (value: unknown, property: string) => {
+  const nextValue = typeof value === "string" ? value.trim() : ""
+  return nextValue && !/[;{}]/.test(nextValue) && CSS.supports(property, nextValue) ? nextValue : ""
+}
+
+export const sanitizeColor = (value: unknown) => sanitizeCssValue(value, "color")
+
+export const sanitizeBg = (value: unknown) => {
+  const color = sanitizeColor(value)
+  if (color) return color
+  return isGradient(value) ? sanitizeCssValue(value, "background-image") : ""
 }
 
 export const sanitizeCustomBgUrl = (value: unknown) => {
@@ -312,22 +324,24 @@ export const sanitizeCustomBgOptions = (
 })
 
 export const renderImageToCanvas = async (
-  imageSource: string,
+  imageSource = "",
   options?: Partial<CustomBgOptions>,
   maxSize = 256,
   backgroundColor = ""
 ) => {
   const imageUrl = sanitizeCustomBgUrl(imageSource)
   const imageOptions = sanitizeCustomBgOptions(options)
-  const canvasBgColor = sanitizeColor(backgroundColor)
+  const canvasBackground = sanitizeBg(backgroundColor)
   const position = getRenderedBackgroundPosition(imageOptions.position, imageOptions.rotation, imageOptions.scaleX)
 
-  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-    const nextImage = new Image()
-    nextImage.onload = () => resolve(nextImage)
-    nextImage.onerror = () => reject()
-    nextImage.src = imageUrl
-  })
+  const image = imageUrl
+    ? await new Promise<HTMLImageElement>((resolve, reject) => {
+      const nextImage = new Image()
+      nextImage.onload = () => resolve(nextImage)
+      nextImage.onerror = () => reject()
+      nextImage.src = imageUrl
+    })
+    : null
 
   const canvas = document.createElement("canvas")
   canvas.width = maxSize
@@ -339,24 +353,39 @@ export const renderImageToCanvas = async (
 
   const context = canvas.getContext("2d")
   const sourceContext = sourceCanvas.getContext("2d")
-  const scale = Math.max(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight)
-  const drawWidth = image.naturalWidth * scale
-  const drawHeight = image.naturalHeight * scale
-  const drawX = (canvas.width - drawWidth) * (position.x / 100)
-  const drawY = (canvas.height - drawHeight) * (position.y / 100)
 
   sourceContext.clearRect(0, 0, sourceCanvas.width, sourceCanvas.height)
-  if (canvasBgColor) {
-    sourceContext.fillStyle = canvasBgColor
-    sourceContext.fillRect(0, 0, sourceCanvas.width, sourceCanvas.height)
+  if (canvasBackground) {
+    const solidColor = sanitizeColor(canvasBackground)
+    const gradientColors = solidColor
+      ? [solidColor]
+      : (canvasBackground.match(/#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{4}|[0-9a-f]{3})\b|(?:rgba?|hsla?)\([^)]*\)/gi) || [])
+        .map(sanitizeColor)
+        .filter(Boolean)
+    if (gradientColors.length) {
+      const fill = sourceContext.createLinearGradient(0, 0, sourceCanvas.width, 0)
+      gradientColors.forEach((color, index) => {
+        fill.addColorStop(gradientColors.length === 1 ? 0 : index / (gradientColors.length - 1), color)
+      })
+      sourceContext.fillStyle = gradientColors.length > 1 ? fill : gradientColors[0]
+      sourceContext.fillRect(0, 0, sourceCanvas.width, sourceCanvas.height)
+    }
   }
-  sourceContext.save()
-  sourceContext.translate(sourceCanvas.width / 2, sourceCanvas.height / 2)
-  sourceContext.rotate((imageOptions.rotation * Math.PI) / 180)
-  sourceContext.scale(imageOptions.scaleX, 1)
-  sourceContext.translate(-sourceCanvas.width / 2, -sourceCanvas.height / 2)
-  sourceContext.drawImage(image, drawX, drawY, drawWidth, drawHeight)
-  sourceContext.restore()
+  if (image) {
+    const scale = Math.max(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight)
+    const drawWidth = image.naturalWidth * scale
+    const drawHeight = image.naturalHeight * scale
+    const drawX = (canvas.width - drawWidth) * (position.x / 100)
+    const drawY = (canvas.height - drawHeight) * (position.y / 100)
+
+    sourceContext.save()
+    sourceContext.translate(sourceCanvas.width / 2, sourceCanvas.height / 2)
+    sourceContext.rotate((imageOptions.rotation * Math.PI) / 180)
+    sourceContext.scale(imageOptions.scaleX, 1)
+    sourceContext.translate(-sourceCanvas.width / 2, -sourceCanvas.height / 2)
+    sourceContext.drawImage(image, drawX, drawY, drawWidth, drawHeight)
+    sourceContext.restore()
+  }
 
   context.clearRect(0, 0, canvas.width, canvas.height)
   context.filter = `invert(${imageOptions.invert}) grayscale(${imageOptions.grayscale}) blur(${imageOptions.blur}px) brightness(${imageOptions.brightness})`
@@ -379,7 +408,7 @@ export const normalizeCustomTheme = (
     accent: sanitizeColor(themeData.accent),
     bgImageId: typeof themeData.bgImageId === "string" ? themeData.bgImageId : "",
     bgAnimated: themeData.bgAnimated === true || isAnimatedBgUrl(bgUrl),
-    bgColor: sanitizeColor(themeData.bgColor),
+    bgColor: sanitizeBg(themeData.bgColor),
     bgOptions: sanitizeCustomBgOptions(themeData.bgOptions),
     ...(bgUrl ? { bgUrl } : {})
   }

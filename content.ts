@@ -39,6 +39,7 @@ import {
   MAX_FILE_BYTES,
   MODEL_ENABLED_STORAGE_KEY,
   PHOTO_WIDGET_STATE_STORAGE_KEY,
+  sanitizeBg,
   sanitizeColor,
   sanitizeCustomBgOptions,
   sanitizeCustomBgUrl,
@@ -104,7 +105,7 @@ const SITE_SELECTORS = {
   chatgpt: {
     container: "body",
     header: "#page-header",
-    footer: 'div[data-testid="thread-disclaimer"] > div > div > div > div > div',
+    footer: 'div[data-scroll-root][data-show-disclaimer] div[data-testid="thread-disclaimer"]',
     elements: '.btn-secondary, .agent-turn, .user-message-bubble-color, .shadow-short-composer, .origin-top-right > aside',
     darkClass: "html.dark"
   },
@@ -342,9 +343,9 @@ const getFABStyle = () => {
         padding: 4px 8px;
         background-color: #000;
         border: 1px solid #66cdaa4D;
-        border-radius: 8px;
         color: #fff;
         font-size: 12px;
+        border-radius: 8px;
         white-space: nowrap;
         opacity: 0;
         pointer-events: none;
@@ -527,7 +528,7 @@ const getCustomThemeData = async (): Promise<ThemeConfig> => {
 
   return {
     bgUrl,
-    bgColor: sanitizeColor(customTheme.bgColor),
+    bgColor: sanitizeBg(customTheme.bgColor),
     accentColor: sanitizeColor(customTheme.accent),
     lightTextColor: sanitizeColor(customTheme.text),
     darkTextColor: sanitizeColor(customTheme.text)
@@ -1583,11 +1584,10 @@ function WidgetOverlayApp() {
   const getWidgetStyle = (item: WidgetInstance): CSSProperties => {
     const frame = frames[item.id]
     const opacity = clampNumber(layout.opacity, 0, 1, 0.8)
-    const textColor = layout.textColor || siteDefaultTextColor
-    const accentColor = layout.accentColor
-    const backgroundColor = layout.backgroundColor
-      ? `color-mix(in srgb, ${layout.backgroundColor} ${opacity * 100}%, transparent)`
-      : isDarkMode ? `rgba(24, 24, 24, ${opacity})` : `rgba(231, 231, 231, ${opacity})`
+    const textColor = sanitizeColor(layout.textColor) || siteDefaultTextColor
+    const accentColor = sanitizeColor(layout.accentColor)
+    const backgroundValue = sanitizeBg(layout.backgroundColor)
+    const background = backgroundValue || (isDarkMode ? "rgb(24, 24, 24)" : "rgb(231, 231, 231)")
 
     return {
       position: "absolute",
@@ -1596,16 +1596,17 @@ function WidgetOverlayApp() {
       width: `${frame.width / viewportSize.width * 100}vw`,
       height: `${frame.height / viewportSize.height * 100}vh`,
       transform: getWidgetTransform(frame, viewportSize),
-      backgroundColor,
+      background: "transparent",
       color: textColor,
       border: "none",
       borderRadius: 8,
-      boxShadow: accentColor ? `inset 0 2px 16px ${accentColor}4D` : "none",
+      boxShadow: accentColor ? `inset 0 2px 16px color-mix(in srgb, ${accentColor} 30%, transparent)` : "none",
       overflow: "hidden",
       pointerEvents: "auto",
       zIndex: editingWidgetId === item.id ? 2 : 1,
       willChange: "transform, width, height",
-      "--decoai-widget-bg": backgroundColor,
+      "--decoai-widget-bg": background,
+      "--decoai-widget-bg-opacity": opacity,
       "--decoai-widget-text": textColor
     } as CSSProperties
   }
@@ -2000,6 +2001,20 @@ const mountWidgetOverlay = () => {
   root.style.zIndex = "1"
   root.innerHTML = `
     <style>
+      .decoai-widget-card::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        border-radius: inherit;
+        background: var(--decoai-widget-bg);
+        opacity: var(--decoai-widget-bg-opacity);
+        pointer-events: none;
+      }
+      .decoai-widget-card > * {
+        position: relative;
+        z-index: 1;
+      }
       .decoai-widget-card__actions {
         z-index: 3;
         display: flex;
@@ -2033,6 +2048,9 @@ const mountWidgetOverlay = () => {
         border-radius: 0 !important;
         box-shadow: none !important;
         overflow: visible !important;
+      }
+      .decoai-widget-card-photo:has(.decoai-photo-widget-image)::before {
+        display: none;
       }
       .decoai-widget-card:hover .decoai-widget-card__actions {
         opacity: 1;
@@ -2603,10 +2621,17 @@ const generateCSS = (
   const opacity = clampNumber(customBgOptions?.opacity, 0, 1, 0.8)
   const hideHeader = customBgOptions?.hideHeader ?? true
   const hideFooter = customBgOptions?.hideFooter ?? true
+  const solidBgColor = sanitizeColor(bgColor)
+  const backgroundGradient = bgColor && !solidBgColor ? bgColor : ""
+  const backgroundImages = [bgUrl ? `url("${bgUrl}")` : "", backgroundGradient].filter(Boolean)
 
   const getVisibilityStyle = () => `
     ${hideHeader ? `${SITE_SELECTORS[site].header} { display: none !important; }` : ""}
-    ${hideFooter ? `${SITE_SELECTORS[site].footer} { font-size: 0 !important; line-height: normal !important }` : ""}
+    ${hideFooter ? `${SITE_SELECTORS[site].footer} {
+      ${site === "chatgpt" ? "display: none !important;" : ""}
+      font-size: 0 !important;
+      line-height: normal !important;
+    }` : ""}
   `
 
   const getBgStyle = () =>
@@ -2616,8 +2641,8 @@ const generateCSS = (
         content: ""; position: fixed; top: 0; left: 0;
         width: ${isBackgroundSideways ? "100vh" : "100vw"};
         height: ${isBackgroundSideways ? "100vw" : "100vh"};
-        ${bgUrl ? `background-image: url("${bgUrl}") !important;` : "background-image: none !important;"}
-        ${bgColor ? `background-color: ${bgColor} !important;` : ""}
+        background-image: ${backgroundImages.length ? backgroundImages.join(", ") : "none"} !important;
+        background-color: ${solidBgColor || "transparent"} !important;
         background-position: ${backgroundPosition} !important;
         background-size: cover !important;
         background-repeat: no-repeat !important;
@@ -2636,7 +2661,7 @@ const generateCSS = (
   const getElStyle = () => `
     ${elements} {
       background-color: rgba(231, 231, 231, ${opacity}) !important;
-      ${accentColor ? `box-shadow: inset 0 2px 16px ${accentColor}4D !important;` : ""}
+      ${accentColor ? `box-shadow: inset 0 2px 16px color-mix(in srgb, ${accentColor} 30%, transparent) !important;` : ""}
       border: none !important;
       backdrop-filter: blur(${glassBlur}px) saturate(140%) !important;
       opacity: 0.8 !important;
@@ -2685,7 +2710,7 @@ const generateCSS = (
       ? `
       ${site === "chatgpt" || site === "gemini" ? container : "*"} {
         scrollbar-width: auto !important;
-        scrollbar-color: ${accentColor}4D transparent !important;
+        scrollbar-color: color-mix(in srgb, ${accentColor} 30%, transparent) transparent !important;
       }
     ` : ""}
   `

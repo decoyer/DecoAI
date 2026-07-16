@@ -7,18 +7,16 @@ const target = mode === "build" ? "prod" : mode
 const rootDir = path.resolve(__dirname, "..")
 const sourceDir = path.join(rootDir, "_locales")
 const targetDir = path.join(rootDir, "build", `chrome-mv3-${target}`, "_locales")
-const plasmoBin = path.join(rootDir, "node_modules", ".bin", process.platform === "win32" ? "plasmo.cmd" : "plasmo")
+const plasmoBin = path.join(rootDir, "node_modules", "plasmo", "bin", "index.mjs")
 
 if (target === "prod") {
-  spawnSync(plasmoBin, ["build"], {
+  spawnSync(process.execPath, [plasmoBin, "build"], {
     cwd: rootDir,
-    shell: process.platform === "win32",
     stdio: "inherit"
   })
 } else {
-  spawn(plasmoBin, [mode], {
+  spawn(process.execPath, [plasmoBin, mode], {
     cwd: rootDir,
-    shell: process.platform === "win32",
     stdio: "inherit"
   })
 }

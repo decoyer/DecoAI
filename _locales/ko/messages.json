@@ -71,6 +71,9 @@
   "reset": {
     "message": "초기화"
   },
+  "cancel": {
+    "message": "취소"
+  },
   "apply": {
     "message": "적용"
   },
@@ -97,6 +100,12 @@
   },
   "backgroundColor": {
     "message": "배경색"
+  },
+  "solid": {
+    "message": "단색"
+  },
+  "gradient": {
+    "message": "그라디언트"
   },
   "backgroundImage": {
     "message": "배경 사진"

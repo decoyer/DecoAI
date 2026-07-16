@@ -2,7 +2,8 @@ import { Icon } from "@iconify/react"
 import { Storage } from "@plasmohq/storage"
 import { useStorage } from "@plasmohq/storage/hook"
 import { Vibrant } from "node-vibrant/browser"
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react"
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react"
+import ColorPicker, { useColorPicker } from "react-best-gradient-color-picker"
 import SortableList, { SortableItem, SortableKnob } from "react-easy-sort"
 import Tilt from "react-parallax-tilt"
 import { toast } from "react-toastify"
@@ -23,10 +24,10 @@ import {
   createThemeExportBlob,
   CUSTOM_THEME_PREVIEW_EVENT,
   CUSTOM_THEMES_STORAGE_KEY,
+  DDAY_WIDGET_STATE_STORAGE_KEY,
   DEFAULT_CUSTOM_BG_OPTIONS,
   DEFAULT_WIDGET_INSTANCES,
   DEFAULT_WIDGET_LAYOUT,
-  DDAY_WIDGET_STATE_STORAGE_KEY,
   deleteImageData,
   detectCurrentSite,
   FAB_OPEN_EVENT,
@@ -36,11 +37,14 @@ import {
   hasAnimatedBackground,
   isAnimatedBgUrl,
   isAnimatedImage,
+  isGradient,
   isJsonFile,
   MAX_FILE_BYTES,
   parseImportedThemes,
   PHOTO_WIDGET_STATE_STORAGE_KEY,
   renderImageToCanvas,
+  sanitizeBg,
+  sanitizeColor,
   sanitizeCustomBgUrl,
   saveImageDataUrl,
   SELECTED_CUSTOM_THEME_ID_STORAGE_KEY,
@@ -66,13 +70,6 @@ const t = (key: string, value?: string) => chrome.i18n.getMessage(key, value)
 const storage = new Storage()
 const localStorageInstance = new Storage({ area: "local" })
 const TEXT_WIDGET_STATE_STORAGE_KEY = "text-widget-state"
-
-const getUniqueNumber = (baseName: string, names: Array<string | undefined>) => {
-  const existingNames = new Set(names)
-  let number = 1
-  while (existingNames.has(`${baseName} ${number}`)) number += 1
-  return `${baseName} ${number}`
-}
 
 const THEME_LIST = [
   { key: "random", color: "#ddd", emoji: "🎲" },
@@ -291,6 +288,13 @@ const updateTitleOverflow = (title: HTMLElement) => {
   title.classList.toggle("title-overflow", text.scrollWidth > text.clientWidth + 1)
 }
 
+const getUniqueNumber = (baseName: string, names: Array<string | undefined>) => {
+  const existingNames = new Set(names)
+  let number = 1
+  while (existingNames.has(`${baseName} ${number}`)) number += 1
+  return `${baseName} ${number}`
+}
+
 function CustomThemeSortableCard({
   item,
   theme,
@@ -333,11 +337,15 @@ function CustomThemeSortableCard({
 
   const bgRotation = item.bgOptions.rotation || 0
   const isBgSideways = bgRotation === 90 || bgRotation === 270
+  const backgroundValue = sanitizeBg(item.bgColor)
+  const solidBgColor = sanitizeColor(backgroundValue)
+  const backgroundGradient = backgroundValue && !solidBgColor ? backgroundValue : ""
+  const backgroundImages = [bgUrl ? `url(${bgUrl})` : "", backgroundGradient].filter(Boolean)
   const bgStyle = {
     width: isBgSideways ? 100 : "100%",
     height: isBgSideways ? 250 : "100%",
-    backgroundImage: bgUrl ? `url(${bgUrl})` : "none",
-    backgroundColor: item.bgColor || "transparent",
+    backgroundImage: backgroundImages.length ? backgroundImages.join(", ") : "none",
+    backgroundColor: solidBgColor || "transparent",
     transform: `translate(-50%, -50%) rotate(${bgRotation}deg) scaleX(${bgUrl && item.bgOptions.scaleX === -1 ? -1 : 1})`,
     filter: bgUrl
       ? `invert(${item.bgOptions.invert}) grayscale(${item.bgOptions.grayscale}) blur(${item.bgOptions.blur * 0.2}px) brightness(${item.bgOptions.brightness})`
@@ -445,7 +453,7 @@ function WidgetGroup({
   return (
     <Card>
       <div style={rowStyle}>
-        <span style={iconLabelStyle}>
+        <span style={{ ...iconLabelStyle, gap: 8 }}>
           <Icon icon={`lucide:${item.icon}`} height={16} aria-hidden="true" />
           <span style={fieldLabelStyle}>{t(item.labelKey)}</span>
         </span>
@@ -743,9 +751,7 @@ export function FabPanelApp() {
       text: draftTextColor,
       accent: draftAccentColor,
       bgImageId: draftBackgroundImageId,
-      ...(draftBackgroundImageUrl && !draftBackgroundImageId
-        ? { bgUrl: draftBackgroundImageUrl }
-        : {}),
+      ...(draftBackgroundImageUrl && !draftBackgroundImageId ? { bgUrl: draftBackgroundImageUrl } : {}),
       bgAnimated: draftBackgroundAnimated,
       bgColor: draftBackgroundColor,
       bgOptions: draftBackgroundOptions
@@ -768,9 +774,7 @@ export function FabPanelApp() {
     setDraftBackgroundAnimated(editingTheme.bgAnimated === true)
     setDraftBackgroundImageUrl("")
     if (editingTheme.bgImageId) {
-      void getImageDataUrl(editingTheme.bgImageId)
-        .then(setDraftBackgroundImageUrl)
-        .catch(() => setDraftBackgroundImageUrl(""))
+      void getImageDataUrl(editingTheme.bgImageId).then(setDraftBackgroundImageUrl).catch(() => setDraftBackgroundImageUrl(""))
     }
     setDraftBackgroundColor(editingTheme.bgColor || "")
     setDraftBackgroundOptions(editingTheme.bgOptions || DEFAULT_CUSTOM_BG_OPTIONS)
@@ -1231,7 +1235,7 @@ export function FabPanelApp() {
   }
 
   const onColorMatchClick = async () => {
-    if (isLoading || !draftBackgroundImageUrl) return
+    if (isLoading || (!draftBackgroundImageUrl && !sanitizeBg(draftBackgroundColor))) return
     setIsLoading(true)
 
     if (!(await requirePremiumAccess("pro_colorMatch"))) {
@@ -1463,15 +1467,11 @@ export function FabPanelApp() {
     setDraftWidgetLayout((prev) => ({ ...prev, [key]: DEFAULT_WIDGET_LAYOUT[key] }))
   }
 
-  const resetEditingThemeDraft = () => {
+  const cancelEditingTheme = () => {
     deleteDraftBackgroundImage()
-    setDraftBackgroundImageId("")
-    setDraftBackgroundAnimated(false)
-    setDraftBackgroundImageUrl("")
-    setDraftBackgroundColor("")
-    setDraftTextColor("")
-    setDraftAccentColor("")
-    setDraftBackgroundOptions(DEFAULT_CUSTOM_BG_OPTIONS)
+    publishEditingThemePreview(null)
+    setEditingCustomThemeId("")
+    setView("themes")
   }
 
   return (
@@ -1479,8 +1479,20 @@ export function FabPanelApp() {
       <style>{`
         * { margin: 0; box-sizing: border-box; user-select: none; -webkit-user-select: none; }
         .content-scroll { scrollbar-width: none; }
-        input.color-picker::-webkit-color-swatch-wrapper { padding: 0; }
-        input.color-picker::-webkit-color-swatch { border: none; border-radius: 6px; }
+        .range-control__tooltip {
+          position: absolute;
+          top: 0;
+          padding: 4px 8px;
+          background-color: #000;
+          border: 1px solid #66cdaa4D;
+          color: #fff;
+          font-size: 12px;
+          border-radius: 8px;
+          line-height: 1;
+          white-space: nowrap;
+          pointer-events: none;
+          transform: translateX(-50%);
+        }
         .preset-theme-card {
           position: relative;
           width: 100%;
@@ -1722,6 +1734,7 @@ export function FabPanelApp() {
                         onChange={(value) => updateWidgetLayout("backgroundColor", value)}
                         onReset={() => resetWidgetLayout("backgroundColor")}
                         canReset={draftWidgetLayout.backgroundColor !== DEFAULT_WIDGET_LAYOUT.backgroundColor}
+                        allowGradient
                       />
                       <ColorSettingCard
                         label={t("text")}
@@ -1869,13 +1882,14 @@ export function FabPanelApp() {
                         onChange={setDraftBackgroundColor}
                         onReset={resetDraftBackgroundColor}
                         canReset={Boolean(draftBackgroundColor)}
+                        allowGradient
                       />
                       <Card>
                         <label style={rowStyle}>
                           <span style={fieldLabelStyle}>
                             {t("backgroundImage")}
                           </span>
-                          <div style={{ display: "flex", gap: 4 }}>
+                          <div style={iconLabelStyle}>
                             <input
                               ref={bgUploadRef}
                               type="file"
@@ -1986,6 +2000,10 @@ export function FabPanelApp() {
                             checked={draftBackgroundOptions.scaleX === -1}
                             onChange={(c) => updateCustomBgOption("scaleX", c ? -1 : 1)}
                           />
+                        </>
+                      )}
+                      {(draftBackgroundImageUrl || draftBackgroundColor) && (
+                        <>
                           <RangeCard
                             label={t("brightness")}
                             min={0}
@@ -2020,7 +2038,7 @@ export function FabPanelApp() {
                   )}
                   {customEditTab === "layout" && (
                     <>
-                      {draftBackgroundImageUrl && (
+                      {(draftBackgroundImageUrl || draftBackgroundColor) && (
                         <>
                           <Card>
                             <label style={rowStyle}>
@@ -2079,7 +2097,7 @@ export function FabPanelApp() {
           </div>
           <div
             className="footer"
-            style={{ display: "flex", flexDirection: "column", padding: "10px 20px", gap: 8 }}>
+            style={{ ...columnControlStyle, padding: "10px 20px" }}>
             {panelMode === "theme" && themeTab === "custom" && view !== "custom" && (
               <div style={{ ...rowStyle, gap: 8 }}>
                 <FooterButton
@@ -2107,10 +2125,10 @@ export function FabPanelApp() {
             {panelMode === "theme" && view === "custom" && (
               <div style={{ ...rowStyle, gap: 8 }}>
                 <FooterButton
-                  onClick={resetEditingThemeDraft}
+                  onClick={cancelEditingTheme}
                   style={footerButtonStyle}
-                  icon="rotate-ccw"
-                  label={t("reset")}
+                  icon="undo-2"
+                  label={t("cancel")}
                 />
                 <FooterButton
                   onClick={onSaveClick}
@@ -2138,8 +2156,8 @@ export function FabPanelApp() {
               position: "absolute",
               inset: 0,
               display: "flex",
-              alignItems: "center",
               justifyContent: "center",
+              alignItems: "center",
               backgroundColor: "rgba(0, 0, 0, 0.5)",
               zIndex: 10,
               pointerEvents: "auto"
@@ -2268,36 +2286,100 @@ function ColorSettingCard({
   value,
   onChange,
   onReset,
-  canReset
+  canReset,
+  allowGradient = false
 }: {
   label: string
   value: string
   onChange: (value: string) => void
   onReset: () => void
   canReset: boolean
+  allowGradient?: boolean
 }) {
+  const [isPickerOpen, setIsPickerOpen] = useState(false)
+  const pickerContainerRef = useRef<HTMLDivElement>(null)
+  const pickerIdSuffix = useId().replace(/:/g, "")
+
+  useEffect(() => {
+    if (!isPickerOpen) return
+
+    const closePicker = (e: MouseEvent) => {
+      const pickerContainer = pickerContainerRef.current
+      if (pickerContainer && !e.composedPath().includes(pickerContainer)) {
+        setIsPickerOpen(false)
+      }
+    }
+
+    document.addEventListener("mousedown", closePicker)
+    return () => document.removeEventListener("mousedown", closePicker)
+  }, [isPickerOpen])
+
+  const pickerValue = value || "#000"
+  const isGradientValue = isGradient(pickerValue)
+  const { rgbaArr } = useColorPicker(pickerValue, onChange)
+  const solidColor = `rgba(${rgbaArr.join(", ")})`
+  const pickerConfig = {
+    defaultColor: solidColor,
+    defaultGradient: isGradientValue ? pickerValue : `linear-gradient(90deg, ${solidColor} 0%, ${solidColor} 100%)`
+  }
+
   return (
     <Card>
-      <label style={rowStyle}>
-        <span style={fieldLabelStyle}>{label}</span>
-        <div style={iconLabelStyle}>
-          <input
-            type="color"
-            value={value || "#000000"}
-            onChange={(e) => onChange(e.target.value)}
-            className="color-picker"
-            style={{ ...controlButtonStyle, padding: 4 }}
-          />
-          <button
-            type="button"
-            className="decoai-control-button"
-            onClick={onReset}
-            disabled={!canReset}
-            style={{ ...controlButtonStyle, ...disabledControlStyle(canReset) }}>
-            {t("reset")}
-          </button>
+      <div ref={pickerContainerRef}>
+        <div style={rowStyle}>
+          <span style={fieldLabelStyle}>{label}</span>
+          <div style={iconLabelStyle}>
+            <button
+              type="button"
+              className="decoai-control-button"
+              onClick={() => setIsPickerOpen((open) => !open)}
+              style={{ ...controlButtonStyle, width: 45, height: 25, padding: 4 }}>
+              <span
+                aria-hidden="true"
+                style={{ width: "100%", height: "100%", borderRadius: 4, background: pickerValue }}
+              />
+            </button>
+            <button
+              type="button"
+              className="decoai-control-button"
+              onClick={onReset}
+              disabled={!canReset}
+              style={{ ...controlButtonStyle, ...disabledControlStyle(canReset) }}>
+              {t("reset")}
+            </button>
+          </div>
         </div>
-      </label>
+        {isPickerOpen && (
+          <div
+            style={{
+              marginTop: 8,
+              padding: 6,
+              border: "1px solid rgba(255, 255, 255, 0.08)",
+              borderRadius: 8,
+              backgroundColor: "#202020",
+              boxSizing: "border-box"
+            }}>
+            <ColorPicker
+              idSuffix={pickerIdSuffix}
+              value={pickerValue}
+              onChange={onChange}
+              locales={{ CONTROLS: { SOLID: t("solid"), GRADIENT: t("gradient") } }}
+              config={pickerConfig}
+              width={170}
+              height={120}
+              hidePresets
+              hideOpacity
+              hideAdvancedSliders
+              hideColorGuide
+              hideInputType
+              hideColorTypeBtns={!allowGradient}
+              hideGradientControls={!allowGradient}
+              hideGradientAngle
+              hideGradientStop
+            />
+          </div>
+        )}
+      </div>
     </Card>
   )
 }
@@ -2312,17 +2394,14 @@ function RangeControl({
   onChange,
   onReset
 }: RangeControlProps) {
+  const rangePosition = max - min === 0 ? 0 : Math.min(1, Math.max(0, (Number(value) - min) / (max - min)))
+  const tooltipLeft = `calc(${rangePosition * 100}% + ${(0.5 - rangePosition) * 16}px)`
+
   return (
-    <label style={columnControlStyle}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center"
-        }}>
+    <div style={columnControlStyle}>
+      <div style={rowStyle}>
         <span style={fieldLabelStyle}>{label}</span>
         <div style={{ ...iconLabelStyle, gap: 8 }}>
-          <span style={fieldLabelStyle}>{value}</span>
           {onReset && (
             <button
               type="button"
@@ -2335,17 +2414,26 @@ function RangeControl({
           )}
         </div>
       </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        disabled={disabled}
-        style={{ accentColor: "#66cdaa", ...disabledControlStyle(!disabled) }}
-        onChange={(e) => onChange(e.target.value)}
-      />
-    </label>
+      <div
+        className="range-control__slider"
+        style={{ position: "relative" }}>
+        <output
+          className="range-control__tooltip"
+          style={{ left: tooltipLeft }}>
+          {value}
+        </output>
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          disabled={disabled}
+          style={{ width: "100%", accentColor: "#66cdaa", ...disabledControlStyle(!disabled) }}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      </div>
+    </div>
   )
 }
 
