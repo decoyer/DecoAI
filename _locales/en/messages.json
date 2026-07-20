@@ -146,14 +146,11 @@
   "text": {
     "message": "Text"
   },
-  "accent": {
-    "message": "Accent"
+  "border": {
+    "message": "Border"
   },
   "opacity": {
     "message": "Opacity"
-  },
-  "glassBlur": {
-    "message": "Glass Blur"
   },
   "random": {
     "message": "Random"

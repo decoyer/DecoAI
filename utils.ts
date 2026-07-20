@@ -6,7 +6,6 @@ export type CustomBgOptions = {
   blur: number
   brightness: number
   position: string
-  glassBlur: number
   opacity: number
   hideHeader: boolean
   hideFooter: boolean
@@ -15,7 +14,7 @@ export type CustomTheme = {
   id: string
   name: string
   text: string
-  accent: string
+  border: string
   bgImageId: string
   bgUrl?: string
   bgAnimated: boolean
@@ -36,7 +35,7 @@ export type WidgetInstance = {
 export type WidgetLayoutOptions = {
   textColor: string
   backgroundColor: string
-  accentColor: string
+  borderColor: string
   opacity: number
 }
 export type DdayWidgetState = {
@@ -118,10 +117,9 @@ export const DEFAULT_CUSTOM_BG_OPTIONS: CustomBgOptions = {
   rotation: 0,
   invert: 0,
   grayscale: 0,
-  blur: 0,
+  blur: 10,
   brightness: 1,
   position: "50% 50%",
-  glassBlur: 10,
   opacity: 0.8,
   hideHeader: false,
   hideFooter: false
@@ -139,7 +137,7 @@ export const DEFAULT_WIDGET_INSTANCES: WidgetInstance[] = []
 export const DEFAULT_WIDGET_LAYOUT: WidgetLayoutOptions = {
   textColor: "",
   backgroundColor: "",
-  accentColor: "",
+  borderColor: "",
   opacity: DEFAULT_CUSTOM_BG_OPTIONS.opacity
 }
 
@@ -317,7 +315,6 @@ export const sanitizeCustomBgOptions = (
   blur: clampNumber(options?.blur, 0, 50, DEFAULT_CUSTOM_BG_OPTIONS.blur),
   brightness: clampNumber(options?.brightness, 0, 5, DEFAULT_CUSTOM_BG_OPTIONS.brightness),
   position: sanitizePosition(options?.position),
-  glassBlur: clampNumber(options?.glassBlur, 0, 50, DEFAULT_CUSTOM_BG_OPTIONS.glassBlur),
   opacity: clampNumber(options?.opacity, 0, 1, DEFAULT_CUSTOM_BG_OPTIONS.opacity),
   hideHeader: options?.hideHeader === true,
   hideFooter: options?.hideFooter === true
@@ -388,7 +385,7 @@ export const renderImageToCanvas = async (
   }
 
   context.clearRect(0, 0, canvas.width, canvas.height)
-  context.filter = `invert(${imageOptions.invert}) grayscale(${imageOptions.grayscale}) blur(${imageOptions.blur}px) brightness(${imageOptions.brightness})`
+  context.filter = `invert(${imageOptions.invert}) grayscale(${imageOptions.grayscale}) brightness(${imageOptions.brightness})`
   context.drawImage(sourceCanvas, 0, 0)
   context.filter = "none"
 
@@ -405,7 +402,7 @@ export const normalizeCustomTheme = (
     id: crypto.randomUUID(),
     name: String(themeData.name || fallbackName).slice(0, 10),
     text: sanitizeColor(themeData.text),
-    accent: sanitizeColor(themeData.accent),
+    border: sanitizeColor(themeData.border),
     bgImageId: typeof themeData.bgImageId === "string" ? themeData.bgImageId : "",
     bgAnimated: themeData.bgAnimated === true || isAnimatedBgUrl(bgUrl),
     bgColor: sanitizeBg(themeData.bgColor),
@@ -418,7 +415,7 @@ export const createCustomTheme = (name: string): CustomTheme => ({
   id: crypto.randomUUID(),
   name,
   text: "",
-  accent: "",
+  border: "",
   bgImageId: "",
   bgAnimated: false,
   bgColor: "",

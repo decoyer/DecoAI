@@ -45,6 +45,7 @@ import {
   renderImageToCanvas,
   sanitizeBg,
   sanitizeColor,
+  sanitizeCustomBgOptions,
   sanitizeCustomBgUrl,
   saveImageDataUrl,
   SELECTED_CUSTOM_THEME_ID_STORAGE_KEY,
@@ -119,7 +120,7 @@ const isSameWidgetLayout = (
 ) =>
   left.textColor === right.textColor &&
   left.backgroundColor === right.backgroundColor &&
-  left.accentColor === right.accentColor &&
+  left.borderColor === right.borderColor &&
   left.opacity === right.opacity
 
 const wrapperStyle = {
@@ -348,7 +349,7 @@ function CustomThemeSortableCard({
     backgroundColor: solidBgColor || "transparent",
     transform: `translate(-50%, -50%) rotate(${bgRotation}deg) scaleX(${bgUrl && item.bgOptions.scaleX === -1 ? -1 : 1})`,
     filter: bgUrl
-      ? `invert(${item.bgOptions.invert}) grayscale(${item.bgOptions.grayscale}) blur(${item.bgOptions.blur * 0.2}px) brightness(${item.bgOptions.brightness})`
+      ? `invert(${item.bgOptions.invert}) grayscale(${item.bgOptions.grayscale}) brightness(${item.bgOptions.brightness})`
       : "none"
   } as CSSProperties
 
@@ -591,7 +592,7 @@ export function FabPanelApp() {
   const [premiumStatus, setPremiumStatus] = useState<PremiumStatus>("unknown")
   const [draftBackgroundOptions, setDraftBackgroundOptions] = useState<CustomBgOptions>(DEFAULT_CUSTOM_BG_OPTIONS)
   const [draftTextColor, setDraftTextColor] = useState("")
-  const [draftAccentColor, setDraftAccentColor] = useState("")
+  const [draftBorderColor, setDraftBorderColor] = useState("")
   const [draftCustomThemeName, setDraftCustomThemeName] = useState("")
   const [draftBackgroundColor, setDraftBackgroundColor] = useState("")
   const [draftWidgetLayout, setDraftWidgetLayout] = useState<WidgetLayoutOptions>(DEFAULT_WIDGET_LAYOUT)
@@ -601,7 +602,7 @@ export function FabPanelApp() {
   const customThemeClickRef = useRef("")
   const previousViewRef = useRef<PanelView>(view)
   const canResetText = Boolean((draftTextColor || "").trim())
-  const canResetAccent = Boolean((draftAccentColor || "").trim())
+  const canResetBorder = Boolean((draftBorderColor || "").trim())
   const isPremiumChecked = premiumStatus !== "unknown"
   const isPremiumUser = premiumStatus === "premium"
   const isFreeUser = premiumStatus === "free"
@@ -749,7 +750,7 @@ export function FabPanelApp() {
       ...editingTheme,
       name: draftCustomThemeName,
       text: draftTextColor,
-      accent: draftAccentColor,
+      border: draftBorderColor,
       bgImageId: draftBackgroundImageId,
       ...(draftBackgroundImageUrl && !draftBackgroundImageId ? { bgUrl: draftBackgroundImageUrl } : {}),
       bgAnimated: draftBackgroundAnimated,
@@ -769,7 +770,7 @@ export function FabPanelApp() {
   useEffect(() => {
     if (!editingTheme) return
     setDraftTextColor(editingTheme.text || "")
-    setDraftAccentColor(editingTheme.accent || "")
+    setDraftBorderColor(editingTheme.border || "")
     setDraftBackgroundImageId(editingTheme.bgImageId || "")
     setDraftBackgroundAnimated(editingTheme.bgAnimated === true)
     setDraftBackgroundImageUrl("")
@@ -777,7 +778,7 @@ export function FabPanelApp() {
       void getImageDataUrl(editingTheme.bgImageId).then(setDraftBackgroundImageUrl).catch(() => setDraftBackgroundImageUrl(""))
     }
     setDraftBackgroundColor(editingTheme.bgColor || "")
-    setDraftBackgroundOptions(editingTheme.bgOptions || DEFAULT_CUSTOM_BG_OPTIONS)
+    setDraftBackgroundOptions(sanitizeCustomBgOptions(editingTheme.bgOptions))
     setDraftCustomThemeName(editingTheme.name || "")
     setCustomEditTab("general")
   }, [editingTheme?.id])
@@ -889,7 +890,7 @@ export function FabPanelApp() {
     editingTheme,
     draftCustomThemeName,
     draftTextColor,
-    draftAccentColor,
+    draftBorderColor,
     draftBackgroundImageId,
     draftBackgroundImageUrl,
     draftBackgroundAnimated,
@@ -1170,7 +1171,7 @@ export function FabPanelApp() {
     }
   }
   const resetCustomText = () => setDraftTextColor("")
-  const resetCustomAccent = () => setDraftAccentColor("")
+  const resetCustomBorder = () => setDraftBorderColor("")
   const resetDraftBackgroundImage = () => {
     deleteDraftBackgroundImage()
     setDraftBackgroundImageId("")
@@ -1250,10 +1251,10 @@ export function FabPanelApp() {
       const canvas = await renderImageToCanvas(draftBackgroundImageUrl, draftBackgroundOptions, 256, draftBackgroundColor)
       const palette = await Vibrant.from(canvas.toDataURL()).getPalette()
       const isDarkMode = isCurrentPageDarkMode()
-      const nextAccent = palette.Vibrant?.hex || ""
+      const nextBorder = palette.Vibrant?.hex || ""
       const nextText = isDarkMode ? palette.LightVibrant?.hex || "" : palette.DarkVibrant?.hex || ""
 
-      if (nextAccent) setDraftAccentColor(nextAccent)
+      if (nextBorder) setDraftBorderColor(nextBorder)
       if (nextText) setDraftTextColor(nextText)
 
       toast.update(toastId, {
@@ -1479,20 +1480,6 @@ export function FabPanelApp() {
       <style>{`
         * { margin: 0; box-sizing: border-box; user-select: none; -webkit-user-select: none; }
         .content-scroll { scrollbar-width: none; }
-        .range-control__tooltip {
-          position: absolute;
-          top: 0;
-          padding: 4px 8px;
-          background-color: #000;
-          border: 1px solid #66cdaa4D;
-          color: #fff;
-          font-size: 12px;
-          border-radius: 8px;
-          line-height: 1;
-          white-space: nowrap;
-          pointer-events: none;
-          transform: translateX(-50%);
-        }
         .preset-theme-card {
           position: relative;
           width: 100%;
@@ -1744,19 +1731,19 @@ export function FabPanelApp() {
                         canReset={draftWidgetLayout.textColor !== DEFAULT_WIDGET_LAYOUT.textColor}
                       />
                       <ColorSettingCard
-                        label={t("accent")}
-                        value={draftWidgetLayout.accentColor}
-                        onChange={(value) => updateWidgetLayout("accentColor", value)}
-                        onReset={() => resetWidgetLayout("accentColor")}
-                        canReset={draftWidgetLayout.accentColor !== DEFAULT_WIDGET_LAYOUT.accentColor}
+                        label={t("border")}
+                        value={draftWidgetLayout.borderColor}
+                        onChange={(value) => updateWidgetLayout("borderColor", value)}
+                        onReset={() => resetWidgetLayout("borderColor")}
+                        canReset={draftWidgetLayout.borderColor !== DEFAULT_WIDGET_LAYOUT.borderColor}
                       />
                       <RangeCard
                         label={t("opacity")}
                         min={0}
-                        max={1}
-                        step={0.1}
-                        value={draftWidgetLayout.opacity}
-                        onChange={(value) => updateWidgetLayout("opacity", Number(value))}
+                        max={100}
+                        step={1}
+                        value={Math.round(draftWidgetLayout.opacity * 100)}
+                        onChange={(value) => updateWidgetLayout("opacity", Number(value) / 100)}
                         onReset={() => resetWidgetLayout("opacity")}
                       />
                     </>
@@ -2013,15 +2000,6 @@ export function FabPanelApp() {
                             onChange={(v) => updateCustomBgOption("brightness", Number(v))}
                             onReset={() => updateCustomBgOption("brightness", 1)}
                           />
-                          <RangeCard
-                            label={t("blur")}
-                            min={0}
-                            max={50}
-                            step={1}
-                            value={draftBackgroundOptions.blur}
-                            onChange={(v) => updateCustomBgOption("blur", Number(v))}
-                            onReset={() => updateCustomBgOption("blur", 0)}
-                          />
                           <CheckboxCard
                             label={t("invert")}
                             checked={draftBackgroundOptions.invert === 1}
@@ -2065,29 +2043,29 @@ export function FabPanelApp() {
                         canReset={canResetText}
                       />
                       <ColorSettingCard
-                        label={t("accent")}
-                        value={draftAccentColor}
-                        onChange={setDraftAccentColor}
-                        onReset={resetCustomAccent}
-                        canReset={canResetAccent}
+                        label={t("border")}
+                        value={draftBorderColor}
+                        onChange={setDraftBorderColor}
+                        onReset={resetCustomBorder}
+                        canReset={canResetBorder}
                       />
                       <RangeCard
                         label={t("opacity")}
                         min={0}
-                        max={1}
-                        step={0.1}
-                        value={draftBackgroundOptions.opacity}
-                        onChange={(v) => updateCustomBgOption("opacity", Number(v))}
+                        max={100}
+                        step={1}
+                        value={Math.round(draftBackgroundOptions.opacity * 100)}
+                        onChange={(value) => updateCustomBgOption("opacity", Number(value) / 100)}
                         onReset={() => updateCustomBgOption("opacity", 0.8)}
                       />
                       <RangeCard
-                        label={t("glassBlur")}
+                        label={t("blur")}
                         min={0}
                         max={50}
                         step={1}
-                        value={draftBackgroundOptions.glassBlur}
-                        onChange={(v) => updateCustomBgOption("glassBlur", Number(v))}
-                        onReset={() => updateCustomBgOption("glassBlur", 10)}
+                        value={draftBackgroundOptions.blur}
+                        onChange={(v) => updateCustomBgOption("blur", Number(v))}
+                        onReset={() => updateCustomBgOption("blur", 10)}
                       />
                     </>
                   )}
@@ -2103,14 +2081,14 @@ export function FabPanelApp() {
                 <FooterButton
                   onClick={onImportClick}
                   style={footerButtonStyle}
-                  icon="file-down"
+                  icon="download"
                   label={t("import")}
                 />
                 <FooterButton
                   onClick={onExportClick}
                   disabled={theme !== "custom"}
                   style={{ ...footerButtonStyle, ...disabledControlStyle(theme === "custom") }}
-                  icon="file-up"
+                  icon="upload"
                   label={t("export")}
                 />
                 <input
@@ -2320,7 +2298,7 @@ function ColorSettingCard({
   const solidColor = `rgba(${rgbaArr.join(", ")})`
   const pickerConfig = {
     defaultColor: solidColor,
-    defaultGradient: isGradientValue ? pickerValue : `linear-gradient(90deg, ${solidColor} 0%, ${solidColor} 100%)`
+    defaultGradient: isGradientValue ? pickerValue : `linear-gradient(180deg, ${solidColor} 0%, ${solidColor} 100%)`
   }
 
   return (
@@ -2374,7 +2352,6 @@ function ColorSettingCard({
               hideInputType
               hideColorTypeBtns={!allowGradient}
               hideGradientControls={!allowGradient}
-              hideGradientAngle
               hideGradientStop
             />
           </div>
@@ -2394,8 +2371,9 @@ function RangeControl({
   onChange,
   onReset
 }: RangeControlProps) {
-  const rangePosition = max - min === 0 ? 0 : Math.min(1, Math.max(0, (Number(value) - min) / (max - min)))
-  const tooltipLeft = `calc(${rangePosition * 100}% + ${(0.5 - rangePosition) * 16}px)`
+  const tickListId = useId()
+  const rangePosition = max === min ? 0 : Math.min(1, Math.max(0, (Number(value) - min) / (max - min)))
+  const outputLeft = `calc(${rangePosition * 100}% + ${(0.5 - rangePosition) * 16}px)`
 
   return (
     <div style={columnControlStyle}>
@@ -2414,14 +2392,7 @@ function RangeControl({
           )}
         </div>
       </div>
-      <div
-        className="range-control__slider"
-        style={{ position: "relative" }}>
-        <output
-          className="range-control__tooltip"
-          style={{ left: tooltipLeft }}>
-          {value}
-        </output>
+      <div style={{ position: "relative" }}>
         <input
           type="range"
           min={min}
@@ -2429,9 +2400,31 @@ function RangeControl({
           step={step}
           value={value}
           disabled={disabled}
+          list={tickListId}
           style={{ width: "100%", accentColor: "#66cdaa", ...disabledControlStyle(!disabled) }}
           onChange={(e) => onChange(e.target.value)}
         />
+        <datalist id={tickListId}>
+          {Array.from({ length: 11 }, (_, index) => (
+            <option key={index} value={min + ((max - min) * index) / 10} />
+          ))}
+        </datalist>
+        <output
+          style={{
+            display: "block",
+            position: "absolute",
+            top: "90%",
+            left: outputLeft,
+            color: "#fff",
+            fontSize: 12,
+            lineHeight: 1,
+            textAlign: "center",
+            whiteSpace: "nowrap",
+            pointerEvents: "none",
+            transform: "translateX(-50%)"
+          }}>
+          {value}
+        </output>
       </div>
     </div>
   )

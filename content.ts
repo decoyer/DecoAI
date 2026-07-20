@@ -85,7 +85,7 @@ export const config: PlasmoCSConfig = {
 interface ThemeConfig {
   bgUrl: string
   bgColor: string
-  accentColor: string
+  borderColor: string
   lightTextColor: string
   darkTextColor: string
 }
@@ -152,7 +152,7 @@ let customThemePreview: { themeId: string; theme: CustomTheme } | null = null
 const EMPTY_THEME: ThemeConfig = {
   bgUrl: "",
   bgColor: "",
-  accentColor: "",
+  borderColor: "",
   lightTextColor: "",
   darkTextColor: ""
 }
@@ -160,7 +160,7 @@ const EMPTY_THEME: ThemeConfig = {
 const TERMINAL_THEME: ThemeConfig = {
   bgUrl: "",
   bgColor: "",
-  accentColor: "#33ff33",
+  borderColor: "#33ff33",
   lightTextColor: "#33ff33",
   darkTextColor: "#33ff33"
 }
@@ -341,7 +341,7 @@ const getFABStyle = () => {
 
       .${FAB_TOOLTIP_CLASS} {
         padding: 4px 8px;
-        background-color: #000;
+        background-color: #1b1b1b;
         border: 1px solid #66cdaa4D;
         color: #fff;
         font-size: 12px;
@@ -430,7 +430,7 @@ const getPaletteData = async (bgUrl: string): Promise<ThemeConfig> => {
     return {
       bgUrl,
       bgColor: "",
-      accentColor: palette.Vibrant?.hex || "",
+      borderColor: palette.Vibrant?.hex || "",
       lightTextColor: palette.DarkVibrant?.hex || "",
       darkTextColor: palette.LightVibrant?.hex || ""
     }
@@ -529,7 +529,7 @@ const getCustomThemeData = async (): Promise<ThemeConfig> => {
   return {
     bgUrl,
     bgColor: sanitizeBg(customTheme.bgColor),
-    accentColor: sanitizeColor(customTheme.accent),
+    borderColor: sanitizeColor(customTheme.border),
     lightTextColor: sanitizeColor(customTheme.text),
     darkTextColor: sanitizeColor(customTheme.text)
   }
@@ -1169,8 +1169,7 @@ function TimerWidgetContent({ widgetId }: { widgetId: string }) {
     max: 59,
     value: String(value).padStart(2, "0"),
     disabled: timer.isRunning,
-    onChange: (e) => setTimerTimePart(part, e.target.value),
-    onClick: (e) => e.currentTarget.select()
+    onChange: (e) => setTimerTimePart(part, e.target.value)
   })
 
   return createElement(
@@ -1585,7 +1584,7 @@ function WidgetOverlayApp() {
     const frame = frames[item.id]
     const opacity = clampNumber(layout.opacity, 0, 1, 0.8)
     const textColor = sanitizeColor(layout.textColor) || siteDefaultTextColor
-    const accentColor = sanitizeColor(layout.accentColor)
+    const borderColor = sanitizeColor(layout.borderColor)
     const backgroundValue = sanitizeBg(layout.backgroundColor)
     const background = backgroundValue || (isDarkMode ? "rgb(24, 24, 24)" : "rgb(231, 231, 231)")
 
@@ -1600,14 +1599,16 @@ function WidgetOverlayApp() {
       color: textColor,
       border: "none",
       borderRadius: 8,
-      boxShadow: accentColor ? `inset 0 2px 16px color-mix(in srgb, ${accentColor} 30%, transparent)` : "none",
       overflow: "hidden",
       pointerEvents: "auto",
       zIndex: editingWidgetId === item.id ? 2 : 1,
       willChange: "transform, width, height",
       "--decoai-widget-bg": background,
       "--decoai-widget-bg-opacity": opacity,
-      "--decoai-widget-text": textColor
+      "--decoai-widget-text": layout.textColor || "#66cdaa",
+      "--decoai-widget-shadow": borderColor
+        ? `inset 0 2px 16px color-mix(in srgb, ${borderColor} 30%, transparent)`
+        : "none"
     } as CSSProperties
   }
 
@@ -1764,7 +1765,7 @@ function WidgetOverlayApp() {
         inset: 0,
         zIndex: 4,
         pointerEvents: "none",
-        "--decoai-widget-accent": layout.accentColor || "#66cdaa"
+        "--decoai-widget-border": layout.borderColor || "#66cdaa"
       } as CSSProperties
     },
     visibleWidgetItems.map((item) => {
@@ -1904,6 +1905,7 @@ function WidgetOverlayApp() {
       snapRotationDegrees: WIDGET_ROTATION_DEGREES,
       snapRotationThreshold: 4,
       checkInput: true,
+      preventDefault: selectedWidget?.type !== "note",
       snappable: true,
       elementGuidelines: Object.entries(widgetRefs.current)
         .filter(([id, node]) => id !== editingWidgetId && node)
@@ -2011,6 +2013,15 @@ const mountWidgetOverlay = () => {
         opacity: var(--decoai-widget-bg-opacity);
         pointer-events: none;
       }
+      .decoai-widget-card::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        border-radius: inherit;
+        box-shadow: var(--decoai-widget-shadow);
+        pointer-events: none;
+      }
       .decoai-widget-card > * {
         position: relative;
         z-index: 1;
@@ -2025,10 +2036,18 @@ const mountWidgetOverlay = () => {
         transform: scale(0.9);
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       }
+      .decoai-widget-card-photo .decoai-widget-card__header {
+        z-index: 5;
+        pointer-events: none;
+      }
+      .decoai-widget-card-photo .decoai-widget-card__actions {
+        z-index: 6;
+        pointer-events: auto;
+      }
       .moveable-control-box,
       .moveable-line,
       .moveable-control {
-        --moveable-color: var(--decoai-widget-accent);
+        --moveable-color: var(--decoai-widget-border);
         pointer-events: auto !important;
         z-index: 4 !important;
       }
@@ -2050,6 +2069,9 @@ const mountWidgetOverlay = () => {
         overflow: visible !important;
       }
       .decoai-widget-card-photo:has(.decoai-photo-widget-image)::before {
+        display: none;
+      }
+      .decoai-widget-card-photo:has(.decoai-photo-widget-image)::after {
         display: none;
       }
       .decoai-widget-card:hover .decoai-widget-card__actions {
@@ -2173,6 +2195,8 @@ const mountWidgetOverlay = () => {
         min-height: 0;
         padding: 0 10px;
         overflow: auto;
+        scrollbar-width: thin !important;
+        scrollbar-color: color-mix(in srgb, var(--decoai-widget-text) 30%, transparent) transparent !important;
       }
       .decoai-text-editor {
         min-height: 100%;
@@ -2201,7 +2225,7 @@ const mountWidgetOverlay = () => {
       .decoai-text-editor ul,
       .decoai-text-editor ol {
         margin: 0;
-        padding-left: max(20px, 10cqmin);
+        padding-left: 1.25em;
       }
       .decoai-text-editor ul {
         list-style: disc outside;
@@ -2211,7 +2235,7 @@ const mountWidgetOverlay = () => {
       }
       .decoai-text-editor li {
         display: list-item;
-        padding-left: max(2px, 1cqmin);
+        padding-left: 2px;
       }
       .decoai-note-toolbar {
         height: max(32px, 16cqmin);
@@ -2221,6 +2245,14 @@ const mountWidgetOverlay = () => {
         padding: 0 10px;
         border-top: 1px solid #4b5563;
         border-bottom: 1px solid transparent;
+        opacity: 0;
+        pointer-events: none;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .decoai-note-widget:hover .decoai-note-toolbar,
+      .decoai-note-widget:focus-within .decoai-note-toolbar {
+        opacity: 1;
+        pointer-events: auto;
       }
       .decoai-text-tool,
       .decoai-todo-add,
@@ -2254,16 +2286,17 @@ const mountWidgetOverlay = () => {
         overflow: auto;
         display: flex;
         flex-direction: column;
-        scrollbar-width: none !important;
+        scrollbar-width: thin !important;
+        scrollbar-color: color-mix(in srgb, var(--decoai-widget-text) 30%, transparent) transparent !important;
       }
       .decoai-todo-item {
         display: flex;
         align-items: center;
         font-size: max(16px, 8cqmin);
-        gap: max(4px, 2cqw);
+        gap: 4px;
       }
       .decoai-todo-item:not(:first-child) {
-        margin-top: max(4px, 2cqmin);
+        margin-top: 4px;
       }
       .decoai-todo-check-label {
         display: flex;
@@ -2272,10 +2305,10 @@ const mountWidgetOverlay = () => {
         min-width: 0;
         height: 100%;
         border-radius: 8px;
-        gap: max(8px, 4cqw);
+        gap: max(8px, 0.25em);
       }
       .decoai-todo-item:not(.decoai-todo-composer) .decoai-todo-check-label {
-        padding-left: max(8px, 4cqmin);
+        padding-left: 8px;
       }
       .decoai-todo-checkbox {
         width: max(16px, 8cqmin);
@@ -2284,12 +2317,12 @@ const mountWidgetOverlay = () => {
         cursor: pointer;
       }
       .decoai-todo-checkbox:checked {
-        accent-color: var(--decoai-widget-text, #66cdaa);
-        background-color: var(--decoai-widget-text, #66cdaa);
+        accent-color: var(--decoai-widget-text);
+        background-color: var(--decoai-widget-text);
       }
       .decoai-todo-item span {
         flex: 1;
-        padding: max(8px, 4cqmin) max(4px, 2cqmin);
+        padding: 8px 4px;
         border-radius: 8px;
         outline: none;
         overflow-wrap: anywhere;
@@ -2355,7 +2388,7 @@ const mountWidgetOverlay = () => {
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: max(8px, 4cqw);
+        gap: 8px;
         font-size: max(32px, 16cqmin);
       }
       .decoai-widget-controls {
@@ -2363,7 +2396,7 @@ const mountWidgetOverlay = () => {
         z-index: 4;
         display: flex;
         flex-direction: column;
-        gap: max(4px, 2cqw);
+        gap: 4px;
       }
       .decoai-widget-control {
         position: relative;
@@ -2389,7 +2422,7 @@ const mountWidgetOverlay = () => {
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: max(4px, 2cqw);
+        gap: 4px;
       }
       .decoai-time-input {
         width: 100%;
@@ -2584,7 +2617,7 @@ const getCustomBgOptions = async (): Promise<CustomBgOptions> => {
 
 const generateCSS = (
   site: SiteType,
-  { bgUrl, bgColor, accentColor, lightTextColor, darkTextColor }: ThemeConfig,
+  { bgUrl, bgColor, borderColor, lightTextColor, darkTextColor }: ThemeConfig,
   customBgOptions?: CustomBgOptions
 ) => {
   const config = SITE_SELECTORS[site]
@@ -2615,9 +2648,8 @@ const generateCSS = (
   })()
   const invert = clampNumber(customBgOptions?.invert, 0, 1, 0)
   const grayscale = clampNumber(customBgOptions?.grayscale, 0, 1, 0)
-  const blur = clampNumber(customBgOptions?.blur, 0, 50, 0)
   const brightness = clampNumber(customBgOptions?.brightness, 0, 5, 1)
-  const glassBlur = clampNumber(customBgOptions?.glassBlur, 0, 50, 10)
+  const blur = clampNumber(customBgOptions?.blur, 0, 50, 10)
   const opacity = clampNumber(customBgOptions?.opacity, 0, 1, 0.8)
   const hideHeader = customBgOptions?.hideHeader ?? true
   const hideFooter = customBgOptions?.hideFooter ?? true
@@ -2649,7 +2681,7 @@ const generateCSS = (
         z-index: 0 !important;
         transform: ${backgroundTransform} !important;
         transform-origin: top left !important;
-        filter: invert(${invert}) grayscale(${grayscale}) blur(${blur}px) brightness(${brightness}) !important;
+        filter: invert(${invert}) grayscale(${grayscale}) brightness(${brightness}) !important;
       }
       ${container} { background-color: transparent !important; }
       ${site === "chatgpt" ? "#page-header, div::after { background-color: transparent !important; }" : ""}
@@ -2661,9 +2693,9 @@ const generateCSS = (
   const getElStyle = () => `
     ${elements} {
       background-color: rgba(231, 231, 231, ${opacity}) !important;
-      ${accentColor ? `box-shadow: inset 0 2px 16px color-mix(in srgb, ${accentColor} 30%, transparent) !important;` : ""}
+      ${borderColor ? `box-shadow: inset 0 2px 16px color-mix(in srgb, ${borderColor} 30%, transparent) !important;` : ""}
       border: none !important;
-      backdrop-filter: blur(${glassBlur}px) saturate(140%) !important;
+      backdrop-filter: blur(${blur}px) !important;
       opacity: 0.8 !important;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
     }
@@ -2706,11 +2738,13 @@ const generateCSS = (
         border-radius: 24px !important;
       }
     ` : ""}
-    ${accentColor
+    ${lightTextColor && darkTextColor
       ? `
+      :root { --decoai-text-color: ${lightTextColor}; }
+      ${darkClass} { --decoai-text-color: ${darkTextColor}; }
       ${site === "chatgpt" || site === "gemini" ? container : "*"} {
         scrollbar-width: auto !important;
-        scrollbar-color: color-mix(in srgb, ${accentColor} 30%, transparent) transparent !important;
+        scrollbar-color: color-mix(in srgb, var(--decoai-text-color) 30%, transparent) transparent !important;
       }
     ` : ""}
   `
@@ -2718,8 +2752,8 @@ const generateCSS = (
   const getTextStyle = () =>
     lightTextColor && darkTextColor
       ? `
-      *:not(pre *):not(#${WIDGET_ROOT_ID}):not(#${WIDGET_ROOT_ID} *) { color: ${lightTextColor} !important; }
-      ${darkClass} *:not(pre *):not(#${WIDGET_ROOT_ID}):not(#${WIDGET_ROOT_ID} *) { color: ${darkTextColor} !important; }
+      *:not(pre *):not(#${FAB_ROOT_ID} *):not(#${WIDGET_ROOT_ID} *) { color: ${lightTextColor} !important; }
+      ${darkClass} *:not(pre *):not(#${FAB_ROOT_ID} *):not(#${WIDGET_ROOT_ID} *) { color: ${darkTextColor} !important; }
     ` : ""
 
   return [
