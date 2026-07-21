@@ -1,10 +1,15 @@
 import type { User } from "firebase/auth"
 import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithCredential, signOut } from "firebase/auth/web-extension"
 
+import {
+  AUTH_SESSION_STORAGE_KEY,
+  parseAuthSessionSnapshot,
+  type AuthSessionSnapshot,
+  type PremiumStatus
+} from "./auth"
 import { app } from "./firebase"
 import { IMAGE_SOURCE_URLS, MAX_FILE_BYTES } from "./utils"
 
-const AUTH_SESSION_STORAGE_KEY = "auth-session"
 const AUTH_SILENT_FAILURE_COOLDOWN_MS = 60_000
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 const GOOGLE_AUTH_SCOPES = ["openid", "email", "profile"]
@@ -12,17 +17,7 @@ const GOOGLE_AUTH_SCOPES = ["openid", "email", "profile"]
 const t = (key: string) => chrome.i18n.getMessage(key)
 
 type ExtensionManifest = chrome.runtime.Manifest & { oauth2?: { client_id?: string } }
-type PremiumStatus = "unknown" | "free" | "premium"
-type AuthSessionSnapshot = {
-  checkedAt: number
-  displayName: string
-  email: string
-  premiumStatus: PremiumStatus
-  uid: string
-}
-let silentUserVerification:
-  | { uid: string; promise: Promise<User | null> }
-  | null = null
+let silentUserVerification: { uid: string; promise: Promise<User | null> } | null = null
 let lastSilentAuthFailureAt = 0
 const IMAGE_DB_NAME = "decoai-images"
 const IMAGE_DB_VERSION = 1
@@ -170,10 +165,7 @@ const getWebAuthToken = (interactive: boolean) =>
     )
   })
 
-const sendWebAuthToken = (
-  sendResponse: (response?: unknown) => void,
-  interactive: boolean
-) => {
+const sendWebAuthToken = (sendResponse: (response?: unknown) => void, interactive: boolean) => {
   getWebAuthToken(interactive)
     .then((token) => sendResponse({ success: true, token }))
     .catch((error) => sendResponse({ success: false, error: error.message })
@@ -196,39 +188,17 @@ const getCurrentUser = () => {
 
 const getAuthSessionSnapshot = async () => {
   const result = await chrome.storage.local.get(AUTH_SESSION_STORAGE_KEY)
-  const snapshot = result[AUTH_SESSION_STORAGE_KEY]
-
-  if (
-    !snapshot || typeof snapshot !== "object" ||
-    typeof snapshot.uid !== "string" ||
-    typeof snapshot.premiumStatus !== "string"
-  ) {
-    return null
-  }
-
-  return {
-    checkedAt: Number(snapshot.checkedAt) || 0,
-    displayName: String(snapshot.displayName || ""),
-    email: String(snapshot.email || ""),
-    premiumStatus: snapshot.premiumStatus as PremiumStatus,
-    uid: snapshot.uid
-  } satisfies AuthSessionSnapshot
+  return parseAuthSessionSnapshot(result[AUTH_SESSION_STORAGE_KEY])
 }
 
-const getPremiumStatusForUser = async (
-  user: User | null,
-  forceRefresh = false
-): Promise<PremiumStatus> => {
+const getPremiumStatusForUser = async (user: User | null, forceRefresh = false): Promise<PremiumStatus> => {
   if (!user) return "unknown"
 
   const tokenResult = await user.getIdTokenResult(forceRefresh)
   return tokenResult.claims.premium === true ? "premium" : "free"
 }
 
-const saveAuthSessionSnapshot = async (
-  user: User,
-  premiumStatus: PremiumStatus
-) => {
+const saveAuthSessionSnapshot = async (user: User, premiumStatus: PremiumStatus) => {
   const snapshot: AuthSessionSnapshot = {
     checkedAt: Date.now(),
     displayName: user.displayName || "",
@@ -291,10 +261,7 @@ const verifySnapshotUserSilently = async (snapshot: AuthSessionSnapshot) => {
   return silentUserVerification.promise
 }
 
-const getVerifiedUserForSnapshot = async (
-  snapshot: AuthSessionSnapshot,
-  verifyGoogleGrant: boolean
-) => {
+const getVerifiedUserForSnapshot = async (snapshot: AuthSessionSnapshot, verifyGoogleGrant: boolean) => {
   const currentUser = await getCurrentUser()
   if (currentUser?.uid === snapshot.uid) return currentUser
   if (!verifyGoogleGrant) return null
@@ -302,10 +269,7 @@ const getVerifiedUserForSnapshot = async (
   return verifySnapshotUserSilently(snapshot)
 }
 
-const validateAuthSession = async (
-  refreshPremiumStatus = false,
-  verifyGoogleGrant = false
-) => {
+const validateAuthSession = async (refreshPremiumStatus = false, verifyGoogleGrant = false) => {
   const snapshot = await getAuthSessionSnapshot()
   if (!snapshot) return null
 
@@ -323,10 +287,7 @@ const validateAuthSession = async (
   return snapshot
 }
 
-const getVerifiedPremiumStatus = async (
-  forceRefresh = false,
-  _interactiveFallback = false
-) => {
+const getVerifiedPremiumStatus = async (forceRefresh = false) => {
   const snapshot = await getAuthSessionSnapshot()
   if (!snapshot) return false
 
@@ -369,10 +330,7 @@ const handleAuthMessage = async (message: any) => {
     case "GET_VERIFIED_PREMIUM_STATUS":
       return {
         success: true,
-        isPremium: await getVerifiedPremiumStatus(
-          message.forceRefresh === true,
-          message.interactiveFallback === true
-        )
+        isPremium: await getVerifiedPremiumStatus(message.forceRefresh === true)
       }
     case "GET_CURRENT_USER_ID_TOKEN":
       return { success: true, idToken: await getCurrentUserIdToken() }
@@ -387,10 +345,7 @@ const handleAuthMessage = async (message: any) => {
   }
 }
 
-const fetchImageAsDataUrl = async (
-  imageSourceUrl: string,
-  sendResponse: (response?: unknown) => void
-) => {
+const fetchImageAsDataUrl = async (imageSourceUrl: string, sendResponse: (response?: unknown) => void) => {
   if (!isImageSource(imageSourceUrl)) {
     sendResponse({ success: false })
     return
@@ -439,10 +394,7 @@ const fetchImageAsDataUrl = async (
   reader.readAsDataURL(blob)
 }
 
-const openCheckout = async (
-  idToken: string,
-  sendResponse: (response?: unknown) => void
-) => {
+const openCheckout = async (idToken: string, sendResponse: (response?: unknown) => void) => {
   try {
     if (idToken.length < 100) {
       sendResponse({ success: false, error: "Invalid token" })
@@ -481,10 +433,7 @@ const blobToDataUrl = (blob: Blob) =>
     reader.readAsDataURL(blob)
   })
 
-const removeBackgroundImage = async (
-  imageUrl: string,
-  sendResponse: (response?: unknown) => void
-) => {
+const removeBackgroundImage = async (imageUrl: string, sendResponse: (response?: unknown) => void) => {
   try {
     const idToken = await getCurrentUserIdToken()
     if (idToken.length < 100) {
@@ -557,11 +506,7 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
     return true
   }
 
-  if (
-    message.type === "SAVE_IMAGE_DATA_URL" ||
-    message.type === "GET_IMAGE_DATA_URL" ||
-    message.type === "DELETE_IMAGE"
-  ) {
+  if (message.type === "SAVE_IMAGE_DATA_URL" || message.type === "GET_IMAGE_DATA_URL" || message.type === "DELETE_IMAGE") {
     void handleImageStoreMessage(message)
       .then((response) => sendResponse(response || { success: false }))
       .catch((error) => sendResponse({ success: false, error: error.message }))

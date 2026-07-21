@@ -11,6 +11,24 @@ export type AuthSessionSnapshot = {
   uid: string
 }
 
+export const parseAuthSessionSnapshot = (value: unknown): AuthSessionSnapshot | null => {
+  if (
+    !value || typeof value !== "object" ||
+    !("uid" in value) || typeof value.uid !== "string" ||
+    !("premiumStatus" in value) || typeof value.premiumStatus !== "string"
+  ) {
+    return null
+  }
+
+  return {
+    checkedAt: "checkedAt" in value ? Number(value.checkedAt) || 0 : 0,
+    displayName: "displayName" in value ? String(value.displayName || "") : "",
+    email: "email" in value ? String(value.email || "") : "",
+    premiumStatus: value.premiumStatus as PremiumStatus,
+    uid: value.uid
+  }
+}
+
 type AuthSessionValidationOptions = {
   refreshPremiumStatus?: boolean
   verifyGoogleGrant?: boolean
@@ -47,29 +65,10 @@ export const signInAndSaveAuthSession = async (interactive: boolean) => {
   return response.session
 }
 
-export const restoreAuthSessionSnapshot = async (interactive = false) => {
-  const snapshot = await getAuthSessionSnapshot()
-  const isSnapshotFresh = Boolean(snapshot?.checkedAt) && Date.now() - (snapshot?.checkedAt || 0) < AUTH_REFRESH_MS
-
-  if (snapshot && !interactive && isSnapshotFresh) return snapshot
-
-  try {
-    return await signInAndSaveAuthSession(interactive)
-  } catch {
-    if (snapshot && !interactive) return snapshot
-    await clearAuthSessionSnapshot()
-    return null
-  }
-}
-
-export const getVerifiedPremiumStatus = async (
-  forceRefresh = false,
-  interactiveFallback = false
-) => {
+export const getVerifiedPremiumStatus = async (forceRefresh = false) => {
   const response = await sendAuthMessage<{ isPremium: boolean }>({
     type: "GET_VERIFIED_PREMIUM_STATUS",
-    forceRefresh,
-    interactiveFallback
+    forceRefresh
   })
 
   return response.isPremium
@@ -79,43 +78,17 @@ export const signOutAuthSession = async () => {
   await sendAuthMessage({ type: "SIGN_OUT_AUTH_SESSION" })
 }
 
-export const clearAuthSessionSnapshot = async () => {
-  await sendAuthMessage({ type: "CLEAR_AUTH_SESSION_SNAPSHOT" })
-}
-
-export const clearAuthSessionAndFirebaseUser = async () => {
-  await signOutAuthSession()
-}
-
 export const getAuthSessionSnapshot = async () => {
   const result = await chrome.storage.local.get(AUTH_SESSION_STORAGE_KEY)
-  const snapshot = result[AUTH_SESSION_STORAGE_KEY]
-
-  if (
-    !snapshot || typeof snapshot !== "object" ||
-    typeof snapshot.uid !== "string" ||
-    typeof snapshot.premiumStatus !== "string"
-  ) {
-    return null
-  }
-
-  const authSessionSnapshot: AuthSessionSnapshot = {
-    checkedAt: Number(snapshot.checkedAt) || 0,
-    displayName: String(snapshot.displayName || ""),
-    email: String(snapshot.email || ""),
-    premiumStatus: snapshot.premiumStatus as PremiumStatus,
-    uid: snapshot.uid
-  }
+  const authSessionSnapshot = parseAuthSessionSnapshot(result[AUTH_SESSION_STORAGE_KEY])
+  if (!authSessionSnapshot) return null
 
   await chrome.storage.local.set({ [AUTH_SESSION_STORAGE_KEY]: authSessionSnapshot })
 
   return authSessionSnapshot
 }
 
-export const getValidAuthSessionSnapshot = async ({
-  refreshPremiumStatus = false,
-  verifyGoogleGrant = false
-}: AuthSessionValidationOptions = {}) => {
+export const getValidAuthSessionSnapshot = async ({ refreshPremiumStatus = false, verifyGoogleGrant = false }: AuthSessionValidationOptions = {}) => {
   const response = await sendAuthMessage<{ session: AuthSessionSnapshot | null }>({
     type: "VALIDATE_AUTH_SESSION",
     refreshPremiumStatus,

@@ -237,10 +237,7 @@ const emitThemeLoading = (loading: boolean) => {
   window.dispatchEvent(new CustomEvent(THEME_LOADING_EVENT, { detail: { loading } }))
 }
 
-const getPremiumStatus = async ({
-  forceRefresh = false,
-  interactiveFallback = false
-} = {}) => {
+const getPremiumStatus = async ({ forceRefresh = false } = {}) => {
   if (!forceRefresh && premiumCache && Date.now() - premiumCache.checkedAt < AUTH_REFRESH_MS) {
     return { isPremium: premiumCache.value, isChecked: true }
   }
@@ -248,7 +245,7 @@ const getPremiumStatus = async ({
   const snapshot = await getAuthSessionSnapshot()
 
   try {
-    const isPremium = await getVerifiedPremiumStatus(forceRefresh, interactiveFallback)
+    const isPremium = await getVerifiedPremiumStatus(forceRefresh)
     const nextSnapshot = await getAuthSessionSnapshot()
     const hasVerifiedNewStatus = Boolean(nextSnapshot?.checkedAt) && nextSnapshot?.checkedAt !== snapshot?.checkedAt
 
@@ -483,9 +480,7 @@ const getSelectedCustomTheme = async (): Promise<{
     CUSTOM_THEMES_STORAGE_KEY,
     SELECTED_CUSTOM_THEME_ID_STORAGE_KEY
   ])
-  const customThemes = customData[CUSTOM_THEMES_STORAGE_KEY] as
-    | CustomTheme[]
-    | undefined
+  const customThemes = customData[CUSTOM_THEMES_STORAGE_KEY] as CustomTheme[] | undefined
   const selectedCustomThemeId = customData[SELECTED_CUSTOM_THEME_ID_STORAGE_KEY] as string | undefined
 
   if (!Array.isArray(customThemes) || !selectedCustomThemeId) {
@@ -510,10 +505,7 @@ const getSelectedCustomTheme = async (): Promise<{
 
     const normalizedTheme = await normalizeCustomThemes(customThemes, selectedCustomThemeId)
 
-    return {
-      isPremium: false,
-      theme: normalizedTheme
-    }
+    return { isPremium: false, theme: normalizedTheme }
   }
 
   return { isPremium: premiumStatus.isPremium, theme: selectedTheme }
@@ -576,10 +568,7 @@ const isFabThemeEditing = () => {
   return panelHost?.shadowRoot?.querySelector('[data-decoai-theme-editing="true"]') !== null
 }
 
-const clampWidgetFrameToViewport = (
-  frame: WidgetFrame,
-  minSize: WidgetSize
-): WidgetFrame => {
+const clampWidgetFrameToViewport = (frame: WidgetFrame, minSize: WidgetSize): WidgetFrame => {
   const widthRatio = clampNumber(frame.widthRatio, minSize.widthRatio, 1, minSize.widthRatio)
   const heightRatio = clampNumber(frame.heightRatio, minSize.heightRatio, 1, minSize.heightRatio)
   return {
@@ -622,11 +611,7 @@ const toPixelWidgetFrame = (frame: WidgetFrame, viewport: ViewportSize): PixelWi
   rotation: frame.rotation
 })
 
-const toRelativeWidgetFrame = (
-  frame: PixelWidgetFrame,
-  viewport: ViewportSize,
-  minSize: WidgetSize
-): WidgetFrame => clampWidgetFrameToViewport({
+const toRelativeWidgetFrame = (frame: PixelWidgetFrame, viewport: ViewportSize, minSize: WidgetSize): WidgetFrame => clampWidgetFrameToViewport({
   xRatio: frame.x / viewport.width,
   yRatio: frame.y / viewport.height,
   widthRatio: frame.width / viewport.width,
@@ -634,11 +619,7 @@ const toRelativeWidgetFrame = (
   rotation: frame.rotation
 }, minSize)
 
-const clampPixelWidgetFrameToViewport = (
-  frame: PixelWidgetFrame,
-  minSize: WidgetSize,
-  viewport: ViewportSize
-) => toPixelWidgetFrame(toRelativeWidgetFrame(frame, viewport, minSize), viewport)
+const clampPixelWidgetFrameToViewport = (frame: PixelWidgetFrame, minSize: WidgetSize, viewport: ViewportSize) => toPixelWidgetFrame(toRelativeWidgetFrame(frame, viewport, minSize), viewport)
 
 const getWidgetTransform = (frame: PixelWidgetFrame, viewport: ViewportSize) =>
   `translate(${frame.x / viewport.width * 100}vw, ${frame.y / viewport.height * 100}vh) rotate(${normalizeWidgetRotation(frame.rotation)}deg)`
@@ -707,9 +688,8 @@ const getTimerDisplayParts = (timer: ReturnType<typeof useTimer>) => {
   }
 }
 
-const getStopwatchMilliseconds = (
-  stopwatch: ReturnType<typeof useStopwatch>
-) => stopwatch.totalSeconds * 1000 + stopwatch.milliseconds
+const getStopwatchMilliseconds = (stopwatch: ReturnType<typeof useStopwatch>) =>
+  stopwatch.totalSeconds * 1000 + stopwatch.milliseconds
 
 const readImageFileAsDataUrl = (file: File) =>
   new Promise<string | null>((resolve) => {
@@ -810,10 +790,7 @@ function NoteWidgetContent({ widgetId }: { widgetId: string }) {
     }, 250)
   }
   const editor = useEditor({
-    extensions: [
-      StarterKit,
-      Placeholder.configure({ placeholder: t("place_noteWidget") })
-    ],
+    extensions: [StarterKit, Placeholder.configure({ placeholder: t("place_noteWidget") })],
     content: content || EMPTY_DOC,
     shouldRerenderOnTransaction: true,
     editorProps: { attributes: { class: "decoai-text-editor" } },
@@ -1488,9 +1465,7 @@ function WidgetOverlayApp() {
       window.cancelAnimationFrame(animationFrame)
       animationFrame = window.requestAnimationFrame(() => {
         const next = getViewportSize()
-        setViewportSize((current) =>
-          current.width === next.width && current.height === next.height ? current : next
-        )
+        setViewportSize((current) => current.width === next.width && current.height === next.height ? current : next)
       })
     }
     const observer = new ResizeObserver(updateViewportSize)
@@ -1606,9 +1581,7 @@ function WidgetOverlayApp() {
       "--decoai-widget-bg": background,
       "--decoai-widget-bg-opacity": opacity,
       "--decoai-widget-text": layout.textColor || "#66cdaa",
-      "--decoai-widget-shadow": borderColor
-        ? `inset 0 2px 16px color-mix(in srgb, ${borderColor} 30%, transparent)`
-        : "none"
+      "--decoai-widget-shadow": borderColor ? `inset 0 2px 16px color-mix(in srgb, ${borderColor} 30%, transparent)` : "none"
     } as CSSProperties
   }
 

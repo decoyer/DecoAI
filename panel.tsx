@@ -941,7 +941,7 @@ export function FabPanelApp() {
   const refreshPremiumStatus = async () => {
     let isPremium = false
     try {
-      isPremium = await getVerifiedPremiumStatus(false, false)
+      isPremium = await getVerifiedPremiumStatus(false)
     } catch {
       isPremium = false
     }
@@ -2148,16 +2148,15 @@ export function FabPanelApp() {
   )
 }
 
-const themeCardStyle = (color: string, active: boolean) => ({
+const themeCardStyle = {
   display: "block",
   width: "100%",
   height: 100,
-  backgroundColor: color,
   border: "none",
   borderRadius: 12,
   cursor: "pointer",
   transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
-})
+} as const
 
 function TabButton({
   active,
@@ -2205,7 +2204,7 @@ function ThemeCard({
         type="button"
         className={`preset-theme-card${active ? " is-active" : ""}${className ? ` ${className}` : ""}`}
         onClick={onClick}
-        style={{ ...themeCardStyle(color, active), backgroundColor: "transparent", cursor: "pointer" }}>
+        style={{ ...themeCardStyle, backgroundColor: "transparent" }}>
         <div className="preset-theme-card__bg" style={{ backgroundColor: color }} />
         <span className="preset-theme-card__emoji">{emoji}</span>
         <span className="preset-theme-card__label">{label}</span>
