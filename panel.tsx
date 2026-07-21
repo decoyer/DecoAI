@@ -186,8 +186,9 @@ const controlButtonStyle = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  paddingTop: 4,
-  paddingBottom: 4,
+  boxSizing: "border-box",
+  height: 28,
+  padding: 4,
   border: "none",
   borderRadius: 8,
   whiteSpace: "nowrap",
@@ -205,6 +206,7 @@ const widgetActionButtonStyle = {
 const proButtonStyle = {
   ...controlButtonStyle,
   width: "100%",
+  height: "auto",
   border: "none",
   padding: 8,
   color: "#fff",
@@ -253,6 +255,7 @@ const footerButtonStyle = {
   ...controlButtonStyle,
   display: "flex",
   flex: 1,
+  height: "auto",
   justifyContent: "center",
   padding: 8
 } as const
@@ -1897,7 +1900,7 @@ export function FabPanelApp() {
                               onClick={resetDraftBackgroundImage}
                               disabled={!draftBackgroundImageUrl}
                               style={{ ...controlButtonStyle, ...disabledControlStyle(Boolean(draftBackgroundImageUrl)) }}>
-                              {t("reset")}
+                              <Icon icon="lucide:rotate-ccw" height={20} aria-hidden="true" />
                             </button>
                           </div>
                         </label>
@@ -2174,6 +2177,7 @@ function TabButton({
       onClick={onClick}
       style={{
         ...controlButtonStyle,
+        height: "auto",
         padding: "8px",
         borderRadius: "12px 12px 0 0",
         backgroundColor: active ? "#66cdaa" : "#4b5563"
@@ -2310,11 +2314,11 @@ function ColorSettingCard({
               type="button"
               className="decoai-control-button"
               onClick={() => setIsPickerOpen((open) => !open)}
-              style={{ ...controlButtonStyle, width: 45, height: 25, padding: 4 }}>
+              style={{ ...controlButtonStyle, width: 45, padding: 4 }}>
               <span
-                aria-hidden="true"
                 style={{ width: "100%", height: "100%", borderRadius: 4, background: pickerValue }}
-              />
+                aria-hidden="true"
+                />
             </button>
             <button
               type="button"
@@ -2322,7 +2326,7 @@ function ColorSettingCard({
               onClick={onReset}
               disabled={!canReset}
               style={{ ...controlButtonStyle, ...disabledControlStyle(canReset) }}>
-              {t("reset")}
+              <Icon icon="lucide:rotate-ccw" height={20} aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -2370,15 +2374,14 @@ function RangeControl({
   onChange,
   onReset
 }: RangeControlProps) {
-  const tickListId = useId()
   const rangePosition = max === min ? 0 : Math.min(1, Math.max(0, (Number(value) - min) / (max - min)))
   const outputLeft = `calc(${rangePosition * 100}% + ${(0.5 - rangePosition) * 16}px)`
 
   return (
-    <div style={columnControlStyle}>
+    <div style={{ ...columnControlStyle, gap: 0 }}>
       <div style={rowStyle}>
         <span style={fieldLabelStyle}>{label}</span>
-        <div style={{ ...iconLabelStyle, gap: 8 }}>
+        <div>
           {onReset && (
             <button
               type="button"
@@ -2386,34 +2389,18 @@ function RangeControl({
               onClick={onReset}
               disabled={disabled}
               style={{ ...controlButtonStyle, ...disabledControlStyle(!disabled) }}>
-              {t("reset")}
+              <Icon icon="lucide:rotate-ccw" height={20} aria-hidden="true" />
             </button>
           )}
         </div>
       </div>
-      <div style={{ position: "relative" }}>
-        <input
-          type="range"
-          min={min}
-          max={max}
-          step={step}
-          value={value}
-          disabled={disabled}
-          list={tickListId}
-          style={{ width: "100%", accentColor: "#66cdaa", ...disabledControlStyle(!disabled) }}
-          onChange={(e) => onChange(e.target.value)}
-        />
-        <datalist id={tickListId}>
-          {Array.from({ length: 11 }, (_, index) => (
-            <option key={index} value={min + ((max - min) * index) / 10} />
-          ))}
-        </datalist>
+      <div>
         <output
           style={{
             display: "block",
-            position: "absolute",
-            top: "90%",
-            left: outputLeft,
+            width: "max-content",
+            marginLeft: outputLeft,
+            marginBottom: 4,
             color: "#fff",
             fontSize: 12,
             lineHeight: 1,
@@ -2421,9 +2408,25 @@ function RangeControl({
             whiteSpace: "nowrap",
             pointerEvents: "none",
             transform: "translateX(-50%)"
-          }}>
+          }}
+        >
           {value}
         </output>
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          disabled={disabled}
+          style={{
+            display: "block",
+            width: "100%",
+            accentColor: "#66cdaa",
+            ...disabledControlStyle(!disabled)
+          }}
+          onChange={(e) => onChange(e.target.value)}
+        />
       </div>
     </div>
   )
