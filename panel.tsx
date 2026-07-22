@@ -299,6 +299,8 @@ const getUniqueNumber = (baseName: string, names: Array<string | undefined>) => 
   return `${baseName} ${number}`
 }
 
+const DEFAULT_PREVIEW = "conic-gradient(#ccc 25%, #fff 0 50%, #ccc 0 75%, #fff 0)"
+
 function CustomThemeSortableCard({
   item,
   theme,
@@ -345,10 +347,13 @@ function CustomThemeSortableCard({
   const solidBgColor = sanitizeColor(backgroundValue)
   const backgroundGradient = backgroundValue && !solidBgColor ? backgroundValue : ""
   const backgroundImages = [bgUrl ? `url(${bgUrl})` : "", backgroundGradient].filter(Boolean)
+  const isDefaultBg = !item.bgImageId && !sanitizeCustomBgUrl(item.bgUrl) && !backgroundValue
   const bgStyle = {
     width: isBgSideways ? 100 : "100%",
     height: isBgSideways ? 250 : "100%",
-    backgroundImage: backgroundImages.length ? backgroundImages.join(", ") : "none",
+    backgroundImage: isDefaultBg ? DEFAULT_PREVIEW : backgroundImages.length ? backgroundImages.join(", ") : "none",
+    backgroundSize: isDefaultBg ? "16px 16px" : "cover",
+    backgroundRepeat: isDefaultBg ? "repeat" : "no-repeat",
     backgroundColor: solidBgColor || "transparent",
     transform: `translate(-50%, -50%) rotate(${bgRotation}deg) scaleX(${bgUrl && item.bgOptions.scaleX === -1 ? -1 : 1})`,
     filter: bgUrl
@@ -2316,9 +2321,13 @@ function ColorSettingCard({
               onClick={() => setIsPickerOpen((open) => !open)}
               style={{ ...controlButtonStyle, width: 45, padding: 4 }}>
               <span
-                style={{ width: "100%", height: "100%", borderRadius: 4, background: pickerValue }}
-                aria-hidden="true"
-                />
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  borderRadius: 4,
+                  background: value ? pickerValue : `${DEFAULT_PREVIEW} 0 / 8px 8px`
+                }}
+                aria-hidden="true" />
             </button>
             <button
               type="button"

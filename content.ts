@@ -286,6 +286,12 @@ const getThemeStyle = () => getOrCreateStyle(THEME_STYLE_ID)
 const getFABStyle = () => {
   const style = getOrCreateStyle(FAB_STYLE_ID)
   if (!style.textContent) {
+    const site = detectCurrentSite()
+    const elements = [FAB_THEME_BTN_CLASS, FAB_WIDGET_BTN_CLASS, FAB_TOOLTIP_CLASS].map((item) => `.${item}`).join(', ')
+
+    const darkClass = SITE_SELECTORS[site]?.darkClass
+    const darkSelectors = mapSelectors(elements, { prefix: `${darkClass} ` })
+
     style.textContent = `
       .${FAB_ROOT_CLASS} {
         position: fixed;
@@ -313,12 +319,7 @@ const getFABStyle = () => {
         cursor: pointer;
       }
 
-      html.dark .${FAB_THEME_BTN_CLASS},
-      html.dark .${FAB_WIDGET_BTN_CLASS},
-      body.dark-theme .${FAB_THEME_BTN_CLASS},
-      body.dark-theme .${FAB_WIDGET_BTN_CLASS},
-      html[data-mode="dark"] .${FAB_THEME_BTN_CLASS},
-      html[data-mode="dark"] .${FAB_WIDGET_BTN_CLASS} {
+      ${darkSelectors} {
         background-color: #fff;
       }
 
@@ -338,7 +339,7 @@ const getFABStyle = () => {
 
       .${FAB_TOOLTIP_CLASS} {
         padding: 4px 8px;
-        background-color: #1b1b1b;
+        background-color: #000;
         border: 1px solid #66cdaa4D;
         color: #fff;
         font-size: 12px;
@@ -347,6 +348,10 @@ const getFABStyle = () => {
         opacity: 0;
         pointer-events: none;
         transform: translateX(4px);
+      }
+
+      ${darkClass} .${FAB_TOOLTIP_CLASS} {
+        color: #000;
       }
 
       .${FAB_THEME_BTN_CLASS}:hover + .${FAB_TOOLTIP_CLASS},
@@ -2216,7 +2221,7 @@ const mountWidgetOverlay = () => {
         align-items: center;
         justify-content: space-between;
         padding: 0 10px;
-        border-top: 1px solid #4b5563;
+        border-top: 1px solid var(--decoai-widget-text);
         border-bottom: 1px solid transparent;
         opacity: 0;
         pointer-events: none;
@@ -2245,17 +2250,30 @@ const mountWidgetOverlay = () => {
         border-radius: 8px;
       }
       .decoai-todo-widget {
-        padding: 0 10px 10px;
+        padding-bottom: 10px;
       }
       .decoai-todo-add,
       .decoai-todo-delete {
         width: max(32px, 16cqmin);
         height: max(32px, 16cqmin);
         border-radius: 999px;
+        opacity: 0;
+        pointer-events: none;
+        transform: scale(0.9);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .decoai-todo-widget:hover .decoai-todo-add,
+      .decoai-todo-widget:hover .decoai-todo-delete,
+      .decoai-todo-widget:focus-within .decoai-todo-add,
+      .decoai-todo-widget:focus-within .decoai-todo-delete {
+        opacity: 1;
+        pointer-events: auto;
+        transform: scale(1);
       }
       .decoai-todo-list {
         flex: 1;
         min-height: 0;
+        padding: 0 10px;
         overflow: auto;
         display: flex;
         flex-direction: column;
@@ -2286,6 +2304,7 @@ const mountWidgetOverlay = () => {
       .decoai-todo-checkbox {
         width: max(16px, 8cqmin);
         height: max(16px, 8cqmin);
+        box-shadow: none;
         border-radius: 4px;
         cursor: pointer;
       }
@@ -2404,6 +2423,7 @@ const mountWidgetOverlay = () => {
         padding: 2px 0;
         color: inherit !important;
         background-color: transparent;
+        box-shadow: none;
         text-align: center;
         outline: none;
         font-size: inherit;

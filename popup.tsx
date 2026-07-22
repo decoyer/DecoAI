@@ -695,7 +695,12 @@ const itemLabelStyle = {
 } as const
 
 const actionButtonStyle = {
+  width: 24,
   height: 24,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 0,
   background: 0,
   border: 0,
   cursor: "pointer"

@@ -68,9 +68,6 @@
   "upload": {
     "message": "업로드"
   },
-  "reset": {
-    "message": "초기화"
-  },
   "cancel": {
     "message": "취소"
   },
