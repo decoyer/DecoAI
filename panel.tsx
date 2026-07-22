@@ -242,14 +242,14 @@ const columnControlStyle = {
 } as const
 const textInputStyle = {
   width: 125,
+  padding: "8px 4px",
   border: "none",
   borderRadius: 8,
-  padding: "8px 4px",
-  textAlign: "center",
-  backgroundColor: "#4b5563",
+  boxShadow: "none",
+  outline: "none",
   color: "#fff",
-  userSelect: "text",
-  WebkitUserSelect: "text"
+  backgroundColor: "#4b5563",
+  textAlign: "center"
 } as const
 const footerButtonStyle = {
   ...controlButtonStyle,

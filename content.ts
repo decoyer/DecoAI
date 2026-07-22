@@ -338,7 +338,11 @@ const getFABStyle = () => {
       }
 
       .${FAB_TOOLTIP_CLASS} {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         padding: 4px 8px;
+        box-sizing: border-box;
         background-color: #000;
         border: 1px solid #66cdaa4D;
         color: #fff;
@@ -839,7 +843,7 @@ function NoteWidgetContent({ widgetId }: { widgetId: string }) {
 }
 
 function TodoWidgetContent({ widgetId }: { widgetId: string }) {
-  const composerRef = useRef<HTMLSpanElement | null>(null)
+  const composerRef = useRef<HTMLInputElement | null>(null)
   const [content, setContent] = useStorage<JSONContent>(
     { key: `${TEXT_WIDGET_STATE_STORAGE_KEY}:${widgetId}`, instance: localStorageInstance },
     EMPTY_DOC
@@ -873,10 +877,10 @@ function TodoWidgetContent({ widgetId }: { widgetId: string }) {
 
   const addTodo = (keepFocus = false) => {
     const composer = composerRef.current
-    const text = (composer?.textContent || "").trim()
+    const text = (composer?.value || "").trim()
     if (text) {
       setTodoItems([...todoItems, { checked: false, text }])
-      if (composer) composer.textContent = ""
+      if (composer) composer.value = ""
     }
     if (keepFocus) requestAnimationFrame(() => composerRef.current?.focus())
   }
@@ -884,7 +888,7 @@ function TodoWidgetContent({ widgetId }: { widgetId: string }) {
   return createElement(
     "div",
     {
-      className: "decoai-todo-widget",
+      className: todoItems.length === 0 ? "decoai-todo-widget is-empty" : "decoai-todo-widget",
       onPointerDown: (e) => e.stopPropagation()
     },
     createElement(
@@ -952,11 +956,11 @@ function TodoWidgetContent({ widgetId }: { widgetId: string }) {
         createElement(
           "div",
           { className: "decoai-todo-check-label" },
-          createElement("span", {
+          createElement("input", {
             ref: composerRef,
-            contentEditable: true,
-            suppressContentEditableWarning: true,
-            "data-placeholder": t("place_todoWidget"),
+            type: "text",
+            className: "decoai-todo-input",
+            placeholder: t("place_todoWidget"),
             onKeyDown: (e) => {
               e.stopPropagation()
               if (e.key === "Enter") {
@@ -2264,8 +2268,7 @@ const mountWidgetOverlay = () => {
       }
       .decoai-todo-widget:hover .decoai-todo-add,
       .decoai-todo-widget:hover .decoai-todo-delete,
-      .decoai-todo-widget:focus-within .decoai-todo-add,
-      .decoai-todo-widget:focus-within .decoai-todo-delete {
+      .decoai-todo-widget.is-empty .decoai-todo-add {
         opacity: 1;
         pointer-events: auto;
         transform: scale(1);
@@ -2312,17 +2315,27 @@ const mountWidgetOverlay = () => {
         accent-color: var(--decoai-widget-text);
         background-color: var(--decoai-widget-text);
       }
-      .decoai-todo-item span {
+      .decoai-todo-item span,
+      .decoai-todo-input {
         flex: 1;
         padding: 8px 4px;
         border-radius: 8px;
         outline: none;
         overflow-wrap: anywhere;
       }
-      .decoai-todo-item span[data-placeholder]:empty::before {
-        content: attr(data-placeholder);
+      .decoai-todo-input {
+        min-width: 0;
+        border: none;
+        box-shadow: none;
+        background-color: transparent;
+      }
+      .decoai-todo-input::placeholder {
+        opacity: 0;
+        transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .decoai-todo-widget:hover .decoai-todo-input::placeholder,
+      .decoai-todo-widget.is-empty .decoai-todo-input::placeholder {
         opacity: 0.35;
-        pointer-events: none;
       }
       .decoai-todo-item span.is-done {
         text-decoration: line-through;
@@ -2332,6 +2345,7 @@ const mountWidgetOverlay = () => {
       .decoai-text-tool:hover,
       .decoai-text-tool.is-active,
       .decoai-todo-item span:hover,
+      .decoai-todo-input:hover,
       .decoai-todo-add:hover,
       .decoai-todo-delete:hover {
         backdrop-filter: brightness(0.9);
