@@ -47,6 +47,7 @@ import {
   SELECTED_CUSTOM_THEME_ID_STORAGE_KEY,
   SELECTED_THEME_STORAGE_KEY,
   STOPWATCH_WIDGET_STATE_STORAGE_KEY,
+  TEXT_WIDGET_STATE_STORAGE_KEY,
   THEME_HIDDEN_STORAGE_KEY,
   THEME_LOADING_EVENT,
   TIMER_WIDGET_STATE_STORAGE_KEY,
@@ -196,7 +197,6 @@ const FAB_THEME_MOUNT_ID = "decoai-fab-theme-mount"
 const WIDGET_ROOT_ID = "decoai-widget-root"
 const TOAST_STYLE_ID = "decoai-toastify-style"
 const TOAST_ROOT_ID = "decoai-toast-root"
-const TEXT_WIDGET_STATE_STORAGE_KEY = "text-widget-state"
 const CUSTOM_THEME_WATCH_STORAGE_KEYS = [CUSTOM_THEMES_STORAGE_KEY, SELECTED_CUSTOM_THEME_ID_STORAGE_KEY]
 let premiumCache: { checkedAt: number; value: boolean } | null = null
 
@@ -1985,24 +1985,22 @@ const mountWidgetOverlay = () => {
   root.style.zIndex = "1"
   root.innerHTML = `
     <style>
-      .decoai-widget-card::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        z-index: 0;
-        border-radius: inherit;
-        background: var(--decoai-widget-bg);
-        opacity: var(--decoai-widget-bg-opacity);
-        pointer-events: none;
-      }
+      .decoai-widget-card::before,
       .decoai-widget-card::after {
         content: "";
         position: absolute;
         inset: 0;
-        z-index: 2;
         border-radius: inherit;
-        box-shadow: var(--decoai-widget-shadow);
         pointer-events: none;
+      }
+      .decoai-widget-card::before {
+        z-index: 0;
+        background: var(--decoai-widget-bg);
+        opacity: var(--decoai-widget-bg-opacity);
+      }
+      .decoai-widget-card::after {
+        z-index: 2;
+        box-shadow: var(--decoai-widget-shadow);
       }
       .decoai-widget-card > * {
         position: relative;
@@ -2016,7 +2014,6 @@ const mountWidgetOverlay = () => {
         margin-left: auto;
         opacity: 0;
         transform: scale(0.9);
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       }
       .decoai-widget-card-photo .decoai-widget-card__header {
         z-index: 5;
@@ -2050,9 +2047,7 @@ const mountWidgetOverlay = () => {
         box-shadow: none !important;
         overflow: visible !important;
       }
-      .decoai-widget-card-photo:has(.decoai-photo-widget-image)::before {
-        display: none;
-      }
+      .decoai-widget-card-photo:has(.decoai-photo-widget-image)::before,
       .decoai-widget-card-photo:has(.decoai-photo-widget-image)::after {
         display: none;
       }
@@ -2089,7 +2084,6 @@ const mountWidgetOverlay = () => {
         color: #fff !important;
         background-color: #0000004D;
         cursor: pointer;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       }
       .decoai-widget-card__edit:hover {
         background-color: #198754;
@@ -2124,20 +2118,7 @@ const mountWidgetOverlay = () => {
         user-select: none;
         pointer-events: none;
       }
-      .decoai-photo-widget-placeholder {
-        position: absolute;
-        top: -32px;
-        right: 0;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        height: auto;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 8px;
-        pointer-events: none;
-      }
+      .decoai-photo-widget-placeholder,
       .decoai-photo-widget-upload-overlay {
         position: absolute;
         top: -32px;
@@ -2147,9 +2128,15 @@ const mountWidgetOverlay = () => {
         display: flex;
         align-items: center;
         justify-content: center;
-        opacity: 0;
         pointer-events: none;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .decoai-photo-widget-placeholder {
+        width: 100%;
+        height: auto;
+        border-radius: 8px;
+      }
+      .decoai-photo-widget-upload-overlay {
+        opacity: 0;
       }
       .decoai-widget-card-photo:has(.decoai-photo-widget-image) .decoai-photo-widget-upload-overlay {
         top: 0;
@@ -2172,7 +2159,8 @@ const mountWidgetOverlay = () => {
         pointer-events: auto;
         container-type: size;
       }
-      .decoai-note-editor-wrap {
+      .decoai-note-editor-wrap,
+      .decoai-todo-list {
         flex: 1;
         min-height: 0;
         padding: 0 10px;
@@ -2229,7 +2217,6 @@ const mountWidgetOverlay = () => {
         border-bottom: 1px solid transparent;
         opacity: 0;
         pointer-events: none;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       }
       .decoai-note-widget:hover .decoai-note-toolbar,
       .decoai-note-widget:focus-within .decoai-note-toolbar {
@@ -2264,7 +2251,6 @@ const mountWidgetOverlay = () => {
         opacity: 0;
         pointer-events: none;
         transform: scale(0.9);
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       }
       .decoai-todo-widget:hover .decoai-todo-add,
       .decoai-todo-widget:hover .decoai-todo-delete,
@@ -2274,14 +2260,8 @@ const mountWidgetOverlay = () => {
         transform: scale(1);
       }
       .decoai-todo-list {
-        flex: 1;
-        min-height: 0;
-        padding: 0 10px;
-        overflow: auto;
         display: flex;
         flex-direction: column;
-        scrollbar-width: thin !important;
-        scrollbar-color: color-mix(in srgb, var(--decoai-widget-text) 30%, transparent) transparent !important;
       }
       .decoai-todo-item {
         display: flex;
@@ -2350,15 +2330,18 @@ const mountWidgetOverlay = () => {
       .decoai-todo-delete:hover {
         backdrop-filter: brightness(0.9);
       }
-      .decoai-dday-widget {
+      .decoai-dday-widget,
+      .decoai-time-widget {
         height: calc(100% - 32px);
         display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: space-evenly;
         padding: 0 10px 10px;
         pointer-events: auto;
         container-type: size;
+      }
+      .decoai-dday-widget {
+        flex-direction: column;
+        align-items: center;
+        justify-content: space-evenly;
       }
       .decoai-dday-display {
         display: flex;
@@ -2366,28 +2349,24 @@ const mountWidgetOverlay = () => {
         font-size: max(48px, 24cqmin);
         user-select: none;
       }
-      .decoai-dday-input {
+      .decoai-dday-input,
+      .decoai-dday-input::-webkit-calendar-picker-indicator {
         position: absolute;
         inset: 0;
+      }
+      .decoai-dday-input {
         padding: 0;
         border: none;
         opacity: 0;
       }
       .decoai-dday-input::-webkit-calendar-picker-indicator {
-        position: absolute;
-        inset: 0;
         width: 100%;
         height: 100%;
         cursor: pointer;
       }
       .decoai-time-widget {
-        height: calc(100% - 32px);
-        display: flex;
         align-items: center;
         justify-content: center;
-        padding: 0 10px 10px;
-        pointer-events: auto;
-        container-type: size;
       }
       .decoai-time-row {
         flex: 1;
@@ -2445,6 +2424,14 @@ const mountWidgetOverlay = () => {
       .decoai-time-input::-webkit-outer-spin-button,
       .decoai-time-input::-webkit-inner-spin-button {
         -webkit-appearance: none;
+      }
+      .decoai-widget-card__actions,
+      .decoai-widget-card__action,
+      .decoai-photo-widget-upload-overlay,
+      .decoai-note-toolbar,
+      .decoai-todo-add,
+      .decoai-todo-delete {
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       }
     </style>
   `

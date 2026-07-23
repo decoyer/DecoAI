@@ -51,6 +51,7 @@ import {
   SELECTED_CUSTOM_THEME_ID_STORAGE_KEY,
   SELECTED_THEME_STORAGE_KEY,
   STOPWATCH_WIDGET_STATE_STORAGE_KEY,
+  TEXT_WIDGET_STATE_STORAGE_KEY,
   THEME_LOADING_EVENT,
   TIMER_WIDGET_STATE_STORAGE_KEY,
   WIDGET_FRAME_STORAGE_KEY,
@@ -70,7 +71,6 @@ import {
 const t = (key: string, value?: string) => chrome.i18n.getMessage(key, value)
 const storage = new Storage()
 const localStorageInstance = new Storage({ area: "local" })
-const TEXT_WIDGET_STATE_STORAGE_KEY = "text-widget-state"
 
 const THEME_LIST = [
   { key: "random", color: "#ddd", emoji: "🎲" },
@@ -371,11 +371,11 @@ function CustomThemeSortableCard({
         tiltEnable={!isDragging}>
         <button
           type="button"
-          className={`custom-theme-card decoai-marquee-title${theme === "custom" && selectedCustomThemeId === item.id ? " is-active" : ""}${draggingCustomThemeId === item.id ? " is-dragging" : ""}`}
+          className={`theme-card custom-theme-card decoai-marquee-title${theme === "custom" && selectedCustomThemeId === item.id ? " is-active" : ""}${draggingCustomThemeId === item.id ? " is-dragging" : ""}`}
           onPointerEnter={(e) => updateTitleOverflow(e.currentTarget)}
           onClick={() => onCustomCardClick(item)}>
-          <div className="custom-theme-card__bg" style={bgStyle} />
-          <div className="custom-theme-card__title">
+          <div className="theme-card__bg custom-theme-card__bg" style={bgStyle} />
+          <div className="theme-card__title">
             <span className="decoai-marquee-title__text" data-title={item.name}>{item.name}</span>
           </div>
         </button>
@@ -1488,10 +1488,12 @@ export function FabPanelApp() {
       <style>{`
         * { margin: 0; box-sizing: border-box; user-select: none; -webkit-user-select: none; }
         .content-scroll { scrollbar-width: none; }
-        .preset-theme-card {
+        .theme-card {
           position: relative;
           width: 100%;
           overflow: hidden;
+        }
+        .preset-theme-card {
           isolation: isolate;
         }
         .theme-card-tilt {
@@ -1504,12 +1506,14 @@ export function FabPanelApp() {
         .custom-theme-card-tilt {
           position: relative;
         }
-        .preset-theme-card__bg {
+        .theme-card__bg {
           position: absolute;
-          inset: 0;
-          z-index: 0;
           background-position: center center;
           background-size: cover;
+        }
+        .preset-theme-card__bg {
+          inset: 0;
+          z-index: 0;
         }
         .preset-theme-card__emoji {
           position: absolute;
@@ -1520,58 +1524,7 @@ export function FabPanelApp() {
           line-height: 1;
           transform: translate(-50%, -75%);
         }
-        .preset-theme-card__label {
-          position: absolute;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          height: 24px;
-          z-index: 2;
-          color: #fff;
-          background-color: #0000008D;
-          text-align: center;
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .preset-theme-card:hover .preset-theme-card__label { background-color: #0000004D; }
-        .preset-theme-card.is-active::after,
-        .custom-theme-card.is-active::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          z-index: 3;
-          border-radius: 12px;
-          box-shadow: inset 0 0 0 2px #66cdaa;
-          pointer-events: none;
-        }
-        .custom-theme-card {
-          position: relative;
-          width: 100%;
-          height: 100px;
-          padding: 0;
-          border: none;
-          border-radius: 12px;
-          cursor: pointer;
-          overflow: hidden;
-        }
-        .custom-theme-card.is-dragging {
-          opacity: 0.5;
-          transform: scale(0.9);
-        }
-        .custom-theme-card__bg {
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          width: 100%;
-          height: 100%;
-          background-position: center center;
-          background-size: cover;
-          background-repeat: no-repeat;
-          transform-origin: center center;
-        }
-        .custom-theme-card__title {
+        .theme-card__title {
           position: absolute;
           left: 0;
           right: 0;
@@ -1581,14 +1534,42 @@ export function FabPanelApp() {
           background-color: #0000008D;
           color: #fff;
           overflow: hidden;
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .custom-theme-card__title .decoai-marquee-title__text {
+        .theme-card:hover .theme-card__title { background-color: #0000004D; }
+        .theme-card__title .decoai-marquee-title__text {
           margin: 0 auto;
           line-height: 24px;
         }
-        .custom-theme-card.title-overflow:hover .decoai-marquee-title__text {
+        .theme-card.title-overflow:hover .decoai-marquee-title__text {
           margin: 0;
+        }
+        .theme-card.is-active::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          z-index: 3;
+          border-radius: 12px;
+          box-shadow: inset 0 0 0 2px #66cdaa;
+          pointer-events: none;
+        }
+        .custom-theme-card {
+          height: 100px;
+          padding: 0;
+          border: none;
+          border-radius: 12px;
+          cursor: pointer;
+        }
+        .custom-theme-card.is-dragging {
+          opacity: 0.5;
+          transform: scale(0.9);
+        }
+        .custom-theme-card__bg {
+          top: 50%;
+          left: 50%;
+          width: 100%;
+          height: 100%;
+          background-repeat: no-repeat;
+          transform-origin: center center;
         }
         .custom-theme-card__actions {
           position: absolute;
@@ -1599,7 +1580,6 @@ export function FabPanelApp() {
           gap: 2px;
           opacity: 0;
           transform: scale(0.9);
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .custom-theme-card__action {
           width: 20px;
@@ -1612,7 +1592,6 @@ export function FabPanelApp() {
           border-radius: 999px;
           background-color: #0000004D;
           cursor: pointer;
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .custom-theme-card-wrap {
           position: relative;
@@ -1652,16 +1631,16 @@ export function FabPanelApp() {
           opacity: 1;
           transform: scale(1);
         }
+        .theme-card__title,
+        .custom-theme-card__actions,
+        .custom-theme-card__action,
         .decoai-control-button,
-        .custom-theme-card__duplicate,
-        .custom-theme-card__delete,
         .decoai-widget-action__add,
         .decoai-widget-action__delete { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
         .custom-theme-card__duplicate:hover,
         .decoai-widget-action__add:hover { background-color: #1976d2 !important; }
         .custom-theme-card__delete:hover,
         .decoai-widget-action__delete:hover { background-color: #d32f2f !important; }
-        .custom-theme-card:hover .custom-theme-card__title { background-color: #0000004D; }
         .pro-button { animation: pro-gradient 10s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
         .decoai-control-button:not(:disabled):hover,
         .footer button:not(:disabled):hover { filter: brightness(1.1); }
@@ -1914,16 +1893,16 @@ export function FabPanelApp() {
                         <>
                           <Card>
                             <label style={rowStyle}>
-                              <div style={{ ...iconLabelStyle, gap: 8 }}>
-                                <Icon icon="lucide:sparkles" height={24} color="#66cdaa" aria-hidden="true" />
-                                <span style={fieldLabelStyle}>{t("removeBG")}</span>
-                              </div>
+                              <span style={fieldLabelStyle}>{t("removeBG")}</span>
                               <button
                                 type="button"
                                 className="decoai-control-button"
                                 onClick={onRemoveBGClick}
                                 style={controlButtonStyle}>
-                                {t("apply")}
+                                <div style={iconLabelStyle}>
+                                  <Icon icon="lucide:sparkles" height={16} color="#66cdaa" aria-hidden="true" />
+                                  {t("apply")}
+                                </div>
                               </button>
                             </label>
                           </Card>
@@ -2028,16 +2007,16 @@ export function FabPanelApp() {
                         <>
                           <Card>
                             <label style={rowStyle}>
-                              <div style={{ ...iconLabelStyle, gap: 8 }}>
-                                <Icon icon="lucide:sparkles" height={24} color="#66cdaa" aria-hidden="true" />
-                                <span style={fieldLabelStyle}>{t("colorMatch")}</span>
-                              </div>
+                              <span style={fieldLabelStyle}>{t("colorMatch")}</span>
                               <button
                                 type="button"
                                 className="decoai-control-button"
                                 onClick={onColorMatchClick}
                                 style={controlButtonStyle}>
-                                {t("apply")}
+                                <div style={iconLabelStyle}>
+                                  <Icon icon="lucide:sparkles" height={16} color="#66cdaa" aria-hidden="true" />
+                                  {t("apply")}
+                                </div>
                               </button>
                             </label>
                           </Card>
@@ -2211,12 +2190,15 @@ function ThemeCard({
     <Tilt {...themeTiltProps} className="theme-card-tilt">
       <button
         type="button"
-        className={`preset-theme-card${active ? " is-active" : ""}${className ? ` ${className}` : ""}`}
+        className={`theme-card preset-theme-card decoai-marquee-title${active ? " is-active" : ""}${className ? ` ${className}` : ""}`}
+        onPointerEnter={(e) => updateTitleOverflow(e.currentTarget)}
         onClick={onClick}
         style={{ ...themeCardStyle, backgroundColor: "transparent" }}>
-        <div className="preset-theme-card__bg" style={{ backgroundColor: color }} />
+        <div className="theme-card__bg preset-theme-card__bg" style={{ backgroundColor: color }} />
         <span className="preset-theme-card__emoji">{emoji}</span>
-        <span className="preset-theme-card__label">{label}</span>
+        <div className="theme-card__title">
+          <span className="decoai-marquee-title__text" data-title={label}>{label}</span>
+        </div>
       </button>
     </Tilt>
   )
@@ -2387,7 +2369,7 @@ function RangeControl({
   const outputLeft = `calc(${rangePosition * 100}% + ${(0.5 - rangePosition) * 16}px)`
 
   return (
-    <div style={{ ...columnControlStyle, gap: 0 }}>
+    <div style={{ ...columnControlStyle, gap: 4 }}>
       <div style={rowStyle}>
         <span style={fieldLabelStyle}>{label}</span>
         <div>
