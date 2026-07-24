@@ -41,7 +41,7 @@
   "restore": {
     "message": "Restore"
   },
-  "backup":  {
+  "backup": {
     "message": "Backup"
   },
   "addTheme": {
@@ -65,14 +65,8 @@
   "import": {
     "message": "Import"
   },
-  "upload": {
-    "message": "Upload"
-  },
   "cancel": {
     "message": "Cancel"
-  },
-  "apply": {
-    "message": "Apply"
   },
   "save": {
     "message": "Save"
@@ -109,18 +103,6 @@
   },
   "removeBG": {
     "message": "Remove BG"
-  },
-  "horizontal": {
-    "message": "Horizontal"
-  },
-  "vertical": {
-    "message": "Vertical"
-  },
-  "rotation": {
-    "message": "Rotation"
-  },
-  "flip": {
-    "message": "Flip"
   },
   "brightness": {
     "message": "Brightness"

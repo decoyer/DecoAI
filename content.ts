@@ -1,6 +1,4 @@
 import { Icon } from "@iconify/react"
-import { Storage } from "@plasmohq/storage"
-import { useStorage } from "@plasmohq/storage/hook"
 import { ListKit } from "@tiptap/extension-list"
 import { Placeholder } from "@tiptap/extensions"
 import { EditorContent, useEditor, type JSONContent } from "@tiptap/react"
@@ -13,6 +11,9 @@ import { createRoot, type Root } from "react-dom/client"
 import Moveable from "react-moveable"
 import { useStopwatch, useTimer } from "react-timer-hook"
 import { toast, ToastContainer } from "react-toastify"
+
+import { Storage } from "@plasmohq/storage"
+import { useStorage } from "@plasmohq/storage/hook"
 
 import { AUTH_REFRESH_MS, AUTH_SESSION_STORAGE_KEY, getAuthSessionSnapshot, getVerifiedPremiumStatus } from "./auth"
 import { FabPanelApp } from "./panel"
@@ -32,13 +33,19 @@ import {
   deleteImageData,
   detectCurrentSite,
   FAB_OPEN_EVENT,
+  getBgImageIds,
+  getBgTransform,
   getImageDataUrl,
-  getRenderedBackgroundPosition,
+  hasRemovedBg,
   isAnimatedCustomTheme,
   isAnimatedImage,
+  LOADING_OVERLAY_STYLE,
   MAX_FILE_BYTES,
   MODEL_ENABLED_STORAGE_KEY,
   PHOTO_WIDGET_STATE_STORAGE_KEY,
+  removeBgFromState,
+  removeImageBg,
+  restoreBgState,
   sanitizeBg,
   sanitizeColor,
   sanitizeCustomBgOptions,
@@ -73,12 +80,7 @@ import {
 } from "./utils"
 
 export const config: PlasmoCSConfig = {
-  matches: [
-    "https://chatgpt.com/*",
-    "https://gemini.google.com/*",
-    "https://claude.ai/*",
-    "https://grok.com/*"
-  ],
+  matches: ["https://chatgpt.com/*", "https://gemini.google.com/*", "https://claude.ai/*", "https://grok.com/*"],
   all_frames: false,
   run_at: "document_start"
 }
@@ -91,23 +93,15 @@ interface ThemeConfig {
   darkTextColor: string
 }
 
-type ThemeName =
-  | "random"
-  | "nasa"
-  | "neon"
-  | "pink"
-  | "vintage"
-  | "fractal"
-  | "terminal"
-  | "custom"
-  | "default"
+type ThemeName = "random" | "nasa" | "neon" | "pink" | "vintage" | "fractal" | "terminal" | "custom" | "default"
 
 const SITE_SELECTORS = {
   chatgpt: {
     container: "body",
     header: "#page-header",
     footer: 'div[data-scroll-root][data-show-disclaimer] div[data-testid="thread-disclaimer"]',
-    elements: '.btn-secondary, .agent-turn, .user-message-bubble-color, .shadow-short-composer, .origin-top-right > aside',
+    elements:
+      ".btn-secondary, .agent-turn, .user-message-bubble-color, .shadow-short-composer, .origin-top-right > aside",
     darkClass: "html.dark"
   },
   gemini: {
@@ -119,7 +113,8 @@ const SITE_SELECTORS = {
   },
   claude: {
     container: "body",
-    header: 'header, #main-content > div > div > main > div:first-child, .z-header, [data-testid="wiggle-controls-actions"]',
+    header:
+      'header, #main-content > div > div > main > div:first-child, .z-header, [data-testid="wiggle-controls-actions"]',
     footer: 'div[data-disclaimer="true"]',
     elements: 'li.inline-block button, .font-claude-response, div[data-user-message-bubble="true"], .\\!box-content',
     darkClass: 'html[data-mode="dark"]'
@@ -207,20 +202,20 @@ const WIDGET_LIST: Array<{
   labelKey: string
   icon: string
 }> = [
-    { key: "note", labelKey: "noteWidget", icon: "notepad-text" },
-    { key: "todo", labelKey: "todoWidget", icon: "list-checks" },
-    { key: "dday", labelKey: "ddayWidget", icon: "calendar-1" },
-    { key: "timer", labelKey: "timerWidget", icon: "alarm-clock" },
-    { key: "stopwatch", labelKey: "stopwatchWidget", icon: "timer" },
-    { key: "photo", labelKey: "photoWidget", icon: "sticker" }
-  ]
+  { key: "note", labelKey: "noteWidget", icon: "notepad-text" },
+  { key: "todo", labelKey: "todoWidget", icon: "list-checks" },
+  { key: "dday", labelKey: "ddayWidget", icon: "calendar-1" },
+  { key: "timer", labelKey: "timerWidget", icon: "alarm-clock" },
+  { key: "stopwatch", labelKey: "stopwatchWidget", icon: "timer" },
+  { key: "photo", labelKey: "photoWidget", icon: "sticker" }
+]
 
 const appendToPage = (element: HTMLElement) => {
-  ; (document.head || document.documentElement).appendChild(element)
+  ;(document.head || document.documentElement).appendChild(element)
 }
 
 const appendToBody = (element: HTMLElement) => {
-  ; (document.body || document.documentElement).appendChild(element)
+  ;(document.body || document.documentElement).appendChild(element)
 }
 
 const getOrCreateStyle = (id: string) => {
@@ -249,12 +244,7 @@ const getPremiumStatus = async ({ forceRefresh = false } = {}) => {
     const nextSnapshot = await getAuthSessionSnapshot()
     const hasVerifiedNewStatus = Boolean(nextSnapshot?.checkedAt) && nextSnapshot?.checkedAt !== snapshot?.checkedAt
 
-    if (
-      !isPremium &&
-      snapshot?.premiumStatus === "premium" &&
-      nextSnapshot &&
-      !hasVerifiedNewStatus
-    ) {
+    if (!isPremium && snapshot?.premiumStatus === "premium" && nextSnapshot && !hasVerifiedNewStatus) {
       return { isPremium: false, isChecked: false }
     }
     premiumCache = { checkedAt: Date.now(), value: isPremium }
@@ -287,7 +277,7 @@ const getFABStyle = () => {
   const style = getOrCreateStyle(FAB_STYLE_ID)
   if (!style.textContent) {
     const site = detectCurrentSite()
-    const elements = [FAB_THEME_BTN_CLASS, FAB_WIDGET_BTN_CLASS, FAB_TOOLTIP_CLASS].map((item) => `.${item}`).join(', ')
+    const elements = [FAB_THEME_BTN_CLASS, FAB_WIDGET_BTN_CLASS, FAB_TOOLTIP_CLASS].map((item) => `.${item}`).join(", ")
 
     const darkClass = SITE_SELECTORS[site]?.darkClass
     const darkSelectors = mapSelectors(elements, { prefix: `${darkClass} ` })
@@ -424,9 +414,8 @@ const mountToastContainer = () => {
 
 const convertToDataUrl = async (url: string): Promise<string> =>
   new Promise((resolve) => {
-    chrome.runtime.sendMessage(
-      { type: "FETCH_IMAGE_AS_DATA_URL", url },
-      (response) => resolve(response?.success ? response.dataUrl : "")
+    chrome.runtime.sendMessage({ type: "FETCH_IMAGE_AS_DATA_URL", url }, (response) =>
+      resolve(response?.success ? response.dataUrl : "")
     )
   })
 
@@ -445,10 +434,7 @@ const getPaletteData = async (bgUrl: string): Promise<ThemeConfig> => {
   }
 }
 
-const normalizeCustomThemes = async (
-  customThemes: CustomTheme[],
-  selectedCustomThemeId: string
-) => {
+const normalizeCustomThemes = async (customThemes: CustomTheme[], selectedCustomThemeId: string) => {
   const source = customThemes.find(({ id }) => id === selectedCustomThemeId) ?? customThemes[0]
   if (!source) return null
   const theme = clearAnimatedBgUrl(source)
@@ -524,7 +510,8 @@ const getCustomThemeData = async (): Promise<ThemeConfig> => {
   const { theme: customTheme } = await getSelectedCustomTheme()
   if (!customTheme) return EMPTY_THEME
 
-  const bgUrl = sanitizeCustomBgUrl(customTheme.bgUrl) ||
+  const bgUrl =
+    sanitizeCustomBgUrl(customTheme.bgUrl) ||
     (customTheme.bgImageId ? await getImageDataUrl(customTheme.bgImageId).catch(() => "") : "")
 
   return {
@@ -604,7 +591,13 @@ const getInitialWidgetFrame = (index: number): WidgetFrame => {
 }
 
 type ViewportSize = { width: number; height: number }
-type PixelWidgetFrame = { x: number; y: number; width: number; height: number; rotation?: number }
+type PixelWidgetFrame = {
+  x: number
+  y: number
+  width: number
+  height: number
+  rotation?: number
+}
 type PixelWidgetFrameMap = Record<string, PixelWidgetFrame>
 
 const getViewportSize = (): ViewportSize => ({
@@ -620,18 +613,23 @@ const toPixelWidgetFrame = (frame: WidgetFrame, viewport: ViewportSize): PixelWi
   rotation: frame.rotation
 })
 
-const toRelativeWidgetFrame = (frame: PixelWidgetFrame, viewport: ViewportSize, minSize: WidgetSize): WidgetFrame => clampWidgetFrameToViewport({
-  xRatio: frame.x / viewport.width,
-  yRatio: frame.y / viewport.height,
-  widthRatio: frame.width / viewport.width,
-  heightRatio: frame.height / viewport.height,
-  rotation: frame.rotation
-}, minSize)
+const toRelativeWidgetFrame = (frame: PixelWidgetFrame, viewport: ViewportSize, minSize: WidgetSize): WidgetFrame =>
+  clampWidgetFrameToViewport(
+    {
+      xRatio: frame.x / viewport.width,
+      yRatio: frame.y / viewport.height,
+      widthRatio: frame.width / viewport.width,
+      heightRatio: frame.height / viewport.height,
+      rotation: frame.rotation
+    },
+    minSize
+  )
 
-const clampPixelWidgetFrameToViewport = (frame: PixelWidgetFrame, minSize: WidgetSize, viewport: ViewportSize) => toPixelWidgetFrame(toRelativeWidgetFrame(frame, viewport, minSize), viewport)
+const clampPixelWidgetFrameToViewport = (frame: PixelWidgetFrame, minSize: WidgetSize, viewport: ViewportSize) =>
+  toPixelWidgetFrame(toRelativeWidgetFrame(frame, viewport, minSize), viewport)
 
 const getWidgetTransform = (frame: PixelWidgetFrame, viewport: ViewportSize) =>
-  `translate(${frame.x / viewport.width * 100}vw, ${frame.y / viewport.height * 100}vh) rotate(${normalizeWidgetRotation(frame.rotation)}deg)`
+  `translate(${(frame.x / viewport.width) * 100}vw, ${(frame.y / viewport.height) * 100}vh) rotate(${normalizeWidgetRotation(frame.rotation)}deg)`
 
 const normalizeWidgetRotation = (rotation: number) => {
   const normalized = rotation % 360
@@ -708,11 +706,7 @@ const readImageFileAsDataUrl = (file: File) =>
     reader.readAsDataURL(file)
   })
 
-const controlButton = (
-  icon: string,
-  onClick: () => void,
-  disabled = false
-) =>
+const controlButton = (icon: string, onClick: () => void, disabled = false) =>
   createElement(
     "button",
     {
@@ -739,7 +733,7 @@ type TodoItem = {
 
 const getTodoItems = (content?: JSONContent): TodoItem[] =>
   (content?.content || [])
-    .flatMap((node) => node.type === "taskList" ? node.content || [] : [])
+    .flatMap((node) => (node.type === "taskList" ? node.content || [] : []))
     .map((node) => ({
       checked: node.attrs?.checked === true,
       text: node.content?.[0]?.content?.[0]?.text || ""
@@ -749,23 +743,24 @@ const createTodoDoc = (items: TodoItem[]): JSONContent => ({
   type: "doc",
   content: items.length
     ? [
-      {
-        type: "taskList",
-        content: items.map((item) => ({
-          type: "taskItem",
-          attrs: { checked: item.checked },
-          content: [{ type: "paragraph", content: item.text ? [{ type: "text", text: item.text }] : [] }]
-        }))
-      }
-    ]
+        {
+          type: "taskList",
+          content: items.map((item) => ({
+            type: "taskItem",
+            attrs: { checked: item.checked },
+            content: [
+              {
+                type: "paragraph",
+                content: item.text ? [{ type: "text", text: item.text }] : []
+              }
+            ]
+          }))
+        }
+      ]
     : EMPTY_DOC.content
 })
 
-const textWidgetButton = (
-  icon: string,
-  onClick: () => void,
-  active = false
-) =>
+const textWidgetButton = (icon: string, onClick: () => void, active = false) =>
   createElement(
     "button",
     {
@@ -783,7 +778,10 @@ const textWidgetButton = (
 
 function NoteWidgetContent({ widgetId }: { widgetId: string }) {
   const [content, setContent] = useStorage<JSONContent>(
-    { key: `${TEXT_WIDGET_STATE_STORAGE_KEY}:${widgetId}`, instance: localStorageInstance },
+    {
+      key: `${TEXT_WIDGET_STATE_STORAGE_KEY}:${widgetId}`,
+      instance: localStorageInstance
+    },
     EMPTY_DOC
   )
   const pendingContentRef = useRef<JSONContent | null>(null)
@@ -817,10 +815,13 @@ function NoteWidgetContent({ widgetId }: { widgetId: string }) {
     setContentRef.current = setContent
   }, [setContent])
 
-  React.useEffect(() => () => {
-    if (saveTimeoutRef.current !== null) window.clearTimeout(saveTimeoutRef.current)
-    if (pendingContentRef.current) setContentRef.current(pendingContentRef.current)
-  }, [])
+  React.useEffect(
+    () => () => {
+      if (saveTimeoutRef.current !== null) window.clearTimeout(saveTimeoutRef.current)
+      if (pendingContentRef.current) setContentRef.current(pendingContentRef.current)
+    },
+    []
+  )
 
   return createElement(
     "div",
@@ -828,16 +829,35 @@ function NoteWidgetContent({ widgetId }: { widgetId: string }) {
       className: "decoai-note-widget",
       onPointerDown: (e) => e.stopPropagation()
     },
-    createElement(EditorContent, { editor, className: "decoai-note-editor-wrap" }),
+    createElement(EditorContent, {
+      editor,
+      className: "decoai-note-editor-wrap"
+    }),
     createElement(
       "div",
       { className: "decoai-note-toolbar" },
       textWidgetButton("lucide:bold", () => editor?.chain().focus().toggleBold().run(), editor?.isActive("bold")),
       textWidgetButton("lucide:italic", () => editor?.chain().focus().toggleItalic().run(), editor?.isActive("italic")),
-      textWidgetButton("lucide:underline", () => editor?.chain().focus().toggleUnderline().run(), editor?.isActive("underline")),
-      textWidgetButton("lucide:strikethrough", () => editor?.chain().focus().toggleStrike().run(), editor?.isActive("strike")),
-      textWidgetButton("lucide:list", () => editor?.chain().focus().toggleBulletList().run(), editor?.isActive("bulletList")),
-      textWidgetButton("lucide:list-ordered", () => editor?.chain().focus().toggleOrderedList().run(), editor?.isActive("orderedList"))
+      textWidgetButton(
+        "lucide:underline",
+        () => editor?.chain().focus().toggleUnderline().run(),
+        editor?.isActive("underline")
+      ),
+      textWidgetButton(
+        "lucide:strikethrough",
+        () => editor?.chain().focus().toggleStrike().run(),
+        editor?.isActive("strike")
+      ),
+      textWidgetButton(
+        "lucide:list",
+        () => editor?.chain().focus().toggleBulletList().run(),
+        editor?.isActive("bulletList")
+      ),
+      textWidgetButton(
+        "lucide:list-ordered",
+        () => editor?.chain().focus().toggleOrderedList().run(),
+        editor?.isActive("orderedList")
+      )
     )
   )
 }
@@ -845,7 +865,10 @@ function NoteWidgetContent({ widgetId }: { widgetId: string }) {
 function TodoWidgetContent({ widgetId }: { widgetId: string }) {
   const composerRef = useRef<HTMLInputElement | null>(null)
   const [content, setContent] = useStorage<JSONContent>(
-    { key: `${TEXT_WIDGET_STATE_STORAGE_KEY}:${widgetId}`, instance: localStorageInstance },
+    {
+      key: `${TEXT_WIDGET_STATE_STORAGE_KEY}:${widgetId}`,
+      instance: localStorageInstance
+    },
     EMPTY_DOC
   )
   const editor = useEditor({
@@ -946,13 +969,20 @@ function TodoWidgetContent({ widgetId }: { widgetId: string }) {
                 setTodoItems(todoItems.filter((_, itemIndex) => itemIndex !== index))
               }
             },
-            createElement(Icon, { icon: "lucide:circle-minus", height: "50%", "aria-hidden": "true" })
+            createElement(Icon, {
+              icon: "lucide:circle-minus",
+              height: "50%",
+              "aria-hidden": "true"
+            })
           )
         )
       ),
       createElement(
         "div",
-        { key: "todo-composer", className: "decoai-todo-item decoai-todo-composer" },
+        {
+          key: "todo-composer",
+          className: "decoai-todo-item decoai-todo-composer"
+        },
         createElement(
           "div",
           { className: "decoai-todo-check-label" },
@@ -986,7 +1016,11 @@ function TodoWidgetContent({ widgetId }: { widgetId: string }) {
               addTodo(true)
             }
           },
-          createElement(Icon, { icon: "lucide:circle-plus", height: "50%", "aria-hidden": "true" })
+          createElement(Icon, {
+            icon: "lucide:circle-plus",
+            height: "50%",
+            "aria-hidden": "true"
+          })
         )
       )
     )
@@ -1026,11 +1060,7 @@ function DdayWidgetContent({ widgetId }: { widgetId: string }) {
       className: "decoai-dday-widget",
       onPointerDown: (e) => e.stopPropagation()
     },
-    createElement(
-      "div",
-      { className: "decoai-dday-display" },
-      getDdayLabel(targetDate, today)
-    ),
+    createElement("div", { className: "decoai-dday-display" }, getDdayLabel(targetDate, today)),
     createElement(
       "label",
       {
@@ -1040,7 +1070,11 @@ function DdayWidgetContent({ widgetId }: { widgetId: string }) {
         onPointerUp: (e) => e.stopPropagation(),
         onClick: (e) => e.stopPropagation()
       },
-      createElement(Icon, { icon: "lucide:calendar-days", height: "75%", "aria-hidden": "true" }),
+      createElement(Icon, {
+        icon: "lucide:calendar-days",
+        height: "75%",
+        "aria-hidden": "true"
+      }),
       createElement("input", {
         type: "date",
         className: "decoai-dday-input",
@@ -1080,19 +1114,15 @@ function TimerWidgetContent({ widgetId }: { widgetId: string }) {
   React.useEffect(() => {
     const nextRemaining = getSyncedTimerSeconds(timerState)
     timer.restart(expiryTimestamp(nextRemaining), timerState.timerRunning && nextRemaining > 0)
-  }, [
-    timerState.timerEndAt,
-    timerState.timerRemainingSeconds,
-    timerState.timerRunning
-  ])
+  }, [timerState.timerEndAt, timerState.timerRemainingSeconds, timerState.timerRunning])
 
   const timerDisplay = getTimerDisplayParts(timer)
 
-  const setTimerTimePart = (
-    part: "hours" | "minutes" | "seconds",
-    value: string
-  ) => {
-    const nextParts = { ...timerDisplay, [part]: clampNumber(value, 0, 59, timer[part]) }
+  const setTimerTimePart = (part: "hours" | "minutes" | "seconds", value: string) => {
+    const nextParts = {
+      ...timerDisplay,
+      [part]: clampNumber(value, 0, 59, timer[part])
+    }
     const nextSeconds = nextParts.hours * 3600 + nextParts.minutes * 60 + nextParts.seconds
     const shouldRun = Boolean(timer.isRunning && nextSeconds > 0)
 
@@ -1145,18 +1175,16 @@ function TimerWidgetContent({ widgetId }: { widgetId: string }) {
     }))
   }
 
-  const timeInput = (
-    part: "hours" | "minutes" | "seconds",
-    value: number
-  ) => createElement("input", {
-    className: "decoai-time-input decoai-timer-input",
-    type: "number",
-    min: 0,
-    max: 59,
-    value: String(value).padStart(2, "0"),
-    disabled: timer.isRunning,
-    onChange: (e) => setTimerTimePart(part, e.target.value)
-  })
+  const timeInput = (part: "hours" | "minutes" | "seconds", value: number) =>
+    createElement("input", {
+      className: "decoai-time-input decoai-timer-input",
+      type: "number",
+      min: 0,
+      max: 59,
+      value: String(value).padStart(2, "0"),
+      disabled: timer.isRunning,
+      onChange: (e) => setTimerTimePart(part, e.target.value)
+    })
 
   return createElement(
     "div",
@@ -1220,10 +1248,7 @@ function StopwatchWidgetContent({ widgetId }: { widgetId: string }) {
       return
     }
 
-    stopwatch.reset(
-      offsetTimestamp(getSyncedStopwatchMilliseconds(stopwatchState)),
-      stopwatchState.stopwatchRunning
-    )
+    stopwatch.reset(offsetTimestamp(getSyncedStopwatchMilliseconds(stopwatchState)), stopwatchState.stopwatchRunning)
   }, [
     stopwatchState.stopwatchElapsedMilliseconds,
     stopwatchState.stopwatchRunning,
@@ -1311,14 +1336,19 @@ function StopwatchWidgetContent({ widgetId }: { widgetId: string }) {
 
 function PhotoWidgetContent({
   widgetId,
-  isRemovingBG = false,
+  onBgRemovalChange,
+  disabled = false
 }: {
   widgetId: string
-  isRemovingBG?: boolean
+  onBgRemovalChange?: (used: boolean) => void
+  disabled?: boolean
 }) {
   const uploadRef = useRef<HTMLInputElement>(null)
   const [photoState, setPhotoState] = useStorage<PhotoWidgetState>(
-    { key: `${PHOTO_WIDGET_STATE_STORAGE_KEY}:${widgetId}`, instance: localStorageInstance },
+    {
+      key: `${PHOTO_WIDGET_STATE_STORAGE_KEY}:${widgetId}`,
+      instance: localStorageInstance
+    },
     DEFAULT_PHOTO_WIDGET_STATE
   )
   const [imageUrl, setImageUrl] = useState("")
@@ -1339,10 +1369,17 @@ function PhotoWidgetContent({
         if (active) setImageUrl("")
       })
 
-    return () => { active = false }
+    return () => {
+      active = false
+    }
   }, [photoState?.imageId])
 
+  React.useEffect(() => {
+    onBgRemovalChange?.(hasRemovedBg(photoState))
+  }, [photoState?.originalImageId])
+
   const uploadImage = async (file?: File) => {
+    if (disabled) return
     if (!file) {
       toast.error(t("error_fileRequired"))
       return
@@ -1367,8 +1404,14 @@ function PhotoWidgetContent({
     const nextImageUrl = await readImageFileAsDataUrl(file)
     if (!nextImageUrl) return
     const imageId = await saveImageDataUrl(nextImageUrl)
-    if (photoState?.imageId) void deleteImageData(photoState.imageId)
-    setPhotoState({ imageId, animated })
+    getBgImageIds(photoState).forEach((previousImageId) => void deleteImageData(previousImageId))
+    const nextPhotoState: PhotoWidgetState = {
+      imageId,
+      animated,
+      originalImageId: "",
+      originalAnimated: false
+    }
+    setPhotoState(nextPhotoState)
   }
 
   const uploadButton = createElement(
@@ -1376,15 +1419,20 @@ function PhotoWidgetContent({
     {
       type: "button",
       className: "decoai-widget-control decoai-photo-widget-upload",
+      disabled,
       onPointerDown: (e) => e.stopPropagation(),
       onPointerUp: (e) => e.stopPropagation(),
       onClick: (e) => {
         e.preventDefault()
         e.stopPropagation()
-        uploadRef.current?.click()
+        if (!disabled) uploadRef.current?.click()
       }
     },
-    createElement(Icon, { icon: "lucide:image-up", height: "50%", "aria-hidden": "true" })
+    createElement(Icon, {
+      icon: "lucide:image-up",
+      height: "50%",
+      "aria-hidden": "true"
+    })
   )
 
   return createElement(
@@ -1394,6 +1442,7 @@ function PhotoWidgetContent({
       ref: uploadRef,
       type: "file",
       accept: "image/*",
+      disabled,
       onChange: (e) => {
         void uploadImage(e.currentTarget.files?.[0])
         e.currentTarget.value = ""
@@ -1402,26 +1451,18 @@ function PhotoWidgetContent({
     }),
     imageUrl
       ? createElement(
-        React.Fragment,
-        null,
-        createElement("img", {
-          className: "decoai-photo-widget-image",
-          src: imageUrl,
-          draggable: false
-        }),
-        !isRemovingBG
-          ? createElement(
-            "div",
-            { className: "decoai-photo-widget-upload-overlay" },
-            uploadButton
-          )
-          : null
-      )
-      : createElement(
-        "div",
-        { className: "decoai-photo-widget-placeholder" },
-        uploadButton
-      )
+          React.Fragment,
+          null,
+          createElement("img", {
+            className: "decoai-photo-widget-image",
+            src: imageUrl,
+            draggable: false
+          }),
+          !disabled ? createElement("div", { className: "decoai-photo-widget-upload-overlay" }, uploadButton) : null
+        )
+      : !disabled
+        ? createElement("div", { className: "decoai-photo-widget-placeholder" }, uploadButton)
+        : null
   )
 }
 
@@ -1432,40 +1473,35 @@ function WidgetOverlayApp() {
     WIDGET_INSTANCES_STORAGE_KEY,
     DEFAULT_WIDGET_INSTANCES
   )
-  const [layoutOptions] = useStorage<WidgetLayoutOptions>(
-    WIDGET_LAYOUT_STORAGE_KEY,
-    DEFAULT_WIDGET_LAYOUT
-  )
-  const [frameMap, setFrameMap] = useStorage<WidgetFrameMap>(
-    WIDGET_FRAME_STORAGE_KEY,
-    {}
-  )
+  const [layoutOptions] = useStorage<WidgetLayoutOptions>(WIDGET_LAYOUT_STORAGE_KEY, DEFAULT_WIDGET_LAYOUT)
+  const [frameMap, setFrameMap] = useStorage<WidgetFrameMap>(WIDGET_FRAME_STORAGE_KEY, {})
   const [viewportSize, setViewportSize] = useState(getViewportSize)
   const [editingWidgetId, setEditingWidgetId] = useState<string | null>(null)
-  const [removingBGWidgetIds, setRemovingBGWidgetIds] = useState<Record<string, boolean>>({})
+  const [removingBgWidgetIds, setRemovingBgWidgetIds] = useState<Record<string, boolean>>({})
+  const [bgRemovedWidgetIds, setBgRemovedWidgetIds] = useState<Record<string, boolean>>({})
   const [selectedTarget, setSelectedTarget] = useState<HTMLDivElement | null>(null)
   const widgetRefs = useRef<Record<string, HTMLDivElement | null>>({})
-  const removeBGToastIdsRef = useRef<Record<string, ReturnType<typeof toast.loading>>>({})
+  const removeBgToastIdsRef = useRef<Record<string, ReturnType<typeof toast.loading>>>({})
   const liveFrameRef = useRef<Partial<PixelWidgetFrameMap>>({})
   const interactionStartFrameRef = useRef<PixelWidgetFrame | null>(null)
-  const layout = { ...DEFAULT_WIDGET_LAYOUT, ...(previewLayout || layoutOptions) }
+  const layout = {
+    ...DEFAULT_WIDGET_LAYOUT,
+    ...(previewLayout || layoutOptions)
+  }
   const siteDefaultTextColor = useMemo(getSiteDefaultTextColor, [isDarkMode])
   const visibleWidgetItems = widgetItems || DEFAULT_WIDGET_INSTANCES
   const selectedWidget = visibleWidgetItems.find((item) => item.id === editingWidgetId)
   const frames = useMemo(
     () =>
-      visibleWidgetItems.reduce(
-        (nextFrames, item, index) => {
-          const fallback = getInitialWidgetFrame(index)
-          const relativeFrame = clampWidgetFrameToViewport(
-            { ...fallback, ...frameMap?.[item.id] },
-            item.type === "photo" ? PHOTO_WIDGET_MIN_SIZE : DEFAULT_WIDGET_MIN_SIZE
-          )
-          nextFrames[item.id] = toPixelWidgetFrame(relativeFrame, viewportSize)
-          return nextFrames
-        },
-        {} as PixelWidgetFrameMap
-      ),
+      visibleWidgetItems.reduce((nextFrames, item, index) => {
+        const fallback = getInitialWidgetFrame(index)
+        const relativeFrame = clampWidgetFrameToViewport(
+          { ...fallback, ...frameMap?.[item.id] },
+          item.type === "photo" ? PHOTO_WIDGET_MIN_SIZE : DEFAULT_WIDGET_MIN_SIZE
+        )
+        nextFrames[item.id] = toPixelWidgetFrame(relativeFrame, viewportSize)
+        return nextFrames
+      }, {} as PixelWidgetFrameMap),
     [frameMap, viewportSize, visibleWidgetItems]
   )
   React.useLayoutEffect(() => {
@@ -1474,7 +1510,7 @@ function WidgetOverlayApp() {
       window.cancelAnimationFrame(animationFrame)
       animationFrame = window.requestAnimationFrame(() => {
         const next = getViewportSize()
-        setViewportSize((current) => current.width === next.width && current.height === next.height ? current : next)
+        setViewportSize((current) => (current.width === next.width && current.height === next.height ? current : next))
       })
     }
     const observer = new ResizeObserver(updateViewportSize)
@@ -1503,7 +1539,9 @@ function WidgetOverlayApp() {
         const photoState = await localStorageInstance.get<PhotoWidgetState>(
           `${PHOTO_WIDGET_STATE_STORAGE_KEY}:${item.id}`
         )
-        if (photoState?.animated === true) removablePhotoWidgetIds.push(item.id)
+        if (photoState?.animated === true || photoState?.originalAnimated === true) {
+          removablePhotoWidgetIds.push(item.id)
+        }
       }
 
       if (!hasMultipleWidgets(items) && removablePhotoWidgetIds.length === 0) return
@@ -1523,8 +1561,9 @@ function WidgetOverlayApp() {
           return nextFrameMap
         })
         removablePhotoWidgetIds.forEach((id) => {
-          void localStorageInstance.get<PhotoWidgetState>(`${PHOTO_WIDGET_STATE_STORAGE_KEY}:${id}`)
-            .then((photoState) => { if (photoState?.imageId) void deleteImageData(photoState.imageId) })
+          void localStorageInstance
+            .get<PhotoWidgetState>(`${PHOTO_WIDGET_STATE_STORAGE_KEY}:${id}`)
+            .then((photoState) => getBgImageIds(photoState).forEach((imageId) => void deleteImageData(imageId)))
           void localStorageInstance.remove(`${PHOTO_WIDGET_STATE_STORAGE_KEY}:${id}`)
         })
         toast.error(t("pro_animatedSticker"), { toastId: "normalizeSticker" })
@@ -1538,15 +1577,21 @@ function WidgetOverlayApp() {
       setPreviewLayout(customEvent.detail)
     }
     window.addEventListener(WIDGET_LAYOUT_PREVIEW_EVENT, onWidgetLayoutPreview)
-    return () =>
-      window.removeEventListener(WIDGET_LAYOUT_PREVIEW_EVENT, onWidgetLayoutPreview)
+    return () => window.removeEventListener(WIDGET_LAYOUT_PREVIEW_EVENT, onWidgetLayoutPreview)
   }, [])
 
   React.useEffect(() => {
     const updateDarkMode = () => setIsDarkMode(isWidgetDarkMode())
     const observer = new MutationObserver(updateDarkMode)
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-mode"] })
-    if (document.body) observer.observe(document.body, { attributes: true, attributeFilter: ["class"] })
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class", "data-mode"]
+    })
+    if (document.body)
+      observer.observe(document.body, {
+        attributes: true,
+        attributeFilter: ["class"]
+      })
 
     updateDarkMode()
     return () => observer.disconnect()
@@ -1559,9 +1604,10 @@ function WidgetOverlayApp() {
       if (target?.closest(".decoai-widget-card") || target?.closest(".moveable-control-box")) return
       setEditingWidgetId(null)
     }
-    document.addEventListener("pointerdown", onDocumentPointerDown, { capture: true })
-    return () =>
-      document.removeEventListener("pointerdown", onDocumentPointerDown, true)
+    document.addEventListener("pointerdown", onDocumentPointerDown, {
+      capture: true
+    })
+    return () => document.removeEventListener("pointerdown", onDocumentPointerDown, true)
   }, [editingWidgetId])
 
   const getWidgetStyle = (item: WidgetInstance): CSSProperties => {
@@ -1569,15 +1615,15 @@ function WidgetOverlayApp() {
     const opacity = clampNumber(layout.opacity, 0, 1, 0.8)
     const textColor = sanitizeColor(layout.textColor) || siteDefaultTextColor
     const borderColor = sanitizeColor(layout.borderColor)
-    const backgroundValue = sanitizeBg(layout.backgroundColor)
-    const background = backgroundValue || (isDarkMode ? "rgb(24, 24, 24)" : "rgb(231, 231, 231)")
+    const bgValue = sanitizeBg(layout.bgColor)
+    const bg = bgValue || (isDarkMode ? "rgb(24, 24, 24)" : "rgb(231, 231, 231)")
 
     return {
       position: "absolute",
       left: 0,
       top: 0,
-      width: `${frame.width / viewportSize.width * 100}vw`,
-      height: `${frame.height / viewportSize.height * 100}vh`,
+      width: `${(frame.width / viewportSize.width) * 100}vw`,
+      height: `${(frame.height / viewportSize.height) * 100}vh`,
       transform: getWidgetTransform(frame, viewportSize),
       background: "transparent",
       color: textColor,
@@ -1587,10 +1633,12 @@ function WidgetOverlayApp() {
       pointerEvents: "auto",
       zIndex: editingWidgetId === item.id ? 2 : 1,
       willChange: "transform, width, height",
-      "--decoai-widget-bg": background,
+      "--decoai-widget-bg": bg,
       "--decoai-widget-bg-opacity": opacity,
       "--decoai-widget-text": layout.textColor || "#66cdaa",
-      "--decoai-widget-shadow": borderColor ? `inset 0 2px 16px color-mix(in srgb, ${borderColor} 30%, transparent)` : "none"
+      "--decoai-widget-shadow": borderColor
+        ? `inset 0 2px 16px color-mix(in srgb, ${borderColor} 30%, transparent)`
+        : "none"
     } as CSSProperties
   }
 
@@ -1611,11 +1659,11 @@ function WidgetOverlayApp() {
   const deleteWidget = async (item: WidgetInstance) => {
     const stateKey = getWidgetStateKey(item)
     if (stateKey) {
-      const stateStorage = item.type === "note" || item.type === "todo" || item.type === "photo"
-        ? localStorageInstance : storage
+      const stateStorage =
+        item.type === "note" || item.type === "todo" || item.type === "photo" ? localStorageInstance : storage
       const photoState = item.type === "photo" ? await localStorageInstance.get<PhotoWidgetState>(stateKey) : null
       await stateStorage.remove(stateKey)
-      if (photoState?.imageId) void deleteImageData(photoState.imageId)
+      getBgImageIds(photoState).forEach((imageId) => void deleteImageData(imageId))
     }
     setWidgetItems((prev) => (prev || DEFAULT_WIDGET_INSTANCES).filter((widget) => widget.id !== item.id))
     setFrameMap((prev) => {
@@ -1623,12 +1671,10 @@ function WidgetOverlayApp() {
       return nextFrameMap
     })
     if (item.type === "photo") {
-      const toastId = removeBGToastIdsRef.current[item.id]
-      if (toastId) {
-        toast.dismiss(toastId)
-        delete removeBGToastIdsRef.current[item.id]
-      }
-      setRemovingBGWidgetIds((prev) => {
+      const toastId = removeBgToastIdsRef.current[item.id]
+      if (toastId) toast.dismiss(toastId)
+      delete removeBgToastIdsRef.current[item.id]
+      setRemovingBgWidgetIds((prev) => {
         const { [item.id]: _removed, ...next } = prev
         return next
       })
@@ -1637,9 +1683,9 @@ function WidgetOverlayApp() {
   }
 
   const toggleWidgetLock = (id: string) => {
-    setWidgetItems((prev) => (prev || DEFAULT_WIDGET_INSTANCES).map((item) =>
-      item.id === id ? { ...item, locked: !item.locked } : item
-    ))
+    setWidgetItems((prev) =>
+      (prev || DEFAULT_WIDGET_INSTANCES).map((item) => (item.id === id ? { ...item, locked: !item.locked } : item))
+    )
   }
 
   const getWidgetStateKey = (item: WidgetInstance) => {
@@ -1660,55 +1706,63 @@ function WidgetOverlayApp() {
     }
   }
 
-  const onRemoveBGClick = async (item: WidgetInstance) => {
-    if (removingBGWidgetIds[item.id]) return
+  const togglePhotoWidgetBg = async (item: WidgetInstance) => {
+    if (removingBgWidgetIds[item.id]) return
+    const finish = () =>
+      setRemovingBgWidgetIds((prev) => {
+        const { [item.id]: _removed, ...next } = prev
+        return next
+      })
 
-    const photoState = await localStorageInstance.get<PhotoWidgetState>(
-      `${PHOTO_WIDGET_STATE_STORAGE_KEY}:${item.id}`
-    )
-    const imageUrl = photoState?.imageId ? await getImageDataUrl(photoState.imageId).catch(() => "") : ""
-    if (!imageUrl) {
+    const stateKey = `${PHOTO_WIDGET_STATE_STORAGE_KEY}:${item.id}`
+    const photoState = await localStorageInstance.get<PhotoWidgetState>(stateKey)
+    if (!photoState?.imageId) {
       toast.error(t("error_fileRequired"))
+      return
+    }
+
+    setRemovingBgWidgetIds((prev) => ({ ...prev, [item.id]: true }))
+    if (hasRemovedBg(photoState)) {
+      try {
+        await localStorageInstance.set(stateKey, restoreBgState(photoState))
+        if (photoState.imageId !== photoState.originalImageId) {
+          void deleteImageData(photoState.imageId)
+        }
+      } catch {
+        toast.error(t("error_removeBG"))
+      } finally {
+        finish()
+      }
       return
     }
 
     const { isPremium, isChecked } = await getPremiumStatus()
     if (!isPremium) {
       if (isChecked) toast.error(t("pro_removeBG"))
+      finish()
+      return
+    }
+
+    const imageUrl = await getImageDataUrl(photoState.imageId).catch(() => "")
+    if (!imageUrl) {
+      toast.error(t("error_fileRequired"))
+      finish()
       return
     }
 
     const toastId = toast.loading(t("loading_removeBG"))
-    removeBGToastIdsRef.current[item.id] = toastId
-    setRemovingBGWidgetIds((prev) => ({ ...prev, [item.id]: true }))
-
+    removeBgToastIdsRef.current[item.id] = toastId
     try {
-      const result = await new Promise<string>((resolve, reject) => {
-        chrome.runtime.sendMessage(
-          { type: "REMOVE_BACKGROUND_IMAGE", imageUrl },
-          (response) => {
-            if (chrome.runtime.lastError) {
-              reject(new Error(chrome.runtime.lastError.message))
-              return
-            }
-            if (!response?.success) {
-              reject(new Error(response?.error || "Failed to remove background"))
-              return
-            }
-            resolve(response.dataUrl)
-          }
-        )
-      })
+      const result = await removeImageBg(imageUrl)
 
-      const latestPhotoState = await localStorageInstance.get<PhotoWidgetState>(
-        `${PHOTO_WIDGET_STATE_STORAGE_KEY}:${item.id}`
-      )
-      if (!latestPhotoState) return
+      const latestState = await localStorageInstance.get<PhotoWidgetState>(stateKey)
+      if (!latestState || latestState.imageId !== photoState.imageId) {
+        toast.dismiss(toastId)
+        return
+      }
 
       const imageId = await saveImageDataUrl(result)
-      if (latestPhotoState.imageId) void deleteImageData(latestPhotoState.imageId)
-      await localStorageInstance.set(`${PHOTO_WIDGET_STATE_STORAGE_KEY}:${item.id}`, { imageId, animated: false })
-
+      await localStorageInstance.set(stateKey, removeBgFromState(latestState, { imageId }))
       toast.update(toastId, {
         render: t("success_removeBG"),
         type: "success",
@@ -1717,11 +1771,6 @@ function WidgetOverlayApp() {
         closeOnClick: null
       })
     } catch {
-      const latestPhotoState = await localStorageInstance.get<PhotoWidgetState>(
-        `${PHOTO_WIDGET_STATE_STORAGE_KEY}:${item.id}`
-      )
-      if (!latestPhotoState) return
-
       toast.update(toastId, {
         render: t("error_removeBG"),
         type: "error",
@@ -1729,13 +1778,9 @@ function WidgetOverlayApp() {
         autoClose: null,
         closeOnClick: null
       })
-    }
-    finally {
-      delete removeBGToastIdsRef.current[item.id]
-      setRemovingBGWidgetIds((prev) => {
-        const { [item.id]: _removed, ...next } = prev
-        return next
-      })
+    } finally {
+      delete removeBgToastIdsRef.current[item.id]
+      finish()
     }
   }
 
@@ -1754,13 +1799,14 @@ function WidgetOverlayApp() {
       const widgetMeta = WIDGET_LIST.find((widget) => widget.key === item.type)
       if (!widgetMeta) return null
       const isPhotoWidget = item.type === "photo"
-      const isRemovingBG = isPhotoWidget && Boolean(removingBGWidgetIds[item.id])
+      const isRemovingBg = Boolean(removingBgWidgetIds[item.id])
+      const isBgRemoved = Boolean(bgRemovedWidgetIds[item.id])
       const isPositionLocked = item.locked === true
       return createElement(
         "div",
         {
           key: item.id,
-          ref: (node: HTMLDivElement | null) => widgetRefs.current[item.id] = node,
+          ref: (node: HTMLDivElement | null) => (widgetRefs.current[item.id] = node),
           className: `decoai-widget-card${isPhotoWidget ? " decoai-widget-card-photo" : ""}`,
           onPointerDown: () => setEditingWidgetId(item.id),
           onClick: (e) => {
@@ -1783,57 +1829,58 @@ function WidgetOverlayApp() {
           },
           !isPhotoWidget
             ? createElement(Icon, {
-              icon: `lucide:${widgetMeta.icon}`,
-              height: 16,
-              "aria-hidden": "true"
-            }) : null,
+                icon: `lucide:${widgetMeta.icon}`,
+                height: 16,
+                "aria-hidden": "true"
+              })
+            : null,
           !isPhotoWidget
             ? createElement(
-              "div",
-              {
-                className: "decoai-widget-title",
-                onPointerEnter: (e) => updateWidgetTitleOverflow(e.currentTarget),
-                style: {
-                  flex: 1,
-                  minWidth: 0,
-                  overflow: "hidden",
-                  userSelect: "none"
-                }
-              },
-              createElement(
-                "span",
+                "div",
                 {
-                  className: "decoai-widget-title__text",
-                  "data-title": item.name ?? t(widgetMeta.labelKey)
+                  className: "decoai-widget-title",
+                  onPointerEnter: (e) => updateWidgetTitleOverflow(e.currentTarget),
+                  style: {
+                    flex: 1,
+                    minWidth: 0,
+                    overflow: "hidden",
+                    userSelect: "none"
+                  }
                 },
-                item.name ?? t(widgetMeta.labelKey)
+                createElement(
+                  "span",
+                  {
+                    className: "decoai-widget-title__text",
+                    "data-title": item.name ?? t(widgetMeta.labelKey)
+                  },
+                  item.name ?? t(widgetMeta.labelKey)
+                )
               )
-            )
             : null,
           createElement(
             "div",
             { className: "decoai-widget-card__actions" },
             isPhotoWidget
               ? createElement(
-                "button",
-                {
-                  type: "button",
-                  className: "decoai-widget-card__action decoai-widget-card__edit",
-                  style: isRemovingBG ? { pointerEvents: "none" } : undefined,
-                  onPointerDown: (e) => e.stopPropagation(),
-                  onPointerUp: (e) => e.stopPropagation(),
-                  onClick: (e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    void onRemoveBGClick(item)
-                  }
-                },
-                createElement(Icon, {
-                  icon: isRemovingBG ? "line-md:loading-twotone-loop" : "lucide:sparkles",
-                  height: 16,
-                  "aria-hidden": "true"
-                })
-              )
+                  "button",
+                  {
+                    type: "button",
+                    className: "decoai-widget-card__action decoai-widget-card__edit",
+                    disabled: isRemovingBg,
+                    onPointerDown: (e) => e.stopPropagation(),
+                    onPointerUp: (e) => e.stopPropagation(),
+                    onClick: (e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      void togglePhotoWidgetBg(item)
+                    }
+                  },
+                  createElement(Icon, {
+                    icon: isBgRemoved ? "lucide:rotate-ccw" : "lucide:sparkles",
+                    height: 16,
+                    "aria-hidden": "true"
+                  })
+                )
               : null,
             createElement(
               "button",
@@ -1867,7 +1914,11 @@ function WidgetOverlayApp() {
                   deleteWidget(item)
                 }
               },
-              createElement(Icon, { icon: "lucide:trash-2", height: 16, "aria-hidden": "true" })
+              createElement(Icon, {
+                icon: "lucide:trash-2",
+                height: 16,
+                "aria-hidden": "true"
+              })
             )
           )
         ),
@@ -1876,7 +1927,27 @@ function WidgetOverlayApp() {
         item.type === "dday" ? createElement(DdayWidgetContent, { widgetId: item.id }) : null,
         item.type === "timer" ? createElement(TimerWidgetContent, { widgetId: item.id }) : null,
         item.type === "stopwatch" ? createElement(StopwatchWidgetContent, { widgetId: item.id }) : null,
-        item.type === "photo" ? createElement(PhotoWidgetContent, { widgetId: item.id, isRemovingBG }) : null
+        item.type === "photo"
+          ? createElement(PhotoWidgetContent, {
+              widgetId: item.id,
+              disabled: isRemovingBg,
+              onBgRemovalChange: (used: boolean) => {
+                if (bgRemovedWidgetIds[item.id] === used) return
+                setBgRemovedWidgetIds((prev) => ({ ...prev, [item.id]: used }))
+              }
+            })
+          : null,
+        isRemovingBg
+          ? createElement(
+              "div",
+              { style: LOADING_OVERLAY_STYLE },
+              createElement(Icon, {
+                icon: "line-md:loading-twotone-loop",
+                height: 48,
+                "aria-hidden": "true"
+              })
+            )
+          : null
       )
     }),
     createElement(Moveable, {
@@ -1900,7 +1971,7 @@ function WidgetOverlayApp() {
         right: viewportSize.width,
         bottom: viewportSize.height
       },
-      onDragStart: () => interactionStartFrameRef.current = editingWidgetId ? frames[editingWidgetId] : null,
+      onDragStart: () => (interactionStartFrameRef.current = editingWidgetId ? frames[editingWidgetId] : null),
       onDrag: (e) => {
         if (!editingWidgetId) return
         const frame = interactionStartFrameRef.current || frames[editingWidgetId]
@@ -1924,10 +1995,7 @@ function WidgetOverlayApp() {
       onResizeStart: (e) => {
         interactionStartFrameRef.current = editingWidgetId ? frames[editingWidgetId] : null
         const minSize = getWidgetMinSize(editingWidgetId)
-        e.setMin([
-          minSize.widthRatio * viewportSize.width,
-          minSize.heightRatio * viewportSize.height
-        ])
+        e.setMin([minSize.widthRatio * viewportSize.width, minSize.heightRatio * viewportSize.height])
         e.setMax([viewportSize.width, viewportSize.height])
       },
       onResize: (e) => {
@@ -1945,8 +2013,8 @@ function WidgetOverlayApp() {
           getWidgetMinSize(editingWidgetId),
           viewportSize
         )
-        e.target.style.width = `${nextFrame.width / viewportSize.width * 100}vw`
-        e.target.style.height = `${nextFrame.height / viewportSize.height * 100}vh`
+        e.target.style.width = `${(nextFrame.width / viewportSize.width) * 100}vw`
+        e.target.style.height = `${(nextFrame.height / viewportSize.height) * 100}vh`
         e.target.style.transform = getWidgetTransform(nextFrame, viewportSize)
         liveFrameRef.current[editingWidgetId] = nextFrame
       },
@@ -1960,7 +2028,10 @@ function WidgetOverlayApp() {
       onRotate: (e) => {
         if (!editingWidgetId) return
         const frame = interactionStartFrameRef.current || frames[editingWidgetId]
-        const nextFrame = { ...frame, rotation: normalizeWidgetRotation(e.rotation) }
+        const nextFrame = {
+          ...frame,
+          rotation: normalizeWidgetRotation(e.rotation)
+        }
         e.target.style.transform = getWidgetTransform(nextFrame, viewportSize)
         liveFrameRef.current[editingWidgetId] = nextFrame
       },
@@ -2442,9 +2513,7 @@ const mountWidgetOverlay = () => {
   widgetMounted = true
 }
 
-const setRouteScopedUiVisibility = (
-  site: SiteType | null = detectCurrentSite()
-) => {
+const setRouteScopedUiVisibility = (site: SiteType | null = detectCurrentSite()) => {
   const shouldShow = Boolean(site && isAllowedRoute(site))
   const fabRoot = document.getElementById(FAB_ROOT_ID)
   const widgetRoot = document.getElementById(WIDGET_ROOT_ID)
@@ -2621,25 +2690,9 @@ const generateCSS = (
   const darkSelectors = mapSelectors(elements, { prefix: `${darkClass} ` })
   const hoverSelectors = mapSelectors(elements, { suffix: ":hover" })
 
-  const position = customBgOptions?.position || "50% 50%"
-  const scaleX = customBgOptions?.scaleX === -1 ? -1 : 1
   const rotation = customBgOptions?.rotation || 0
-  const renderedPosition = getRenderedBackgroundPosition(position, rotation, scaleX)
-  const backgroundPosition = `${renderedPosition.x}% ${renderedPosition.y}%`
-  const isBackgroundSideways = rotation === 90 || rotation === 270
-  const isBackgroundFlipped = scaleX === -1
-  const backgroundTransform = (() => {
-    switch (rotation) {
-      case 90:
-        return `${isBackgroundFlipped ? "translate(100vw, 100vh)" : "translateX(100vw)"} rotate(90deg) scaleX(${scaleX}) translateZ(0)`
-      case 180:
-        return `${isBackgroundFlipped ? "translateY(100vh)" : "translate(100vw, 100vh)"} rotate(180deg) scaleX(${scaleX}) translateZ(0)`
-      case 270:
-        return `${isBackgroundFlipped ? "" : "translateY(100vh) "}rotate(270deg) scaleX(${scaleX}) translateZ(0)`
-      default:
-        return `${isBackgroundFlipped ? "translateX(100vw) " : ""}scaleX(${scaleX}) translateZ(0)`
-    }
-  })()
+  const isBgSideways = rotation === 90 || rotation === 270
+  const bgTransform = getBgTransform(customBgOptions)
   const invert = clampNumber(customBgOptions?.invert, 0, 1, 0)
   const grayscale = clampNumber(customBgOptions?.grayscale, 0, 1, 0)
   const brightness = clampNumber(customBgOptions?.brightness, 0, 5, 1)
@@ -2648,41 +2701,57 @@ const generateCSS = (
   const hideHeader = customBgOptions?.hideHeader ?? true
   const hideFooter = customBgOptions?.hideFooter ?? true
   const solidBgColor = sanitizeColor(bgColor)
-  const backgroundGradient = bgColor && !solidBgColor ? bgColor : ""
-  const backgroundImages = [bgUrl ? `url("${bgUrl}")` : "", backgroundGradient].filter(Boolean)
+  const bgGradient = bgColor && !solidBgColor ? bgColor : ""
+  const bgFill = solidBgColor || bgGradient || "transparent"
 
   const getVisibilityStyle = () => `
     ${hideHeader ? `${SITE_SELECTORS[site].header} { display: none !important; }` : ""}
-    ${hideFooter ? `${SITE_SELECTORS[site].footer} {
+    ${
+      hideFooter
+        ? `${SITE_SELECTORS[site].footer} {
       ${site === "chatgpt" ? "display: none !important;" : ""}
       font-size: 0 !important;
       line-height: normal !important;
-    }` : ""}
+    }`
+        : ""
+    }
   `
 
   const getBgStyle = () =>
     bgUrl || bgColor
       ? `
+      html body {
+        background: ${bgFill} !important;
+        background-attachment: fixed !important;
+        background-size: cover !important;
+      }
+      ${
+        bgUrl
+          ? `
       body::before {
-        content: ""; position: fixed; top: 0; left: 0;
-        width: ${isBackgroundSideways ? "100vh" : "100vw"};
-        height: ${isBackgroundSideways ? "100vw" : "100vh"};
-        background-image: ${backgroundImages.length ? backgroundImages.join(", ") : "none"} !important;
-        background-color: ${solidBgColor || "transparent"} !important;
-        background-position: ${backgroundPosition} !important;
+        content: ""; position: fixed; top: 50%; left: 50%;
+        width: ${isBgSideways ? "100vh" : "100vw"};
+        height: ${isBgSideways ? "100vw" : "100vh"};
+        background-image: url("${bgUrl}") !important;
+        background-color: transparent !important;
+        background-position: center !important;
         background-size: cover !important;
         background-repeat: no-repeat !important;
         z-index: 0 !important;
-        transform: ${backgroundTransform} !important;
-        transform-origin: top left !important;
+        transform: ${bgTransform} !important;
+        transform-origin: center !important;
         filter: invert(${invert}) grayscale(${grayscale}) brightness(${brightness}) !important;
+      }
+      `
+          : ""
       }
       ${container} { background-color: transparent !important; }
       ${site === "chatgpt" ? "#page-header, div::after { background-color: transparent !important; }" : ""}
       ${site === "gemini" ? ".input-gradient { background-color: transparent !important; } .input-gradient::before { content: none !important; }" : ""}
       ${site === "claude" ? 'header { background-color: transparent !important; } header > div:first-of-type { display: none !important } div[role="note"][data-disclaimer="true"] { background-color: transparent !important; }' : ""}
       ${site === "grok" ? "main > div > div { background-image: none !important; } .chat-input-backdrop { background-color: transparent !important; }" : ""}
-    ` : ""
+    `
+      : ""
 
   const getElStyle = () => `
     ${elements} {
@@ -2699,17 +2768,21 @@ const generateCSS = (
     ${hoverSelectors} {
       opacity: 1 !important;
     }
-    ${site === "chatgpt"
-      ? `
+    ${
+      site === "chatgpt"
+        ? `
       .agent-turn {
         margin-top: 5px !important;
         margin-bottom: 5px !important;
         padding: 10px 16px !important;
         border-radius: 22px !important;
       }
-    ` : ""}
-    ${site === "gemini"
-      ? `
+    `
+        : ""
+    }
+    ${
+      site === "gemini"
+        ? `
       .show-lm-background::before {
         background: none !important;
       }
@@ -2717,30 +2790,41 @@ const generateCSS = (
         padding: 20px 28px !important;
         border-radius: 40px !important;
       }
-    ` : ""}
-    ${site === "claude"
-      ? `
+    `
+        : ""
+    }
+    ${
+      site === "claude"
+        ? `
       .font-claude-response {
         padding: 10px 16px !important;
         border-radius: 12px !important;
       }
-    ` : ""}
-    ${site === "grok"
-      ? `
+    `
+        : ""
+    }
+    ${
+      site === "grok"
+        ? `
       [data-testid="assistant-message"] {
         padding: 8px 16px !important;
         border-radius: 24px !important;
       }
-    ` : ""}
-    ${lightTextColor && darkTextColor
-      ? `
+    `
+        : ""
+    }
+    ${
+      lightTextColor && darkTextColor
+        ? `
       :root { --decoai-text-color: ${lightTextColor}; }
       ${darkClass} { --decoai-text-color: ${darkTextColor}; }
       ${site === "chatgpt" || site === "gemini" ? container : "*"} {
         scrollbar-width: auto !important;
         scrollbar-color: color-mix(in srgb, var(--decoai-text-color) 30%, transparent) transparent !important;
       }
-    ` : ""}
+    `
+        : ""
+    }
   `
 
   const getTextStyle = () =>
@@ -2748,14 +2832,10 @@ const generateCSS = (
       ? `
       *:not(pre *):not(#${FAB_ROOT_ID} *):not(#${WIDGET_ROOT_ID} *) { color: ${lightTextColor} !important; }
       ${darkClass} *:not(pre *):not(#${FAB_ROOT_ID} *):not(#${WIDGET_ROOT_ID} *) { color: ${darkTextColor} !important; }
-    ` : ""
+    `
+      : ""
 
-  return [
-    getBgStyle(),
-    getElStyle(),
-    getTextStyle(),
-    getVisibilityStyle()
-  ].join("\n")
+  return [getBgStyle(), getElStyle(), getTextStyle(), getVisibilityStyle()].join("\n")
 }
 
 const applyTheme = async (requestId: number) => {
@@ -2833,12 +2913,10 @@ const invalidateThemeCache = () => {
   cachedThemeData = null
 }
 
-const hasCustomThemeStorageChange = (
-  changes: Record<string, chrome.storage.StorageChange>
-) => CUSTOM_THEME_WATCH_STORAGE_KEYS.some((key) => changes[key])
+const hasCustomThemeStorageChange = (changes: Record<string, chrome.storage.StorageChange>) =>
+  CUSTOM_THEME_WATCH_STORAGE_KEYS.some((key) => changes[key])
 
-const isCustomThemeSelected = async () =>
-  (await storage.get<string>(SELECTED_THEME_STORAGE_KEY)) === "custom"
+const isCustomThemeSelected = async () => (await storage.get<string>(SELECTED_THEME_STORAGE_KEY)) === "custom"
 
 const watchLocationChange = () => {
   const originalPushState = history.pushState
@@ -2883,7 +2961,10 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 })
 
 window.addEventListener(CUSTOM_THEME_PREVIEW_EVENT, (e) => {
-  const customEvent = e as CustomEvent<{ themeId: string; theme: CustomTheme } | null>
+  const customEvent = e as CustomEvent<{
+    themeId: string
+    theme: CustomTheme
+  } | null>
   customThemePreview = customEvent.detail
   void (async () => {
     if (!(await isCustomThemeSelected())) return

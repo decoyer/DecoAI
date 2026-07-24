@@ -1,5 +1,11 @@
 import type { User } from "firebase/auth"
-import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithCredential, signOut } from "firebase/auth/web-extension"
+import {
+  getAuth,
+  GoogleAuthProvider,
+  onAuthStateChanged,
+  signInWithCredential,
+  signOut
+} from "firebase/auth/web-extension"
 
 import {
   AUTH_SESSION_STORAGE_KEY,
@@ -16,8 +22,13 @@ const GOOGLE_AUTH_SCOPES = ["openid", "email", "profile"]
 
 const t = (key: string) => chrome.i18n.getMessage(key)
 
-type ExtensionManifest = chrome.runtime.Manifest & { oauth2?: { client_id?: string } }
-let silentUserVerification: { uid: string; promise: Promise<User | null> } | null = null
+type ExtensionManifest = chrome.runtime.Manifest & {
+  oauth2?: { client_id?: string }
+}
+let silentUserVerification: {
+  uid: string
+  promise: Promise<User | null>
+} | null = null
 let lastSilentAuthFailureAt = 0
 const IMAGE_DB_NAME = "decoai-images"
 const IMAGE_DB_VERSION = 1
@@ -77,9 +88,7 @@ const dataUrlToBlob = async (dataUrl: string) => {
 const saveImageDataUrl = async (dataUrl: string) => {
   const blob = await dataUrlToBlob(dataUrl)
   const id = crypto.randomUUID()
-  await imageStoreRequest("readwrite", (store) =>
-    store.put({ id, blob, createdAt: Date.now() } satisfies StoredImage)
-  )
+  await imageStoreRequest("readwrite", (store) => store.put({ id, blob, createdAt: Date.now() } satisfies StoredImage))
   return id
 }
 
@@ -94,8 +103,7 @@ const deleteImage = async (id: string) => {
   await imageStoreRequest("readwrite", (store) => store.delete(id))
 }
 
-const isImageSource = (value: unknown) =>
-  typeof value === "string" && IMAGE_SOURCE_URLS.has(value)
+const isImageSource = (value: unknown) => typeof value === "string" && IMAGE_SOURCE_URLS.has(value)
 
 const getContentLength = (response: Response) => {
   const value = Number(response.headers.get("content-length") || 0)
@@ -105,10 +113,7 @@ const getContentLength = (response: Response) => {
 const isSupportedImageResponse = (response: Response) => {
   const contentType = response.headers.get("content-type") || ""
   const contentLength = getContentLength(response)
-  return (
-    contentType.startsWith("image/") &&
-    (!contentLength || contentLength <= MAX_FILE_BYTES)
-  )
+  return contentType.startsWith("image/") && (!contentLength || contentLength <= MAX_FILE_BYTES)
 }
 
 const getOAuthClientId = () => {
@@ -146,36 +151,33 @@ const getWebAuthToken = (interactive: boolean) =>
     authUrl.searchParams.set("scope", GOOGLE_AUTH_SCOPES.join(" "))
     authUrl.searchParams.set("prompt", interactive ? "select_account" : "none")
 
-    chrome.identity.launchWebAuthFlow({ url: authUrl.toString(), interactive },
-      (redirectUrl) => {
-        if (chrome.runtime.lastError || !redirectUrl) {
-          reject(new Error(chrome.runtime.lastError?.message))
-          return
-        }
-
-        const token = getTokenFromRedirectUrl(redirectUrl)
-
-        if (!token) {
-          reject(new Error("Missing access token"))
-          return
-        }
-
-        resolve(token)
+    chrome.identity.launchWebAuthFlow({ url: authUrl.toString(), interactive }, (redirectUrl) => {
+      if (chrome.runtime.lastError || !redirectUrl) {
+        reject(new Error(chrome.runtime.lastError?.message))
+        return
       }
-    )
+
+      const token = getTokenFromRedirectUrl(redirectUrl)
+
+      if (!token) {
+        reject(new Error("Missing access token"))
+        return
+      }
+
+      resolve(token)
+    })
   })
 
 const sendWebAuthToken = (sendResponse: (response?: unknown) => void, interactive: boolean) => {
   getWebAuthToken(interactive)
     .then((token) => sendResponse({ success: true, token }))
-    .catch((error) => sendResponse({ success: false, error: error.message })
-    )
+    .catch((error) => sendResponse({ success: false, error: error.message }))
 }
 
-const getBackgroundAuth = () => getAuth(app)
+const getBgAuth = () => getAuth(app)
 
 const getCurrentUser = () => {
-  const auth = getBackgroundAuth()
+  const auth = getBgAuth()
   if (auth.currentUser) return Promise.resolve(auth.currentUser)
 
   return new Promise<User | null>((resolve) => {
@@ -213,7 +215,7 @@ const saveAuthSessionSnapshot = async (user: User, premiumStatus: PremiumStatus)
 
 const signInWithGoogleAccessToken = async (accessToken: string) => {
   const credential = GoogleAuthProvider.credential(null, accessToken)
-  const result = await signInWithCredential(getBackgroundAuth(), credential)
+  const result = await signInWithCredential(getBgAuth(), credential)
   return result.user
 }
 
@@ -226,7 +228,7 @@ const signInAndSaveAuthSession = async (interactive: boolean) => {
 
 const signOutAuthSession = async () => {
   await chrome.storage.local.remove(AUTH_SESSION_STORAGE_KEY)
-  await signOut(getBackgroundAuth())
+  await signOut(getBgAuth())
 }
 
 const verifySnapshotUserSilently = async (snapshot: AuthSessionSnapshot) => {
@@ -322,10 +324,7 @@ const handleAuthMessage = async (message: any) => {
     case "VALIDATE_AUTH_SESSION":
       return {
         success: true,
-        session: await validateAuthSession(
-          message.refreshPremiumStatus === true,
-          message.verifyGoogleGrant === true
-        )
+        session: await validateAuthSession(message.refreshPremiumStatus === true, message.verifyGoogleGrant === true)
       }
     case "GET_VERIFIED_PREMIUM_STATUS":
       return {
@@ -407,7 +406,10 @@ const openCheckout = async (idToken: string, sendResponse: (response?: unknown) 
     })
 
     if (!response.ok) {
-      sendResponse({ success: false, error: `Checkout request failed: ${response.status}` })
+      sendResponse({
+        success: false,
+        error: `Checkout request failed: ${response.status}`
+      })
       return
     }
 
@@ -433,7 +435,7 @@ const blobToDataUrl = (blob: Blob) =>
     reader.readAsDataURL(blob)
   })
 
-const removeBackgroundImage = async (imageUrl: string, sendResponse: (response?: unknown) => void) => {
+const removeBgImage = async (imageUrl: string, sendResponse: (response?: unknown) => void) => {
   try {
     const idToken = await getCurrentUserIdToken()
     if (idToken.length < 100) {
@@ -443,7 +445,10 @@ const removeBackgroundImage = async (imageUrl: string, sendResponse: (response?:
 
     const res = await fetch("https://decoai.cokr.workers.dev/remove-bg", {
       method: "POST",
-      headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        "Content-Type": "application/json"
+      },
       body: JSON.stringify({ imageUrl })
     })
 
@@ -486,8 +491,7 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
   ) {
     void handleAuthMessage(message)
       .then((response) => sendResponse(response || { success: false }))
-      .catch((error) => sendResponse({ success: false, error: error.message })
-      )
+      .catch((error) => sendResponse({ success: false, error: error.message }))
     return true
   }
 
@@ -502,11 +506,15 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
   }
 
   if (message.type === "REMOVE_BACKGROUND_IMAGE") {
-    void removeBackgroundImage(message.imageUrl, sendResponse)
+    void removeBgImage(message.imageUrl, sendResponse)
     return true
   }
 
-  if (message.type === "SAVE_IMAGE_DATA_URL" || message.type === "GET_IMAGE_DATA_URL" || message.type === "DELETE_IMAGE") {
+  if (
+    message.type === "SAVE_IMAGE_DATA_URL" ||
+    message.type === "GET_IMAGE_DATA_URL" ||
+    message.type === "DELETE_IMAGE"
+  ) {
     void handleImageStoreMessage(message)
       .then((response) => sendResponse(response || { success: false }))
       .catch((error) => sendResponse({ success: false, error: error.message }))

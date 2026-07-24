@@ -1,4 +1,5 @@
 export type CustomBgOptions = {
+  zoom: number
   scaleX: number
   rotation: number
   invert: number
@@ -18,6 +19,9 @@ export type CustomTheme = {
   bgImageId: string
   bgUrl?: string
   bgAnimated: boolean
+  bgOriginalImageId: string
+  bgOriginalUrl?: string
+  bgOriginalAnimated: boolean
   bgColor: string
   bgOptions: CustomBgOptions
 }
@@ -34,7 +38,7 @@ export type WidgetInstance = {
 }
 export type WidgetLayoutOptions = {
   textColor: string
-  backgroundColor: string
+  bgColor: string
   borderColor: string
   opacity: number
 }
@@ -52,10 +56,15 @@ export type StopwatchWidgetState = {
   stopwatchStartedAt: number | null
   stopwatchRunning: boolean
 }
-export type PhotoWidgetState = {
+export type BgImageState = {
   imageId: string
+  imageUrl?: string
   animated: boolean
+  originalImageId?: string
+  originalImageUrl?: string
+  originalAnimated?: boolean
 }
+export type PhotoWidgetState = BgImageState
 export type WidgetFrame = {
   xRatio: number
   yRatio: number
@@ -76,14 +85,14 @@ type ThemeImportFile = {
   sync?: Record<string, unknown>
   local?: Record<string, unknown>
   images?: Record<string, unknown>
-  customThemes?: Array<Partial<CustomTheme> & { bgUrl?: string }>
+  customThemes?: Partial<CustomTheme>[]
 }
 
 export type DataImportFile = {
   sync: Record<string, unknown>
   local: Record<string, unknown>
   images: Record<string, string>
-  customThemes: Array<CustomTheme & { bgUrl?: string }>
+  customThemes: CustomTheme[]
   sourceThemeIds: string[]
 }
 
@@ -112,8 +121,19 @@ export const THEME_FILE_VERSION = 1
 export const IMAGE_HEADER_BYTES = 64 * 1024
 export const DATA_URL_SAMPLE_CHARS = 96 * 1024
 export const MAX_FILE_BYTES = 10 * 1024 * 1024
+export const LOADING_OVERLAY_STYLE = {
+  position: "absolute",
+  inset: 0,
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  backgroundColor: "rgba(0, 0, 0, 0.5)",
+  zIndex: 10,
+  pointerEvents: "auto"
+} as const
 
 export const DEFAULT_CUSTOM_BG_OPTIONS: CustomBgOptions = {
+  zoom: 1,
   scaleX: 1,
   rotation: 0,
   invert: 0,
@@ -137,7 +157,7 @@ export const DEFAULT_WIDGET_INSTANCES: WidgetInstance[] = []
 
 export const DEFAULT_WIDGET_LAYOUT: WidgetLayoutOptions = {
   textColor: "",
-  backgroundColor: "",
+  bgColor: "",
   borderColor: "",
   opacity: DEFAULT_CUSTOM_BG_OPTIONS.opacity
 }
@@ -161,8 +181,38 @@ export const DEFAULT_STOPWATCH_WIDGET_STATE: StopwatchWidgetState = {
 
 export const DEFAULT_PHOTO_WIDGET_STATE: PhotoWidgetState = {
   imageId: "",
-  animated: false
+  animated: false,
+  originalImageId: "",
+  originalAnimated: false
 }
+
+export const getBgImageIds = (state?: Partial<BgImageState> | null) => [
+  ...new Set([state?.imageId, state?.originalImageId].filter(Boolean) as string[])
+]
+
+export const hasRemovedBg = (state?: Partial<BgImageState> | null) =>
+  Boolean(state?.originalImageId || state?.originalImageUrl)
+
+export const removeBgFromState = (
+  state: BgImageState,
+  image: { imageId?: string; imageUrl?: string }
+): BgImageState => ({
+  imageId: image.imageId || "",
+  imageUrl: image.imageUrl,
+  animated: false,
+  originalImageId: state.imageId,
+  originalImageUrl: state.imageUrl,
+  originalAnimated: state.animated
+})
+
+export const restoreBgState = (state: BgImageState): BgImageState => ({
+  imageId: state.originalImageId || state.imageId,
+  imageUrl: state.originalImageUrl || state.imageUrl,
+  animated: hasRemovedBg(state) ? state.originalAnimated === true : state.animated,
+  originalImageId: "",
+  originalImageUrl: "",
+  originalAnimated: false
+})
 
 export const DEFAULT_WIDGET_MIN_SIZE: WidgetSize = {
   widthRatio: 0.12,
@@ -178,8 +228,7 @@ export const IMAGE_SOURCE_URLS = new Set([
   "https://i.imgur.com/H1rtAbm.png"
 ])
 
-export const isJsonFile = (file: File) =>
-  file.type === "application/json" || file.name.toLowerCase().endsWith(".json")
+export const isJsonFile = (file: File) => file.type === "application/json" || file.name.toLowerCase().endsWith(".json")
 
 export const detectCurrentSite = (): SiteType | null => {
   const { hostname } = window.location
@@ -191,12 +240,7 @@ export const detectCurrentSite = (): SiteType | null => {
   return null
 }
 
-export const clampNumber = (
-  value: unknown,
-  min: number,
-  max: number,
-  fallback: number
-) => {
+export const clampNumber = (value: unknown, min: number, max: number, fallback: number) => {
   const numberValue = Number(value)
   if (!Number.isFinite(numberValue)) return fallback
   return Math.min(max, Math.max(min, numberValue))
@@ -240,18 +284,31 @@ const sendRuntimeMessage = <T>(message: Record<string, unknown>) =>
   })
 
 export const saveImageDataUrl = async (dataUrl: string) => {
-  const response = await sendRuntimeMessage<{ id: string }>({ type: "SAVE_IMAGE_DATA_URL", dataUrl })
+  const response = await sendRuntimeMessage<{ id: string }>({
+    type: "SAVE_IMAGE_DATA_URL",
+    dataUrl
+  })
   if (typeof response.id !== "string") throw new Error("Failed to save image")
   return response.id
 }
 
 export const getImageDataUrl = async (id: string) => {
-  const response = await sendRuntimeMessage<{ dataUrl: string }>({ type: "GET_IMAGE_DATA_URL", id })
+  const response = await sendRuntimeMessage<{ dataUrl: string }>({
+    type: "GET_IMAGE_DATA_URL",
+    id
+  })
   return sanitizeCustomBgUrl(response.dataUrl)
 }
 
-export const deleteImageData = (id: string) =>
-  sendRuntimeMessage<void>({ type: "DELETE_IMAGE", id })
+export const deleteImageData = (id: string) => sendRuntimeMessage<void>({ type: "DELETE_IMAGE", id })
+
+export const removeImageBg = async (imageUrl: string) => {
+  const response = await sendRuntimeMessage<{ dataUrl: string }>({
+    type: "REMOVE_BACKGROUND_IMAGE",
+    imageUrl
+  })
+  return response.dataUrl
+}
 
 export const sanitizePosition = (value: unknown) => {
   const position = String(value)
@@ -278,20 +335,16 @@ export const getPositionYPercent = (value: unknown) => {
   return getSanitizedPositionPercentPair(value).y
 }
 
-export const normalizeBackgroundRotation = (value: unknown) => {
+export const normalizeBgRotation = (value: unknown) => {
   const rotation = Number(value)
   if (!Number.isFinite(rotation)) return DEFAULT_CUSTOM_BG_OPTIONS.rotation
   const normalized = (Math.round(rotation / 90) * 90) % 360
   return normalized < 0 ? normalized + 360 : normalized
 }
 
-export const getRenderedBackgroundPosition = (
-  value: unknown,
-  rotationValue: unknown,
-  scaleXValue: unknown
-) => {
+export const getRenderedBgPosition = (value: unknown, rotationValue: unknown, scaleXValue: unknown) => {
   const { x, y } = getSanitizedPositionPercentPair(value)
-  const rotation = normalizeBackgroundRotation(rotationValue)
+  const rotation = normalizeBgRotation(rotationValue)
   const isFlipped = scaleXValue === -1
 
   switch (rotation) {
@@ -306,11 +359,32 @@ export const getRenderedBackgroundPosition = (
   }
 }
 
-export const sanitizeCustomBgOptions = (
-  options?: Partial<CustomBgOptions>
-): CustomBgOptions => ({
+export const getStoredBgPosition = (x: number, y: number, rotationValue: unknown, scaleXValue: unknown) => {
+  const rotation = normalizeBgRotation(rotationValue)
+  const isFlipped = scaleXValue === -1
+
+  switch (rotation) {
+    case 90:
+      return { x: 100 - y, y: isFlipped ? 100 - x : x }
+    case 180:
+      return { x: isFlipped ? x : 100 - x, y: 100 - y }
+    case 270:
+      return { x: y, y: isFlipped ? x : 100 - x }
+    default:
+      return { x: isFlipped ? 100 - x : x, y }
+  }
+}
+
+export const getBgTransform = (options?: Partial<CustomBgOptions>) => {
+  const sanitized = sanitizeCustomBgOptions(options)
+  const position = getRenderedBgPosition(sanitized.position, sanitized.rotation, sanitized.scaleX)
+  return `translate(calc(-50% + ${position.x - 50}%), calc(-50% + ${position.y - 50}%)) rotate(${sanitized.rotation}deg) scaleX(${sanitized.scaleX}) scale(${sanitized.zoom})`
+}
+
+export const sanitizeCustomBgOptions = (options?: Partial<CustomBgOptions>): CustomBgOptions => ({
+  zoom: clampNumber(options?.zoom, 1, 3, DEFAULT_CUSTOM_BG_OPTIONS.zoom),
   scaleX: options?.scaleX === -1 ? -1 : 1,
-  rotation: normalizeBackgroundRotation(options?.rotation),
+  rotation: normalizeBgRotation(options?.rotation),
   invert: clampNumber(options?.invert, 0, 1, DEFAULT_CUSTOM_BG_OPTIONS.invert),
   grayscale: clampNumber(options?.grayscale, 0, 1, DEFAULT_CUSTOM_BG_OPTIONS.grayscale),
   blur: clampNumber(options?.blur, 0, 50, DEFAULT_CUSTOM_BG_OPTIONS.blur),
@@ -325,20 +399,20 @@ export const renderImageToCanvas = async (
   imageSource = "",
   options?: Partial<CustomBgOptions>,
   maxSize = 256,
-  backgroundColor = ""
+  bgColor = ""
 ) => {
   const imageUrl = sanitizeCustomBgUrl(imageSource)
   const imageOptions = sanitizeCustomBgOptions(options)
-  const canvasBackground = sanitizeBg(backgroundColor)
-  const position = getRenderedBackgroundPosition(imageOptions.position, imageOptions.rotation, imageOptions.scaleX)
+  const canvasBg = sanitizeBg(bgColor)
+  const position = getRenderedBgPosition(imageOptions.position, imageOptions.rotation, imageOptions.scaleX)
 
   const image = imageUrl
     ? await new Promise<HTMLImageElement>((resolve, reject) => {
-      const nextImage = new Image()
-      nextImage.onload = () => resolve(nextImage)
-      nextImage.onerror = () => reject()
-      nextImage.src = imageUrl
-    })
+        const nextImage = new Image()
+        nextImage.onload = () => resolve(nextImage)
+        nextImage.onerror = () => reject()
+        nextImage.src = imageUrl
+      })
     : null
 
   const canvas = document.createElement("canvas")
@@ -353,13 +427,13 @@ export const renderImageToCanvas = async (
   const sourceContext = sourceCanvas.getContext("2d")
 
   sourceContext.clearRect(0, 0, sourceCanvas.width, sourceCanvas.height)
-  if (canvasBackground) {
-    const solidColor = sanitizeColor(canvasBackground)
+  if (canvasBg) {
+    const solidColor = sanitizeColor(canvasBg)
     const gradientColors = solidColor
       ? [solidColor]
-      : (canvasBackground.match(/#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{4}|[0-9a-f]{3})\b|(?:rgba?|hsla?)\([^)]*\)/gi) || [])
-        .map(sanitizeColor)
-        .filter(Boolean)
+      : (canvasBg.match(/#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{4}|[0-9a-f]{3})\b|(?:rgba?|hsla?)\([^)]*\)/gi) || [])
+          .map(sanitizeColor)
+          .filter(Boolean)
     if (gradientColors.length) {
       const fill = sourceContext.createLinearGradient(0, 0, sourceCanvas.width, 0)
       gradientColors.forEach((color, index) => {
@@ -370,7 +444,7 @@ export const renderImageToCanvas = async (
     }
   }
   if (image) {
-    const scale = Math.max(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight)
+    const scale = Math.max(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight) * imageOptions.zoom
     const drawWidth = image.naturalWidth * scale
     const drawHeight = image.naturalHeight * scale
     const drawX = (canvas.width - drawWidth) * (position.x / 100)
@@ -393,11 +467,9 @@ export const renderImageToCanvas = async (
   return canvas
 }
 
-export const normalizeCustomTheme = (
-  themeData: Partial<CustomTheme> & { bgUrl?: string },
-  fallbackName: string
-): CustomTheme & { bgUrl?: string } => {
+export const normalizeCustomTheme = (themeData: Partial<CustomTheme>, fallbackName: string): CustomTheme => {
   const bgUrl = sanitizeCustomBgUrl(themeData.bgUrl)
+  const bgOriginalUrl = sanitizeCustomBgUrl(themeData.bgOriginalUrl)
 
   return {
     id: crypto.randomUUID(),
@@ -406,9 +478,12 @@ export const normalizeCustomTheme = (
     border: sanitizeColor(themeData.border),
     bgImageId: typeof themeData.bgImageId === "string" ? themeData.bgImageId : "",
     bgAnimated: themeData.bgAnimated === true || isAnimatedBgUrl(bgUrl),
+    bgOriginalImageId: typeof themeData.bgOriginalImageId === "string" ? themeData.bgOriginalImageId : "",
+    bgOriginalAnimated: themeData.bgOriginalAnimated === true || isAnimatedBgUrl(bgOriginalUrl),
     bgColor: sanitizeBg(themeData.bgColor),
     bgOptions: sanitizeCustomBgOptions(themeData.bgOptions),
-    ...(bgUrl ? { bgUrl } : {})
+    ...(bgUrl ? { bgUrl } : {}),
+    ...(bgOriginalUrl ? { bgOriginalUrl } : {})
   }
 }
 
@@ -419,9 +494,61 @@ export const createCustomTheme = (name: string): CustomTheme => ({
   border: "",
   bgImageId: "",
   bgAnimated: false,
+  bgOriginalImageId: "",
+  bgOriginalAnimated: false,
   bgColor: "",
   bgOptions: { ...DEFAULT_CUSTOM_BG_OPTIONS }
 })
+
+export const getCustomThemeBgState = (theme: CustomTheme): BgImageState => ({
+  imageId: theme.bgImageId,
+  imageUrl: theme.bgUrl,
+  animated: theme.bgAnimated,
+  originalImageId: theme.bgOriginalImageId,
+  originalImageUrl: theme.bgOriginalUrl,
+  originalAnimated: theme.bgOriginalAnimated
+})
+
+export const exportCustomThemeImages = async (theme: CustomTheme): Promise<CustomTheme> => {
+  const [bgUrl, bgOriginalUrl] = await Promise.all([
+    theme.bgImageId ? getImageDataUrl(theme.bgImageId).catch(() => "") : "",
+    theme.bgOriginalImageId ? getImageDataUrl(theme.bgOriginalImageId).catch(() => "") : ""
+  ])
+  return {
+    ...theme,
+    ...(bgUrl ? { bgUrl } : {}),
+    ...(bgOriginalUrl ? { bgOriginalUrl } : {})
+  }
+}
+
+export const importCustomThemeImages = async (themes: CustomTheme[]) => {
+  const imported: CustomTheme[] = []
+  const imageIds: string[] = []
+
+  try {
+    for (const theme of themes) {
+      const { bgUrl: sourceUrl, bgOriginalUrl: sourceOriginalUrl, ...storedTheme } = theme
+      const bgUrl = sanitizeCustomBgUrl(sourceUrl)
+      const bgOriginalUrl = sanitizeCustomBgUrl(sourceOriginalUrl)
+      const bgImageId = bgUrl ? await saveImageDataUrl(bgUrl) : ""
+      if (bgImageId) imageIds.push(bgImageId)
+      const bgOriginalImageId = bgOriginalUrl ? await saveImageDataUrl(bgOriginalUrl) : ""
+      if (bgOriginalImageId) imageIds.push(bgOriginalImageId)
+
+      imported.push({
+        ...storedTheme,
+        bgImageId,
+        bgAnimated: isAnimatedBgUrl(bgUrl),
+        bgOriginalImageId,
+        bgOriginalAnimated: isAnimatedBgUrl(bgOriginalUrl)
+      })
+    }
+    return { themes: imported, imageIds }
+  } catch (error) {
+    imageIds.forEach((imageId) => void deleteImageData(imageId))
+    throw error
+  }
+}
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value)
@@ -436,13 +563,9 @@ const parseFileData = (text: string) => {
   }
 }
 
-const getThemeSources = (data: ThemeImportFile | null) =>
-  Array.isArray(data?.customThemes) ? data.customThemes : []
+const getThemeSources = (data: ThemeImportFile | null) => (Array.isArray(data?.customThemes) ? data.customThemes : [])
 
-export const parseImportedThemes = (
-  text: string,
-  getFallbackName: (index: number) => string
-) => {
+export const parseImportedThemes = (text: string, getFallbackName: (index: number) => string) => {
   const data = parseFileData(text)
   if (data?.type !== "theme") return []
   const theme = getThemeSources(data)[0]
@@ -477,34 +600,28 @@ export const createExportBlob = (data: {
   sync?: Record<string, unknown>
   local?: Record<string, unknown>
   images?: Record<string, string>
-  customThemes: Array<CustomTheme & { bgUrl?: string }>
+  customThemes: CustomTheme[]
 }) =>
   new Blob(
     [
-      JSON.stringify(
-        {
-          app: THEME_FILE_APP_ID,
-          version: THEME_FILE_VERSION,
-          exportedAt: new Date().toISOString(),
-          ...data
-        }
-      )
+      JSON.stringify({
+        app: THEME_FILE_APP_ID,
+        version: THEME_FILE_VERSION,
+        exportedAt: new Date().toISOString(),
+        ...data
+      })
     ],
     { type: "application/json" }
   )
 
-export const createThemeExportBlob = (themeData: CustomTheme & { bgUrl?: string }) =>
-  createExportBlob({
-    type: "theme",
-    customThemes: [themeData]
-  })
+export const createThemeExportBlob = (themeData: CustomTheme) =>
+  createExportBlob({ type: "theme", customThemes: [themeData] })
 
 const decoder = new TextDecoder("latin1")
 const GIF_SIGNATURE = [0x47, 0x49, 0x46] as const
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47] as const
 const ANIMATED_MARKERS = ["avis", "msf1", "aseq"] as const
-const startsWith = (bytes: Uint8Array, signature: readonly number[]) =>
-  signature.every((byte, i) => bytes[i] === byte)
+const startsWith = (bytes: Uint8Array, signature: readonly number[]) => signature.every((byte, i) => bytes[i] === byte)
 
 export const isAnimatedBytes = (bytes: Uint8Array) => {
   const text = decoder.decode(bytes)
@@ -514,8 +631,7 @@ export const isAnimatedBytes = (bytes: Uint8Array) => {
   if (text.includes("WEBP")) return text.includes("ANIM")
 
   return (
-    (text.includes("ftypavif") || text.includes("ftypavis")) &&
-    ANIMATED_MARKERS.some((marker) => text.includes(marker))
+    (text.includes("ftypavif") || text.includes("ftypavis")) && ANIMATED_MARKERS.some((marker) => text.includes(marker))
   )
 }
 
@@ -555,14 +671,19 @@ export const isAnimatedDataUrl = (dataUrl: string) => {
   }
 }
 
-export const isAnimatedBgUrl = (value: string) =>
-  value ? isAnimatedDataUrl(value) : false
+export const isAnimatedBgUrl = (value: string) => (value ? isAnimatedDataUrl(value) : false)
 
-export const hasAnimatedBackground = (themes: CustomTheme[]) =>
-  themes.some((theme) => theme.bgAnimated)
+export const hasAnimatedBg = (themes: CustomTheme[]) => themes.some(isAnimatedCustomTheme)
 
-export const isAnimatedCustomTheme = (theme: CustomTheme) =>
-  theme.bgAnimated
+export const isAnimatedCustomTheme = (theme: CustomTheme) => theme.bgAnimated || theme.bgOriginalAnimated
 
 export const clearAnimatedBgUrl = (theme: CustomTheme) =>
-  isAnimatedCustomTheme(theme) ? { ...theme, bgImageId: "", bgAnimated: false } : theme
+  isAnimatedCustomTheme(theme)
+    ? {
+        ...theme,
+        bgImageId: theme.bgAnimated ? "" : theme.bgImageId,
+        bgAnimated: false,
+        bgOriginalImageId: theme.bgOriginalAnimated ? "" : theme.bgOriginalImageId,
+        bgOriginalAnimated: false
+      }
+    : theme

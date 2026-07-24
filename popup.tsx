@@ -1,7 +1,8 @@
 import { Icon } from "@iconify/react"
-import { useStorage } from "@plasmohq/storage/hook"
 import { useEffect, useRef, useState } from "react"
 import { toast, ToastContainer } from "react-toastify"
+
+import { useStorage } from "@plasmohq/storage/hook"
 
 import {
   AUTH_REFRESH_MS,
@@ -18,9 +19,12 @@ import {
   CUSTOM_THEMES_STORAGE_KEY,
   DEFAULT_MODEL_ENABLED,
   deleteImageData,
+  exportCustomThemeImages,
+  getBgImageIds,
   getImageDataUrl,
-  isAnimatedBgUrl,
+  importCustomThemeImages,
   isJsonFile,
+  LOADING_OVERLAY_STYLE,
   MODEL_ENABLED_STORAGE_KEY,
   parseDataImportFile,
   PHOTO_WIDGET_STATE_STORAGE_KEY,
@@ -73,15 +77,7 @@ const getExportableCustomThemes = async (themesValue: unknown) => {
   const themes = parseStoredValue<unknown[]>(themesValue)
   if (!Array.isArray(themes)) return []
 
-  return Promise.all(
-    themes.map(async (themeValue) => {
-      const theme = isRecord(themeValue) ? themeValue : {}
-      const bgImageId = typeof theme.bgImageId === "string" ? theme.bgImageId : ""
-      const bgUrl = bgImageId ? await getImageDataUrl(bgImageId).catch(() => "") : sanitizeCustomBgUrl(theme.bgUrl)
-
-      return { ...theme, ...(bgUrl ? { bgUrl } : {}) } as CustomTheme & { bgUrl?: string }
-    })
-  )
+  return Promise.all(themes.filter(isRecord).map((theme) => exportCustomThemeImages(theme as CustomTheme)))
 }
 
 const getPortableImageData = async (localData: Record<string, unknown>) => {
@@ -93,37 +89,21 @@ const getPortableImageData = async (localData: Record<string, unknown>) => {
     const photoState = parseStoredValue<Record<string, unknown>>(value)
     if (!isRecord(photoState)) continue
 
-    const imageId = typeof photoState.imageId === "string" ? photoState.imageId : ""
-    if (!imageId || images[imageId]) continue
-
-    const dataUrl = await getImageDataUrl(imageId).catch(() => "")
-    if (dataUrl) images[imageId] = dataUrl
+    const imageIds = getBgImageIds({
+      imageId: typeof photoState.imageId === "string" ? photoState.imageId : "",
+      originalImageId: typeof photoState.originalImageId === "string" ? photoState.originalImageId : ""
+    })
+    for (const imageId of imageIds) {
+      if (!imageId || images[imageId]) continue
+      const dataUrl = await getImageDataUrl(imageId).catch(() => "")
+      if (dataUrl) images[imageId] = dataUrl
+    }
   }
 
   return images
 }
 
-const saveImportedCustomThemes = async (
-  themes: Array<CustomTheme & { bgUrl?: string }>,
-  importedImageIds: string[]
-) =>
-  Promise.all(
-    themes.map(async (themeData) => {
-      const { bgUrl: importedBgUrl, ...storageTheme } = themeData
-      const bgUrl = sanitizeCustomBgUrl(importedBgUrl)
-      if (!bgUrl) return storageTheme
-
-      const bgImageId = await saveImageDataUrl(bgUrl)
-      importedImageIds.push(bgImageId)
-
-      return { ...storageTheme, bgImageId, bgAnimated: isAnimatedBgUrl(bgUrl) }
-    })
-  )
-
-const saveImportedImages = async (
-  images: Record<string, string>,
-  importedImageIds: string[]
-) => {
+const saveImportedImages = async (images: Record<string, string>, importedImageIds: string[]) => {
   const imageIdMap: Record<string, string> = {}
 
   for (const [sourceId, sourceDataUrl] of Object.entries(images)) {
@@ -138,10 +118,7 @@ const saveImportedImages = async (
   return imageIdMap
 }
 
-const replacePhotoImageIds = (
-  localData: Record<string, unknown>,
-  imageIdMap: Record<string, string>
-) => {
+const replacePhotoImageIds = (localData: Record<string, unknown>, imageIdMap: Record<string, string>) => {
   const nextLocalData = { ...localData }
 
   for (const [key, value] of Object.entries(nextLocalData)) {
@@ -150,8 +127,17 @@ const replacePhotoImageIds = (
     const photoState = parseStoredValue<Record<string, unknown>>(value)
     if (!isRecord(photoState)) continue
 
-    const imageId = typeof photoState.imageId === "string" ? photoState.imageId : ""
-    if (imageIdMap[imageId]) nextLocalData[key] = JSON.stringify({ ...photoState, imageId: imageIdMap[imageId] })
+    const mappedState = { ...photoState }
+    let changed = false
+    for (const imageKey of ["imageId", "originalImageId"] as const) {
+      const value = photoState[imageKey]
+      const imageId = typeof value === "string" ? value : ""
+      if (imageIdMap[imageId]) {
+        mappedState[imageKey] = imageIdMap[imageId]
+        changed = true
+      }
+    }
+    if (changed) nextLocalData[key] = JSON.stringify(mappedState)
   }
 
   return nextLocalData
@@ -180,10 +166,7 @@ function IndexPopup() {
   }, [])
 
   useEffect(() => {
-    const onAuthSessionChanged = (
-      changes: Record<string, chrome.storage.StorageChange>,
-      areaName: string
-    ) => {
+    const onAuthSessionChanged = (changes: Record<string, chrome.storage.StorageChange>, areaName: string) => {
       if (areaName !== "local") return
       if (!changes[AUTH_SESSION_STORAGE_KEY]) return
 
@@ -267,13 +250,15 @@ function IndexPopup() {
 
   const onRestoreClick = () => restoreFileRef.current?.click()
 
-  const replaceStorageData = async (
-    nextSyncData: Record<string, unknown>,
-    nextLocalData: Record<string, unknown>
-  ) => {
-    const [currentSyncData, currentLocalData] = await Promise.all([chrome.storage.sync.get(), chrome.storage.local.get()])
+  const replaceStorageData = async (nextSyncData: Record<string, unknown>, nextLocalData: Record<string, unknown>) => {
+    const [currentSyncData, currentLocalData] = await Promise.all([
+      chrome.storage.sync.get(),
+      chrome.storage.local.get()
+    ])
     const syncKeys = Object.keys(currentSyncData).filter((key) => !(key in nextSyncData))
-    const localKeys = Object.keys(currentLocalData).filter((key) => key !== AUTH_SESSION_STORAGE_KEY && !(key in nextLocalData))
+    const localKeys = Object.keys(currentLocalData).filter(
+      (key) => key !== AUTH_SESSION_STORAGE_KEY && !(key in nextLocalData)
+    )
 
     if (Object.keys(nextSyncData).length) await chrome.storage.sync.set(nextSyncData)
     if (Object.keys(nextLocalData).length) await chrome.storage.local.set(nextLocalData)
@@ -303,7 +288,9 @@ function IndexPopup() {
       }
 
       const imageIdMap = await saveImportedImages(dataFile.images, importedImageIds)
-      const importedThemes = await saveImportedCustomThemes(dataFile.customThemes, importedImageIds)
+      const importedThemeData = await importCustomThemeImages(dataFile.customThemes)
+      const importedThemes = importedThemeData.themes
+      importedImageIds.push(...importedThemeData.imageIds)
       const nextLocalData = replacePhotoImageIds(dataFile.local, imageIdMap)
       delete nextLocalData[AUTH_SESSION_STORAGE_KEY]
 
@@ -397,11 +384,7 @@ function IndexPopup() {
               label={t("setting")}
               onClick={() => setActiveTab("settings")}
             />
-            <TabButton
-              active={activeTab === "account"}
-              label={t("account")}
-              onClick={() => setActiveTab("account")}
-            />
+            <TabButton active={activeTab === "account"} label={t("account")} onClick={() => setActiveTab("account")} />
           </div>
 
           {activeTab !== "account" ? (
@@ -414,23 +397,21 @@ function IndexPopup() {
               <label style={rowStyle}>
                 <div style={itemLabelStyle}>
                   <Icon icon="lucide:wallpaper" color="#66cdaa" height={16} aria-hidden="true" />
-                  <span style={{ lineHeight: 1 }}>{t("theme")} {t("setting")}</span>
+                  <span style={{ lineHeight: 1 }}>
+                    {t("theme")} {t("setting")}
+                  </span>
                 </div>
-                <ToggleSwitch
-                  checked={!themeHidden}
-                  onChange={(checked) => setThemeHidden(!checked)}
-                />
+                <ToggleSwitch checked={!themeHidden} onChange={(checked) => setThemeHidden(!checked)} />
               </label>
 
               <label style={rowStyle}>
                 <div style={itemLabelStyle}>
                   <Icon icon="lucide:component" color="#66cdaa" height={16} aria-hidden="true" />
-                  <span style={{ lineHeight: 1 }}>{t("widget")} {t("setting")}</span>
+                  <span style={{ lineHeight: 1 }}>
+                    {t("widget")} {t("setting")}
+                  </span>
                 </div>
-                <ToggleSwitch
-                  checked={!widgetHidden}
-                  onChange={(checked) => setWidgetHidden(!checked)}
-                />
+                <ToggleSwitch checked={!widgetHidden} onChange={(checked) => setWidgetHidden(!checked)} />
               </label>
 
               <div style={{ ...sectionHeaderStyle, marginTop: 16 }}>
@@ -446,9 +427,7 @@ function IndexPopup() {
                   </div>
                   <ToggleSwitch
                     checked={Boolean(modelEnabled?.[site.key])}
-                    onChange={(checked) =>
-                      updateModelEnabled(site.key, checked)
-                    }
+                    onChange={(checked) => updateModelEnabled(site.key, checked)}
                   />
                 </label>
               ))}
@@ -489,10 +468,7 @@ function IndexPopup() {
                   <Icon icon="lucide:gem" height={24} aria-hidden="true" />
                   <h3>{t("subscription")}</h3>
                 </div>
-                <button
-                  type="button"
-                  onClick={onSubscriptionClick}
-                  style={actionButtonStyle}>
+                <button type="button" onClick={onSubscriptionClick} style={actionButtonStyle}>
                   <Icon icon="lucide:inbox" color="#66cdaa" height={24} aria-hidden="true" />
                 </button>
               </div>
@@ -520,19 +496,13 @@ function IndexPopup() {
               </div>
 
               <div className="data" style={{ ...rowStyle, marginTop: 8 }}>
-                <button
-                  type="button"
-                  onClick={onRestoreClick}
-                  style={controlButtonStyle}>
+                <button type="button" onClick={onRestoreClick} style={controlButtonStyle}>
                   <div style={{ ...itemLabelStyle, gap: 4 }}>
                     <Icon icon="lucide-hard-drive-download" height={16} aria-hidden="true" />
                     <span>{t("restore")}</span>
                   </div>
                 </button>
-                <button
-                  type="button"
-                  onClick={onBackupClick}
-                  style={controlButtonStyle}>
+                <button type="button" onClick={onBackupClick} style={controlButtonStyle}>
                   <div style={{ ...itemLabelStyle, gap: 4 }}>
                     <Icon icon="lucide-hard-drive-upload" height={16} aria-hidden="true" />
                     <span>{t("backup")}</span>
@@ -550,17 +520,7 @@ function IndexPopup() {
           )}
         </div>
         {isLoading && (
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: "rgba(0, 0, 0, 0.5)",
-              zIndex: 10,
-              pointerEvents: "auto"
-            }}>
+          <div style={LOADING_OVERLAY_STYLE}>
             <Icon icon="line-md:loading-twotone-loop" height={48} color="#66cdaa" aria-hidden="true" />
           </div>
         )}
@@ -579,39 +539,23 @@ function IndexPopup() {
   )
 }
 
-function TabButton({
-  active,
-  label,
-  onClick
-}: {
-  active: boolean
-  label: string
-  onClick: () => void
-}) {
+function TabButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      style={{ ...tabButtonStyle, ...(active ? activeTabButtonStyle : inactiveTabButtonStyle) }}>
+      style={{
+        ...tabButtonStyle,
+        ...(active ? activeTabButtonStyle : inactiveTabButtonStyle)
+      }}>
       {label}
     </button>
   )
 }
 
-function ToggleSwitch({
-  checked,
-  onChange
-}: {
-  checked: boolean
-  onChange: (checked: boolean) => void
-}) {
+function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
   return (
-    <input
-      className="toggle-switch"
-      type="checkbox"
-      checked={checked}
-      onChange={(e) => onChange(e.target.checked)}
-    />
+    <input className="toggle-switch" type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
   )
 }
 

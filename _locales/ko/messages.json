@@ -41,7 +41,7 @@
   "restore": {
     "message": "복원"
   },
-  "backup":  {
+  "backup": {
     "message": "백업"
   },
   "addTheme": {
@@ -65,14 +65,8 @@
   "import": {
     "message": "가져오기"
   },
-  "upload": {
-    "message": "업로드"
-  },
   "cancel": {
     "message": "취소"
-  },
-  "apply": {
-    "message": "적용"
   },
   "save": {
     "message": "저장"
@@ -109,18 +103,6 @@
   },
   "removeBG": {
     "message": "배경 제거"
-  },
-  "horizontal": {
-    "message": "가로 위치"
-  },
-  "vertical": {
-    "message": "세로 위치"
-  },
-  "rotation": {
-    "message": "회전 방향"
-  },
-  "flip": {
-    "message": "대칭 이동"
   },
   "brightness": {
     "message": "밝기 효과"

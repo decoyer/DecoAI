@@ -1,12 +1,14 @@
 import { Icon } from "@iconify/react"
-import { Storage } from "@plasmohq/storage"
-import { useStorage } from "@plasmohq/storage/hook"
 import { Vibrant } from "node-vibrant/browser"
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react"
 import ColorPicker, { useColorPicker } from "react-best-gradient-color-picker"
 import SortableList, { SortableItem, SortableKnob } from "react-easy-sort"
+import Moveable from "react-moveable"
 import Tilt from "react-parallax-tilt"
 import { toast } from "react-toastify"
+
+import { Storage } from "@plasmohq/storage"
+import { useStorage } from "@plasmohq/storage/hook"
 
 import {
   AUTH_REFRESH_MS,
@@ -19,6 +21,7 @@ import {
   type PremiumStatus
 } from "./auth"
 import {
+  clampNumber,
   clearAnimatedBgUrl,
   createCustomTheme,
   createThemeExportBlob,
@@ -30,21 +33,29 @@ import {
   DEFAULT_WIDGET_LAYOUT,
   deleteImageData,
   detectCurrentSite,
+  exportCustomThemeImages,
   FAB_OPEN_EVENT,
+  getBgImageIds,
+  getBgTransform,
+  getCustomThemeBgState,
   getImageDataUrl,
-  getPositionXPercent,
-  getPositionYPercent,
-  hasAnimatedBackground,
-  isAnimatedBgUrl,
+  getRenderedBgPosition,
+  getStoredBgPosition,
+  hasAnimatedBg,
+  hasRemovedBg,
+  importCustomThemeImages,
   isAnimatedImage,
   isGradient,
   isJsonFile,
+  LOADING_OVERLAY_STYLE,
   MAX_FILE_BYTES,
   parseImportedThemes,
   PHOTO_WIDGET_STATE_STORAGE_KEY,
+  removeBgFromState,
+  removeImageBg,
   renderImageToCanvas,
+  restoreBgState,
   sanitizeBg,
-  sanitizeColor,
   sanitizeCustomBgOptions,
   sanitizeCustomBgUrl,
   saveImageDataUrl,
@@ -58,6 +69,7 @@ import {
   WIDGET_INSTANCES_STORAGE_KEY,
   WIDGET_LAYOUT_PREVIEW_EVENT,
   WIDGET_LAYOUT_STORAGE_KEY,
+  type BgImageState,
   type CustomBgOptions,
   type CustomTheme,
   type PhotoWidgetState,
@@ -114,12 +126,9 @@ const themeTiltProps = {
   tiltMaxAngleY: 12
 }
 
-const isSameWidgetLayout = (
-  left: WidgetLayoutOptions,
-  right: WidgetLayoutOptions
-) =>
+const isSameWidgetLayout = (left: WidgetLayoutOptions, right: WidgetLayoutOptions) =>
   left.textColor === right.textColor &&
-  left.backgroundColor === right.backgroundColor &&
+  left.bgColor === right.bgColor &&
   left.borderColor === right.borderColor &&
   left.opacity === right.opacity
 
@@ -261,8 +270,7 @@ const footerButtonStyle = {
 } as const
 
 const downloadCustomTheme = async (themeData: CustomTheme) => {
-  const bgUrl = themeData.bgImageId ? await getImageDataUrl(themeData.bgImageId).catch(() => "") : ""
-  const blob = createThemeExportBlob({ ...themeData, ...(bgUrl ? { bgUrl } : {}) })
+  const blob = createThemeExportBlob(await exportCustomThemeImages(themeData))
   const url = URL.createObjectURL(blob)
   const link = document.createElement("a")
   link.href = url
@@ -272,7 +280,10 @@ const downloadCustomTheme = async (themeData: CustomTheme) => {
 }
 
 const disabledControlStyle = (enabled: boolean) =>
-  ({ opacity: enabled ? 1 : 0.5, pointerEvents: enabled ? "auto" : "none" }) as const
+  ({
+    opacity: enabled ? 1 : 0.5,
+    pointerEvents: enabled ? "auto" : "none"
+  }) as const
 
 const clearFileInput = (input: HTMLInputElement | null) => {
   if (input) input.value = ""
@@ -283,7 +294,10 @@ const isCurrentPageDarkMode = () => {
   return currentSite ? document.querySelector(SITE_DARK_SELECTORS[currentSite]) !== null : false
 }
 
-const wait = (ms: number) => new Promise<void>((resolve) => { window.setTimeout(resolve, ms) })
+const wait = (ms: number) =>
+  new Promise<void>((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
 
 const updateTitleOverflow = (title: HTMLElement) => {
   const text = title.querySelector<HTMLElement>(".decoai-marquee-title__text")
@@ -320,6 +334,7 @@ function CustomThemeSortableCard({
 }) {
   const [bgUrl, setBgUrl] = useState("")
   const isDragging = draggingCustomThemeId === item.id
+  const bgRemoved = hasRemovedBg(getCustomThemeBgState(item))
 
   useEffect(() => {
     let active = true
@@ -343,40 +358,43 @@ function CustomThemeSortableCard({
 
   const bgRotation = item.bgOptions.rotation || 0
   const isBgSideways = bgRotation === 90 || bgRotation === 270
-  const backgroundValue = sanitizeBg(item.bgColor)
-  const solidBgColor = sanitizeColor(backgroundValue)
-  const backgroundGradient = backgroundValue && !solidBgColor ? backgroundValue : ""
-  const backgroundImages = [bgUrl ? `url(${bgUrl})` : "", backgroundGradient].filter(Boolean)
-  const isDefaultBg = !item.bgImageId && !sanitizeCustomBgUrl(item.bgUrl) && !backgroundValue
+  const bgValue = sanitizeBg(item.bgColor)
+  const isDefaultBg = !item.bgImageId && !sanitizeCustomBgUrl(item.bgUrl) && !bgValue
+  const cardBg = bgValue || (bgRemoved || isDefaultBg ? DEFAULT_PREVIEW : "")
   const bgStyle = {
     width: isBgSideways ? 100 : "100%",
     height: isBgSideways ? 250 : "100%",
-    backgroundImage: isDefaultBg ? DEFAULT_PREVIEW : backgroundImages.length ? backgroundImages.join(", ") : "none",
-    backgroundSize: isDefaultBg ? "16px 16px" : "cover",
-    backgroundRepeat: isDefaultBg ? "repeat" : "no-repeat",
-    backgroundColor: solidBgColor || "transparent",
-    transform: `translate(-50%, -50%) rotate(${bgRotation}deg) scaleX(${bgUrl && item.bgOptions.scaleX === -1 ? -1 : 1})`,
+    backgroundImage: bgUrl ? `url(${bgUrl})` : "none",
+    backgroundSize: "cover",
+    backgroundRepeat: "no-repeat",
+    backgroundColor: "transparent",
+    transform: getBgTransform(item.bgOptions),
     filter: bgUrl
       ? `invert(${item.bgOptions.invert}) grayscale(${item.bgOptions.grayscale}) brightness(${item.bgOptions.brightness})`
       : "none"
   } as CSSProperties
 
   return (
-    <div
-      className="custom-theme-card-wrap"
-      style={{ position: "relative", zIndex: isDragging ? 2 : "auto" }}>
-      <Tilt
-        {...themeTiltProps}
-        className="theme-card-tilt custom-theme-card-tilt"
-        tiltEnable={!isDragging}>
+    <div className="custom-theme-card-wrap" style={{ position: "relative", zIndex: isDragging ? 2 : "auto" }}>
+      <Tilt {...themeTiltProps} className="theme-card-tilt custom-theme-card-tilt" tiltEnable={!isDragging}>
         <button
           type="button"
           className={`theme-card custom-theme-card decoai-marquee-title${theme === "custom" && selectedCustomThemeId === item.id ? " is-active" : ""}${draggingCustomThemeId === item.id ? " is-dragging" : ""}`}
+          style={
+            cardBg
+              ? {
+                  background: cardBg,
+                  backgroundSize: bgValue ? undefined : "16px 16px"
+                }
+              : undefined
+          }
           onPointerEnter={(e) => updateTitleOverflow(e.currentTarget)}
           onClick={() => onCustomCardClick(item)}>
           <div className="theme-card__bg custom-theme-card__bg" style={bgStyle} />
           <div className="theme-card__title">
-            <span className="decoai-marquee-title__text" data-title={item.name}>{item.name}</span>
+            <span className="decoai-marquee-title__text" data-title={item.name}>
+              {item.name}
+            </span>
           </div>
         </button>
         {!isDragging && (
@@ -467,18 +485,10 @@ function WidgetGroup({
           <span style={fieldLabelStyle}>{t(item.labelKey)}</span>
         </span>
         <div style={iconLabelStyle}>
-          <button
-            type="button"
-            className="decoai-widget-action__add"
-            onClick={onAdd}
-            style={widgetActionButtonStyle}>
+          <button type="button" className="decoai-widget-action__add" onClick={onAdd} style={widgetActionButtonStyle}>
             <Icon icon="lucide:plus" height={16} aria-hidden="true" />
           </button>
-          <button
-            type="button"
-            className="decoai-control-button"
-            onClick={onToggle}
-            style={widgetActionButtonStyle}>
+          <button type="button" className="decoai-control-button" onClick={onToggle} style={widgetActionButtonStyle}>
             <Icon icon={`lucide:chevron-${expanded ? "up" : "down"}`} height={16} aria-hidden="true" />
           </button>
         </div>
@@ -497,10 +507,7 @@ function WidgetGroup({
               <SortableItem key={widget.id}>
                 <div className="widget-group-row" style={{ ...rowStyle, gap: 8 }}>
                   <SortableKnob>
-                    <button
-                      type="button"
-                      className="decoai-control-button"
-                      style={widgetActionButtonStyle}>
+                    <button type="button" className="decoai-control-button" style={widgetActionButtonStyle}>
                       <Icon icon="lucide:grip-horizontal" height={16} aria-hidden="true" />
                     </button>
                   </SortableKnob>
@@ -577,32 +584,39 @@ export function FabPanelApp() {
     WIDGET_INSTANCES_STORAGE_KEY,
     DEFAULT_WIDGET_INSTANCES
   )
-  const [, setWidgetFrameMap] = useStorage<WidgetFrameMap>(
-    WIDGET_FRAME_STORAGE_KEY,
-    {}
-  )
+  const [, setWidgetFrameMap] = useStorage<WidgetFrameMap>(WIDGET_FRAME_STORAGE_KEY, {})
   const [widgetLayout, setWidgetLayout] = useStorage<WidgetLayoutOptions>(
     WIDGET_LAYOUT_STORAGE_KEY,
     DEFAULT_WIDGET_LAYOUT
   )
   const bgUploadRef = useRef<HTMLInputElement>(null)
+  const bgPreviewRef = useRef<HTMLDivElement>(null)
+  const [bgPreviewTarget, setBgPreviewTarget] = useState<HTMLElement | null>(null)
   const importFileRef = useRef<HTMLInputElement>(null)
-  const [draftBackgroundImageUrl, setDraftBackgroundImageUrl] = useState("")
-  const [draftBackgroundImageId, setDraftBackgroundImageId] = useState("")
-  const [draftBackgroundAnimated, setDraftBackgroundAnimated] = useState(false)
+  const [draftBgImageUrl, setDraftBgImageUrl] = useState("")
+  const [draftBgImageId, setDraftBgImageId] = useState("")
+  const [draftBgAnimated, setDraftBgAnimated] = useState(false)
+  const [draftOriginalBgImageUrl, setDraftOriginalBgImageUrl] = useState("")
+  const [draftOriginalBgImageId, setDraftOriginalBgImageId] = useState("")
+  const [draftOriginalBgAnimated, setDraftOriginalBgAnimated] = useState(false)
   const [storedCustomThemes, setCustomThemes] = useStorage<CustomTheme[]>(
-    { key: CUSTOM_THEMES_STORAGE_KEY, instance: localStorageInstance }, []
+    { key: CUSTOM_THEMES_STORAGE_KEY, instance: localStorageInstance },
+    []
   )
   const [selectedCustomThemeId, setSelectedCustomThemeId] = useStorage(
-    { key: SELECTED_CUSTOM_THEME_ID_STORAGE_KEY, instance: localStorageInstance }, ""
+    {
+      key: SELECTED_CUSTOM_THEME_ID_STORAGE_KEY,
+      instance: localStorageInstance
+    },
+    ""
   )
   const [editingCustomThemeId, setEditingCustomThemeId] = useState("")
   const [premiumStatus, setPremiumStatus] = useState<PremiumStatus>("unknown")
-  const [draftBackgroundOptions, setDraftBackgroundOptions] = useState<CustomBgOptions>(DEFAULT_CUSTOM_BG_OPTIONS)
+  const [draftBgOptions, setDraftBgOptions] = useState<CustomBgOptions>(DEFAULT_CUSTOM_BG_OPTIONS)
   const [draftTextColor, setDraftTextColor] = useState("")
   const [draftBorderColor, setDraftBorderColor] = useState("")
   const [draftCustomThemeName, setDraftCustomThemeName] = useState("")
-  const [draftBackgroundColor, setDraftBackgroundColor] = useState("")
+  const [draftBgColor, setDraftBgColor] = useState("")
   const [draftWidgetLayout, setDraftWidgetLayout] = useState<WidgetLayoutOptions>(DEFAULT_WIDGET_LAYOUT)
   const [isLoading, setIsLoading] = useState(false)
   const [draggingCustomThemeId, setDraggingCustomThemeId] = useState("")
@@ -621,7 +635,9 @@ export function FabPanelApp() {
   }
 
   function clampCustomThemeDrag() {
-    const dragged = panelRootRef.current?.querySelector<HTMLElement>(".custom-theme-card-dragged, .widget-group-row-dragged")
+    const dragged = panelRootRef.current?.querySelector<HTMLElement>(
+      ".custom-theme-card-dragged, .widget-group-row-dragged"
+    )
     const scrollArea = dragged?.classList.contains("widget-group-row-dragged")
       ? widgetSortScrollRef.current
       : themeGridScrollRef.current
@@ -639,12 +655,8 @@ export function FabPanelApp() {
   }
 
   useEffect(() => {
-    if (!customThemes.length && selectedCustomThemeId)
-      setSelectedCustomThemeId("")
-    if (
-      selectedCustomThemeId &&
-      !customThemes.some((item) => item.id === selectedCustomThemeId)
-    )
+    if (!customThemes.length && selectedCustomThemeId) setSelectedCustomThemeId("")
+    if (selectedCustomThemeId && !customThemes.some((item) => item.id === selectedCustomThemeId))
       setSelectedCustomThemeId("")
   }, [customThemes, selectedCustomThemeId, setSelectedCustomThemeId])
 
@@ -661,9 +673,7 @@ export function FabPanelApp() {
 
   useEffect(() => {
     const nextLayout = { ...DEFAULT_WIDGET_LAYOUT, ...widgetLayout }
-    setDraftWidgetLayout((prev) =>
-      isSameWidgetLayout(prev, nextLayout) ? prev : nextLayout
-    )
+    setDraftWidgetLayout((prev) => (isSameWidgetLayout(prev, nextLayout) ? prev : nextLayout))
   }, [widgetLayout])
 
   useEffect(() => {
@@ -698,10 +708,7 @@ export function FabPanelApp() {
   }, [])
 
   useEffect(() => {
-    const onAuthSessionChanged = (
-      changes: Record<string, chrome.storage.StorageChange>,
-      areaName: string
-    ) => {
+    const onAuthSessionChanged = (changes: Record<string, chrome.storage.StorageChange>, areaName: string) => {
       if (areaName !== "local") return
 
       const authSessionChange = changes[AUTH_SESSION_STORAGE_KEY]
@@ -738,18 +745,40 @@ export function FabPanelApp() {
   }, [theme, widgetLayout])
 
   const editingTheme = customThemes.find((item) => item.id === editingCustomThemeId)
+  const getThemeImageIds = (themeData?: CustomTheme) =>
+    themeData ? getBgImageIds(getCustomThemeBgState(themeData)) : []
 
-  const isBackgroundImageUsed = (imageId: string, ignoredThemeId = "") =>
-    customThemes.some((item) => item.id !== ignoredThemeId && item.bgImageId === imageId)
+  const isBgImageUsed = (imageId: string, ignoredThemeId = "") =>
+    customThemes.some(
+      (item) => item.id !== ignoredThemeId && (item.bgImageId === imageId || item.bgOriginalImageId === imageId)
+    )
 
-  const deleteBackgroundImage = (imageId: string, ignoredThemeId = "") => {
-    if (imageId && !isBackgroundImageUsed(imageId, ignoredThemeId)) void deleteImageData(imageId)
+  const deleteBgImage = (imageId: string, ignoredThemeId = "") => {
+    if (imageId && !isBgImageUsed(imageId, ignoredThemeId)) void deleteImageData(imageId)
   }
 
-  const deleteDraftBackgroundImage = (imageId = draftBackgroundImageId) => {
-    if (!imageId || imageId === editingTheme?.bgImageId) return
-    deleteBackgroundImage(imageId)
+  const deleteDraftBgImage = (imageId = draftBgImageId) => {
+    if (!imageId || imageId === editingTheme?.bgImageId || imageId === editingTheme?.bgOriginalImageId) return
+    deleteBgImage(imageId)
   }
+
+  const getDraftBgState = (): BgImageState => ({
+    imageId: draftBgImageId,
+    imageUrl: draftBgImageUrl,
+    animated: draftBgAnimated,
+    originalImageId: draftOriginalBgImageId,
+    originalImageUrl: draftOriginalBgImageUrl,
+    originalAnimated: draftOriginalBgAnimated
+  })
+  const setDraftBgState = (state: BgImageState) => {
+    setDraftBgImageId(state.imageId)
+    setDraftBgImageUrl(state.imageUrl || "")
+    setDraftBgAnimated(state.animated)
+    setDraftOriginalBgImageId(state.originalImageId || "")
+    setDraftOriginalBgImageUrl(state.originalImageUrl || "")
+    setDraftOriginalBgAnimated(state.originalAnimated === true)
+  }
+  const draftBgRemovalUsed = hasRemovedBg(getDraftBgState())
 
   const getEditingThemeDraft = () => {
     if (!editingTheme) return null
@@ -759,11 +788,14 @@ export function FabPanelApp() {
       name: draftCustomThemeName,
       text: draftTextColor,
       border: draftBorderColor,
-      bgImageId: draftBackgroundImageId,
-      ...(draftBackgroundImageUrl && !draftBackgroundImageId ? { bgUrl: draftBackgroundImageUrl } : {}),
-      bgAnimated: draftBackgroundAnimated,
-      bgColor: draftBackgroundColor,
-      bgOptions: draftBackgroundOptions
+      bgImageId: draftBgImageId,
+      bgUrl: draftBgImageUrl && !draftBgImageId ? draftBgImageUrl : undefined,
+      bgAnimated: draftBgAnimated,
+      bgOriginalImageId: draftOriginalBgImageId,
+      bgOriginalAnimated: draftOriginalBgAnimated,
+      bgOriginalUrl: draftOriginalBgImageUrl && !draftOriginalBgImageId ? draftOriginalBgImageUrl : undefined,
+      bgColor: draftBgColor,
+      bgOptions: draftBgOptions
     }
   }
 
@@ -777,31 +809,90 @@ export function FabPanelApp() {
 
   useEffect(() => {
     if (!editingTheme) return
+    const bgState = getCustomThemeBgState(editingTheme)
+    const bgRemovalUsed = hasRemovedBg(bgState)
     setDraftTextColor(editingTheme.text || "")
     setDraftBorderColor(editingTheme.border || "")
-    setDraftBackgroundImageId(editingTheme.bgImageId || "")
-    setDraftBackgroundAnimated(editingTheme.bgAnimated === true)
-    setDraftBackgroundImageUrl("")
+    setDraftBgState(bgState)
     if (editingTheme.bgImageId) {
-      void getImageDataUrl(editingTheme.bgImageId).then(setDraftBackgroundImageUrl).catch(() => setDraftBackgroundImageUrl(""))
+      void getImageDataUrl(editingTheme.bgImageId)
+        .then(setDraftBgImageUrl)
+        .catch(() => {
+          setDraftBgImageUrl("")
+        })
     }
-    setDraftBackgroundColor(editingTheme.bgColor || "")
-    setDraftBackgroundOptions(sanitizeCustomBgOptions(editingTheme.bgOptions))
+    if (bgRemovalUsed && editingTheme.bgOriginalImageId) {
+      void getImageDataUrl(editingTheme.bgOriginalImageId)
+        .then(setDraftOriginalBgImageUrl)
+        .catch(() => setDraftOriginalBgImageUrl(""))
+    }
+    setDraftBgColor(editingTheme.bgColor || "")
+    setDraftBgOptions(sanitizeCustomBgOptions(editingTheme.bgOptions))
     setDraftCustomThemeName(editingTheme.name || "")
     setCustomEditTab("general")
   }, [editingTheme?.id])
 
-  const updateCustomBgOption = (
-    key: keyof CustomBgOptions,
-    value: string | number | boolean
-  ) => setDraftBackgroundOptions((prev) => ({ ...prev, [key]: value }))
+  const updateCustomBgOption = (key: keyof CustomBgOptions, value: string | number | boolean) =>
+    setDraftBgOptions((prev) => ({ ...prev, [key]: value }))
 
-  const rotateDraftBackground = (degrees: -90 | 90) => {
-    setDraftBackgroundOptions((prev) => {
+  const rotateDraftBg = (degrees: -90 | 90) => {
+    setDraftBgOptions((prev) => {
       const nextRotation = ((Number(prev.rotation) || 0) + degrees) % 360
-      return { ...prev, rotation: nextRotation < 0 ? nextRotation + 360 : nextRotation }
+      return {
+        ...prev,
+        rotation: nextRotation < 0 ? nextRotation + 360 : nextRotation
+      }
     })
   }
+
+  const zoomDraftBg = (amount: number) => {
+    setDraftBgOptions((prev) => ({
+      ...prev,
+      zoom: clampNumber(prev.zoom + amount, 1, 3, 1)
+    }))
+  }
+
+  const fitDraftBg = () => {
+    setDraftBgOptions((prev) => ({ ...prev, zoom: 1, position: "50% 50%" }))
+  }
+
+  const dragDraftBg = (deltaX: number, deltaY: number) => {
+    const bounds = bgPreviewRef.current?.getBoundingClientRect()
+    if (!bounds?.width || !bounds.height) return
+
+    setDraftBgOptions((prev) => {
+      const sideways = prev.rotation === 90 || prev.rotation === 270
+      const position = getRenderedBgPosition(prev.position, prev.rotation, prev.scaleX)
+      const stored = getStoredBgPosition(
+        clampNumber(position.x + (deltaX / (sideways ? bounds.height : bounds.width)) * 100, 0, 100, 50),
+        clampNumber(position.y + (deltaY / (sideways ? bounds.width : bounds.height)) * 100, 0, 100, 50),
+        prev.rotation,
+        prev.scaleX
+      )
+      return { ...prev, position: `${stored.x}% ${stored.y}%` }
+    })
+  }
+
+  const bgPreviewActions = [
+    {
+      icon: "zoom-in",
+      onClick: () => zoomDraftBg(0.1),
+      disabled: draftBgOptions.zoom >= 3
+    },
+    {
+      icon: "zoom-out",
+      onClick: () => zoomDraftBg(-0.1),
+      disabled: draftBgOptions.zoom <= 1
+    },
+    { icon: "expand", onClick: fitDraftBg },
+    { icon: "undo-dot", onClick: () => rotateDraftBg(-90) },
+    { icon: "redo-dot", onClick: () => rotateDraftBg(90) },
+    {
+      icon: "flip-horizontal-2",
+      onClick: () => updateCustomBgOption("scaleX", draftBgOptions.scaleX === -1 ? 1 : -1)
+    }
+  ]
+  const isDraftBgSideways = draftBgOptions.rotation === 90 || draftBgOptions.rotation === 270
 
   const normalizeCustomThemes = () => {
     if (!customThemes.length) return false
@@ -814,9 +905,11 @@ export function FabPanelApp() {
     if (changed) {
       customThemes.forEach((item) => {
         if (!themes.some((theme) => theme.id === item.id)) {
-          deleteBackgroundImage(item.bgImageId, item.id)
-        } else if (item.bgImageId !== theme.bgImageId) {
-          deleteBackgroundImage(item.bgImageId, item.id)
+          getThemeImageIds(item).forEach((imageId) => deleteBgImage(imageId, item.id))
+        } else {
+          getThemeImageIds(item)
+            .filter((imageId) => !getThemeImageIds(theme).includes(imageId))
+            .forEach((imageId) => deleteBgImage(imageId, item.id))
         }
       })
       setCustomThemes(themes)
@@ -826,11 +919,11 @@ export function FabPanelApp() {
       setEditingCustomThemeId("")
       setView("themes")
     }
-    if (draftBackgroundAnimated) {
-      deleteDraftBackgroundImage()
-      setDraftBackgroundImageId("")
-      setDraftBackgroundImageUrl("")
-      setDraftBackgroundAnimated(false)
+    if (draftBgAnimated) {
+      deleteDraftBgImage()
+      setDraftBgImageId("")
+      setDraftBgImageUrl("")
+      setDraftBgAnimated(false)
     }
 
     return changed
@@ -853,9 +946,7 @@ export function FabPanelApp() {
       retainedTypes.add(item.type)
       return true
     })
-    const changed =
-      nextItems.length !== items.length ||
-      nextItems.some((item, index) => item.id !== items[index]?.id)
+    const changed = nextItems.length !== items.length || nextItems.some((item, index) => item.id !== items[index]?.id)
 
     if (changed) setWidgetItems(nextItems)
 
@@ -866,7 +957,7 @@ export function FabPanelApp() {
     if (!isPremiumChecked || !isFreeUser || isPremiumUser) return
 
     const themeLimitLocked = customThemes.length > 1
-    const animatedThemeLocked = hasAnimatedBackground(customThemes)
+    const animatedThemeLocked = hasAnimatedBg(customThemes)
     const widgetLocked = hasPremiumLockedWidgets(widgetItems || DEFAULT_WIDGET_INSTANCES)
 
     if (themeLimitLocked || animatedThemeLocked) {
@@ -880,7 +971,7 @@ export function FabPanelApp() {
       toast.error(t("pro_widgetLimit"), { toastId: "normalizeWidget" })
     }
   }, [
-    draftBackgroundAnimated,
+    draftBgAnimated,
     customThemes,
     editingCustomThemeId,
     isFreeUser,
@@ -899,29 +990,26 @@ export function FabPanelApp() {
     draftCustomThemeName,
     draftTextColor,
     draftBorderColor,
-    draftBackgroundImageId,
-    draftBackgroundImageUrl,
-    draftBackgroundAnimated,
-    draftBackgroundColor,
-    draftBackgroundOptions
+    draftBgImageId,
+    draftBgImageUrl,
+    draftBgAnimated,
+    draftBgColor,
+    draftBgOptions
   ])
 
   const openCheckout = async (idToken: string) => {
     await new Promise<void>((resolve, reject) => {
-      chrome.runtime.sendMessage(
-        { type: "OPEN_CHECKOUT", idToken },
-        (response) => {
-          if (chrome.runtime.lastError) {
-            reject(new Error(chrome.runtime.lastError.message))
-            return
-          }
-          if (!response?.success) {
-            reject(new Error(response?.error || "Failed to open checkout"))
-            return
-          }
-          resolve()
+      chrome.runtime.sendMessage({ type: "OPEN_CHECKOUT", idToken }, (response) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message))
+          return
         }
-      )
+        if (!response?.success) {
+          reject(new Error(response?.error || "Failed to open checkout"))
+          return
+        }
+        resolve()
+      })
     })
   }
 
@@ -929,9 +1017,7 @@ export function FabPanelApp() {
     let authSession: AuthSessionSnapshot | null = null
     try {
       authSession = await getValidAuthSessionSnapshot(
-        verifyGrant
-          ? { refreshPremiumStatus: true, verifyGoogleGrant: true }
-          : undefined
+        verifyGrant ? { refreshPremiumStatus: true, verifyGoogleGrant: true } : undefined
       )
     } catch {
       authSession = null
@@ -988,7 +1074,7 @@ export function FabPanelApp() {
             await openCheckout(nextIdToken)
             return
           }
-        } catch { }
+        } catch {}
 
         const nextAuthSession = await signInAndSaveAuthSession(true)
         setPremiumStatus(nextAuthSession.premiumStatus)
@@ -1036,11 +1122,11 @@ export function FabPanelApp() {
       return
     }
 
-    let imported: Array<CustomTheme & { bgUrl?: string }> = []
+    let imported: CustomTheme[] = []
     const importImageIds: string[] = []
     try {
       const text = await file.text()
-      imported = parseImportedThemes(text, (index) => `${t("custom")} ${index + 1}`)
+      imported = parseImportedThemes(text, (index) => `${t("theme")} ${index + 1}`)
     } catch {
       toast.error(t("error_fileInvalid", "JSON"))
       clearFileInput(importFileRef.current)
@@ -1054,21 +1140,9 @@ export function FabPanelApp() {
     }
 
     try {
-      imported = await Promise.all(
-        imported.map(async (themeData) => {
-          const { bgUrl: importedBgUrl, ...storageTheme } = themeData
-          const bgUrl = sanitizeCustomBgUrl(importedBgUrl)
-          if (!bgUrl) return storageTheme
-          const bgImageId = await saveImageDataUrl(bgUrl)
-          importImageIds.push(bgImageId)
-
-          return {
-            ...storageTheme,
-            bgImageId,
-            bgAnimated: isAnimatedBgUrl(bgUrl)
-          }
-        })
-      )
+      const result = await importCustomThemeImages(imported)
+      imported = result.themes
+      importImageIds.push(...result.imageIds)
     } catch {
       importImageIds.forEach((imageId) => void deleteImageData(imageId))
       toast.error(t("error_fileInvalid", "JSON"))
@@ -1076,7 +1150,7 @@ export function FabPanelApp() {
       return
     }
 
-    const hasAnimatedImportedTheme = hasAnimatedBackground(imported)
+    const hasAnimatedImportedTheme = hasAnimatedBg(imported)
     if (hasAnimatedImportedTheme && !(await requirePremiumAccess("pro_animatedBG"))) {
       importImageIds.forEach((imageId) => void deleteImageData(imageId))
       clearFileInput(importFileRef.current)
@@ -1088,9 +1162,9 @@ export function FabPanelApp() {
     if (premium) {
       setCustomThemes((prev) => [...prev, ...imported])
     } else {
-      const keepImageId = imported[0].bgImageId
+      const keepImageIds = new Set(getThemeImageIds(imported[0]))
       importImageIds.forEach((imageId) => {
-        if (imageId !== keepImageId) void deleteImageData(imageId)
+        if (!keepImageIds.has(imageId)) void deleteImageData(imageId)
       })
       setCustomThemes([imported[0]])
       setSelectedCustomThemeId(imported[0].id)
@@ -1131,10 +1205,8 @@ export function FabPanelApp() {
         return
       }
       try {
-        deleteDraftBackgroundImage()
-        setDraftBackgroundImageId("")
-        setDraftBackgroundAnimated(animated)
-        setDraftBackgroundImageUrl(result)
+        deleteDraftBgImage()
+        setDraftBgState({ imageId: "", imageUrl: result, animated })
       } catch {
         toast.error(t("error_fileInvalid", "IMG"))
       } finally {
@@ -1145,7 +1217,7 @@ export function FabPanelApp() {
   }
 
   const onThemeClick = (key: string) => {
-    deleteDraftBackgroundImage()
+    deleteDraftBgImage()
     setTheme("")
     setTheme(key)
     setEditingCustomThemeId("")
@@ -1155,20 +1227,34 @@ export function FabPanelApp() {
     if (isLoading) return
 
     const nextTheme = getEditingThemeDraft()
-    const oldImageId = editingTheme?.bgImageId || ""
+    const oldImageIds = getThemeImageIds(editingTheme)
 
     if (!nextTheme) return
 
     setIsLoading(true)
 
     try {
-      const shouldSaveImage = Boolean(draftBackgroundImageUrl && !draftBackgroundImageId)
-      const bgImageId = shouldSaveImage ? await saveImageDataUrl(draftBackgroundImageUrl) : draftBackgroundImageId
-      const { bgUrl, ...storageTheme } = { ...nextTheme, bgImageId }
+      const shouldSaveImage = Boolean(draftBgImageUrl && !draftBgImageId)
+      const shouldSaveOriginalImage = Boolean(draftOriginalBgImageUrl && !draftOriginalBgImageId)
+      const [bgImageId, bgOriginalImageId] = await Promise.all([
+        shouldSaveImage ? saveImageDataUrl(draftBgImageUrl) : draftBgImageId,
+        shouldSaveOriginalImage ? saveImageDataUrl(draftOriginalBgImageUrl) : draftOriginalBgImageId
+      ])
+      const { bgUrl, bgOriginalUrl, ...storageTheme } = {
+        ...nextTheme,
+        bgImageId,
+        bgOriginalImageId
+      }
 
       setCustomThemes((prev) => prev.map((item) => (item.id === storageTheme.id ? storageTheme : item)))
-      setDraftBackgroundImageId(bgImageId)
-      if (oldImageId && oldImageId !== bgImageId) deleteBackgroundImage(oldImageId, storageTheme.id)
+      setDraftBgImageId(bgImageId)
+      setDraftOriginalBgImageId(bgOriginalImageId)
+      const nextImageIds = new Set(getThemeImageIds(storageTheme))
+      oldImageIds.forEach((imageId) => {
+        if (imageId && !nextImageIds.has(imageId)) {
+          deleteBgImage(imageId, storageTheme.id)
+        }
+      })
 
       setView("themes")
       toast.success(t("success_themeSave"))
@@ -1180,17 +1266,20 @@ export function FabPanelApp() {
   }
   const resetCustomText = () => setDraftTextColor("")
   const resetCustomBorder = () => setDraftBorderColor("")
-  const resetDraftBackgroundImage = () => {
-    deleteDraftBackgroundImage()
-    setDraftBackgroundImageId("")
-    setDraftBackgroundAnimated(false)
-    setDraftBackgroundImageUrl("")
-    setDraftBackgroundOptions(DEFAULT_CUSTOM_BG_OPTIONS)
+  const resetDraftBgImage = () => {
+    deleteDraftBgImage()
+    setDraftBgState({ imageId: "", animated: false })
+    setDraftBgOptions(DEFAULT_CUSTOM_BG_OPTIONS)
   }
-  const resetDraftBackgroundColor = () => setDraftBackgroundColor("")
+  const restoreDraftBgImage = () => {
+    if (!draftBgRemovalUsed || !draftOriginalBgImageUrl) return
+    deleteDraftBgImage()
+    setDraftBgState(restoreBgState(getDraftBgState()))
+  }
+  const resetDraftBgColor = () => setDraftBgColor("")
 
-  const onRemoveBGClick = async () => {
-    if (isLoading || !draftBackgroundImageUrl) return
+  const onRemoveBgClick = async () => {
+    if (isLoading || !draftBgImageUrl || draftBgRemovalUsed) return
     setIsLoading(true)
 
     if (!(await requirePremiumAccess("pro_removeBG"))) {
@@ -1201,27 +1290,10 @@ export function FabPanelApp() {
     const toastId = toast.loading(t("loading_removeBG"))
 
     try {
-      const result = await new Promise<string>((resolve, reject) => {
-        chrome.runtime.sendMessage(
-          { type: "REMOVE_BACKGROUND_IMAGE", imageUrl: draftBackgroundImageUrl },
-          (response) => {
-            if (chrome.runtime.lastError) {
-              reject(new Error(chrome.runtime.lastError.message))
-              return
-            }
-            if (!response?.success) {
-              reject(new Error(response?.error || "Failed to remove background"))
-              return
-            }
-            resolve(response.dataUrl)
-          }
-        )
-      })
+      const result = await removeImageBg(draftBgImageUrl)
 
-      deleteDraftBackgroundImage()
-      setDraftBackgroundImageId("")
-      setDraftBackgroundAnimated(false)
-      setDraftBackgroundImageUrl(result)
+      deleteDraftBgImage()
+      setDraftBgState(removeBgFromState(getDraftBgState(), { imageUrl: result }))
 
       toast.update(toastId, {
         render: t("success_removeBG"),
@@ -1244,7 +1316,7 @@ export function FabPanelApp() {
   }
 
   const onColorMatchClick = async () => {
-    if (isLoading || (!draftBackgroundImageUrl && !sanitizeBg(draftBackgroundColor))) return
+    if (isLoading || (!draftBgImageUrl && !sanitizeBg(draftBgColor))) return
     setIsLoading(true)
 
     if (!(await requirePremiumAccess("pro_colorMatch"))) {
@@ -1256,7 +1328,7 @@ export function FabPanelApp() {
 
     try {
       await wait(2000)
-      const canvas = await renderImageToCanvas(draftBackgroundImageUrl, draftBackgroundOptions, 256, draftBackgroundColor)
+      const canvas = await renderImageToCanvas(draftBgImageUrl, draftBgOptions, 256, draftBgColor)
       const palette = await Vibrant.from(canvas.toDataURL()).getPalette()
       const isDarkMode = isCurrentPageDarkMode()
       const nextBorder = palette.Vibrant?.hex || ""
@@ -1297,7 +1369,7 @@ export function FabPanelApp() {
       setView("custom")
       return
     }
-    deleteDraftBackgroundImage()
+    deleteDraftBgImage()
     setEditingCustomThemeId("")
     setSelectedCustomThemeId(customThemeItem.id)
     setTheme("custom")
@@ -1315,7 +1387,9 @@ export function FabPanelApp() {
 
     stopCustomThemeDragClamp()
     document.addEventListener("mousemove", clampCustomThemeDrag)
-    document.addEventListener("mouseup", stopCustomThemeDragClamp, { once: true })
+    document.addEventListener("mouseup", stopCustomThemeDragClamp, {
+      once: true
+    })
   }
 
   const onCustomThemeSortEnd = (oldIndex: number, newIndex: number) => {
@@ -1341,8 +1415,16 @@ export function FabPanelApp() {
 
   const onCustomPlusClick = async () => {
     if (customThemes.length > 0 && !(await requirePremiumAccess("pro_themeLimit"))) return
-    const baseName = t("custom")
-    setCustomThemes((prev) => [...prev, createCustomTheme(getUniqueNumber(baseName, prev.map((item) => item.name)))])
+    const baseName = t("theme")
+    setCustomThemes((prev) => [
+      ...prev,
+      createCustomTheme(
+        getUniqueNumber(
+          baseName,
+          prev.map((item) => item.name)
+        )
+      )
+    ])
   }
 
   const deleteCustomTheme = (customThemeId: string) => {
@@ -1351,7 +1433,7 @@ export function FabPanelApp() {
     const deletingSelected = selectedCustomThemeId === customThemeId && theme === "custom"
     const nextThemes = customThemes.filter((item) => item.id !== customThemeId)
     setCustomThemes(nextThemes)
-    if (deletedTheme?.bgImageId) deleteBackgroundImage(deletedTheme.bgImageId, deletedTheme.id)
+    getThemeImageIds(deletedTheme).forEach((imageId) => deleteBgImage(imageId, deletedTheme?.id || ""))
     if (deletingSelected) {
       setSelectedCustomThemeId("")
       setTheme("default")
@@ -1371,11 +1453,7 @@ export function FabPanelApp() {
   const onCustomCardDuplicateClick = async (customThemeItem: CustomTheme) => {
     if (customThemes.length > 0 && !(await requirePremiumAccess("pro_themeLimit"))) return
 
-    const copiedTheme = {
-      ...customThemeItem,
-      id: crypto.randomUUID(),
-      name: String(customThemeItem.name || t("custom")).slice(0, 10)
-    }
+    const copiedTheme = { ...customThemeItem, id: crypto.randomUUID() }
     const sourceIndex = customThemes.findIndex((item) => item.id === customThemeItem.id)
 
     setCustomThemes((prev) => {
@@ -1397,15 +1475,16 @@ export function FabPanelApp() {
     const baseName = t(widgetMeta?.labelKey)
     setWidgetItems((prev) => {
       const currentItems = prev || DEFAULT_WIDGET_INSTANCES
-      const sameTypeNames = currentItems
-        .filter((widget) => widget.type === key)
-        .map((widget) => widget.name)
+      const sameTypeNames = currentItems.filter((widget) => widget.type === key).map((widget) => widget.name)
 
-      return [...currentItems, {
-        id: `${key}-${crypto.randomUUID()}`,
-        type: key,
-        name: getUniqueNumber(baseName, sameTypeNames)
-      }]
+      return [
+        ...currentItems,
+        {
+          id: `${key}-${crypto.randomUUID()}`,
+          type: key,
+          name: getUniqueNumber(baseName, sameTypeNames)
+        }
+      ]
     })
     setExpandedWidgetTypes((prev) => ({ ...prev, [key]: true }))
   }
@@ -1420,14 +1499,14 @@ export function FabPanelApp() {
       const typeItems = items.filter((widget) => widget.type === key)
       typeItems.splice(newIndex, 0, typeItems.splice(oldIndex, 1)[0])
       let index = 0
-      return items.map((widget) => widget.type === key ? typeItems[index++] : widget)
+      return items.map((widget) => (widget.type === key ? typeItems[index++] : widget))
     })
   }
 
   const renameWidget = (widget: WidgetInstance, name: string) => {
-    setWidgetItems((prev) => (prev || DEFAULT_WIDGET_INSTANCES).map((item) =>
-      item.id === widget.id ? { ...item, name } : item
-    ))
+    setWidgetItems((prev) =>
+      (prev || DEFAULT_WIDGET_INSTANCES).map((item) => (item.id === widget.id ? { ...item, name } : item))
+    )
   }
 
   const getWidgetStateKey = (widget: WidgetInstance) => {
@@ -1451,11 +1530,11 @@ export function FabPanelApp() {
   const deleteWidget = async (widget: WidgetInstance) => {
     const stateKey = getWidgetStateKey(widget)
     if (stateKey) {
-      const stateStorage = widget.type === "note" || widget.type === "todo" || widget.type === "photo"
-        ? localStorageInstance : storage
+      const stateStorage =
+        widget.type === "note" || widget.type === "todo" || widget.type === "photo" ? localStorageInstance : storage
       const photoState = widget.type === "photo" ? await localStorageInstance.get<PhotoWidgetState>(stateKey) : null
       await stateStorage.remove(stateKey)
-      if (photoState?.imageId) void deleteImageData(photoState.imageId)
+      getBgImageIds(photoState).forEach((imageId) => void deleteImageData(imageId))
     }
 
     setWidgetItems((prev) => (prev || DEFAULT_WIDGET_INSTANCES).filter((item) => item.id !== widget.id))
@@ -1465,19 +1544,19 @@ export function FabPanelApp() {
     })
   }
 
-  const updateWidgetLayout = (
-    key: keyof WidgetLayoutOptions,
-    value: string | number
-  ) => {
+  const updateWidgetLayout = (key: keyof WidgetLayoutOptions, value: string | number) => {
     setDraftWidgetLayout((prev) => ({ ...prev, [key]: value }))
   }
 
   const resetWidgetLayout = (key: keyof WidgetLayoutOptions) => {
-    setDraftWidgetLayout((prev) => ({ ...prev, [key]: DEFAULT_WIDGET_LAYOUT[key] }))
+    setDraftWidgetLayout((prev) => ({
+      ...prev,
+      [key]: DEFAULT_WIDGET_LAYOUT[key]
+    }))
   }
 
   const cancelEditingTheme = () => {
-    deleteDraftBackgroundImage()
+    deleteDraftBgImage()
     publishEditingThemePreview(null)
     setEditingCustomThemeId("")
     setView("themes")
@@ -1662,16 +1741,17 @@ export function FabPanelApp() {
           <div style={contentStyle}>
             {panelMode === "widget" && (
               <>
-                <h3 style={centeredHeadingStyle}>{t("widget")} {t("setting")}</h3>
+                <h3 style={centeredHeadingStyle}>
+                  {t("widget")} {t("setting")}
+                </h3>
                 <div
-                  style={{ ...tabGridStyle, marginTop: 20, gridTemplateColumns: "1fr 1fr" }}>
+                  style={{
+                    ...tabGridStyle,
+                    marginTop: 20,
+                    gridTemplateColumns: "1fr 1fr"
+                  }}>
                   {(["visibility", "layout"] as const).map((tab) => (
-                    <TabButton
-                      key={tab}
-                      active={widgetTab === tab}
-                      label={t(tab)}
-                      onClick={() => setWidgetTab(tab)}
-                    />
+                    <TabButton key={tab} active={widgetTab === tab} label={t(tab)} onClick={() => setWidgetTab(tab)} />
                   ))}
                 </div>
                 <div className="content-scroll" style={editSectionScrollStyle}>
@@ -1689,7 +1769,12 @@ export function FabPanelApp() {
                             widgets={typeWidgets}
                             expanded={Boolean(expandedWidgetTypes[item.key])}
                             holderRef={panelRootRef}
-                            onToggle={() => setExpandedWidgetTypes((prev) => ({ ...prev, [item.key]: !prev[item.key] }))}
+                            onToggle={() =>
+                              setExpandedWidgetTypes((prev) => ({
+                                ...prev,
+                                [item.key]: !prev[item.key]
+                              }))
+                            }
                             onAdd={() => void addWidget(item.key)}
                             onSortStart={onCustomThemeSortStart}
                             onSortEnd={(oldIndex, newIndex) => sortWidgets(item.key, oldIndex, newIndex)}
@@ -1704,10 +1789,10 @@ export function FabPanelApp() {
                     <>
                       <ColorSettingCard
                         label={t("backgroundColor")}
-                        value={draftWidgetLayout.backgroundColor}
-                        onChange={(value) => updateWidgetLayout("backgroundColor", value)}
-                        onReset={() => resetWidgetLayout("backgroundColor")}
-                        canReset={draftWidgetLayout.backgroundColor !== DEFAULT_WIDGET_LAYOUT.backgroundColor}
+                        value={draftWidgetLayout.bgColor}
+                        onChange={(value) => updateWidgetLayout("bgColor", value)}
+                        onReset={() => resetWidgetLayout("bgColor")}
+                        canReset={draftWidgetLayout.bgColor !== DEFAULT_WIDGET_LAYOUT.bgColor}
                         allowGradient
                       />
                       <ColorSettingCard
@@ -1740,17 +1825,13 @@ export function FabPanelApp() {
             )}
             {panelMode === "theme" && view === "themes" && (
               <>
-                <h3 style={centeredHeadingStyle}>{t("theme")} {t("setting")}</h3>
+                <h3 style={centeredHeadingStyle}>
+                  {t("theme")} {t("setting")}
+                </h3>
                 <div style={themeSectionStyle}>
-                  <div
-                    style={{ ...tabGridStyle, gridTemplateColumns: "1fr 1fr" }}>
+                  <div style={{ ...tabGridStyle, gridTemplateColumns: "1fr 1fr" }}>
                     {(["preset", "custom"] as const).map((tab) => (
-                      <TabButton
-                        key={tab}
-                        active={themeTab === tab}
-                        label={t(tab)}
-                        onClick={() => setThemeTab(tab)}
-                      />
+                      <TabButton key={tab} active={themeTab === tab} label={t(tab)} onClick={() => setThemeTab(tab)} />
                     ))}
                   </div>
                   <div ref={themeGridScrollRef} className="content-scroll" style={themeGridScrollStyle}>
@@ -1808,7 +1889,12 @@ export function FabPanelApp() {
             {panelMode === "theme" && view === "custom" && (
               <>
                 <h3 style={centeredHeadingStyle}>{t("editTheme")}</h3>
-                <div style={{ ...tabGridStyle, marginTop: 20, gridTemplateColumns: "1fr 1fr 1fr" }}>
+                <div
+                  style={{
+                    ...tabGridStyle,
+                    marginTop: 20,
+                    gridTemplateColumns: "1fr 1fr 1fr"
+                  }}>
                   {(["general", "background", "layout"] as const).map((tab) => (
                     <TabButton
                       key={tab}
@@ -1838,12 +1924,12 @@ export function FabPanelApp() {
                       </Card>
                       <CheckboxCard
                         label={t("hideHeader")}
-                        checked={draftBackgroundOptions.hideHeader}
+                        checked={draftBgOptions.hideHeader}
                         onChange={(c) => updateCustomBgOption("hideHeader", c)}
                       />
                       <CheckboxCard
                         label={t("hideFooter")}
-                        checked={draftBackgroundOptions.hideFooter}
+                        checked={draftBgOptions.hideFooter}
                         onChange={(c) => updateCustomBgOption("hideFooter", c)}
                       />
                     </>
@@ -1852,17 +1938,15 @@ export function FabPanelApp() {
                     <>
                       <ColorSettingCard
                         label={t("backgroundColor")}
-                        value={draftBackgroundColor}
-                        onChange={setDraftBackgroundColor}
-                        onReset={resetDraftBackgroundColor}
-                        canReset={Boolean(draftBackgroundColor)}
+                        value={draftBgColor}
+                        onChange={setDraftBgColor}
+                        onReset={resetDraftBgColor}
+                        canReset={Boolean(draftBgColor)}
                         allowGradient
                       />
                       <Card>
-                        <label style={rowStyle}>
-                          <span style={fieldLabelStyle}>
-                            {t("backgroundImage")}
-                          </span>
+                        <div style={rowStyle}>
+                          <span style={fieldLabelStyle}>{t("backgroundImage")}</span>
                           <div style={iconLabelStyle}>
                             <input
                               ref={bgUploadRef}
@@ -1876,125 +1960,143 @@ export function FabPanelApp() {
                               className="decoai-control-button"
                               onClick={() => bgUploadRef.current?.click()}
                               style={controlButtonStyle}>
-                              {t("upload")}
+                              <Icon icon="lucide:image-up" height={20} aria-hidden="true" />
                             </button>
                             <button
                               type="button"
                               className="decoai-control-button"
-                              onClick={resetDraftBackgroundImage}
-                              disabled={!draftBackgroundImageUrl}
-                              style={{ ...controlButtonStyle, ...disabledControlStyle(Boolean(draftBackgroundImageUrl)) }}>
+                              onClick={resetDraftBgImage}
+                              disabled={!draftBgImageUrl}
+                              style={{
+                                ...controlButtonStyle,
+                                ...disabledControlStyle(Boolean(draftBgImageUrl))
+                              }}>
                               <Icon icon="lucide:rotate-ccw" height={20} aria-hidden="true" />
                             </button>
                           </div>
-                        </label>
+                        </div>
                       </Card>
-                      {draftBackgroundImageUrl && (
+                      {draftBgImageUrl && (
                         <>
                           <Card>
-                            <label style={rowStyle}>
-                              <span style={fieldLabelStyle}>{t("removeBG")}</span>
-                              <button
-                                type="button"
-                                className="decoai-control-button"
-                                onClick={onRemoveBGClick}
-                                style={controlButtonStyle}>
-                                <div style={iconLabelStyle}>
-                                  <Icon icon="lucide:sparkles" height={16} color="#66cdaa" aria-hidden="true" />
-                                  {t("apply")}
-                                </div>
-                              </button>
-                            </label>
-                          </Card>
-                          <Card>
-                            <div style={columnControlStyle}>
-                              <RangeControl
-                                label={t("horizontal")}
-                                min={0}
-                                max={100}
-                                step={1}
-                                value={getPositionXPercent(draftBackgroundOptions.position)}
-                                onChange={(v) =>
-                                  updateCustomBgOption(
-                                    "position",
-                                    `${Number(v)}% ${getPositionYPercent(draftBackgroundOptions.position)}%`
-                                  )
-                                }
-                                onReset={() =>
-                                  updateCustomBgOption(
-                                    "position",
-                                    `50% ${getPositionYPercent(draftBackgroundOptions.position)}%`
-                                  )
-                                }
-                              />
-                              <RangeControl
-                                label={t("vertical")}
-                                min={0}
-                                max={100}
-                                step={1}
-                                value={getPositionYPercent(draftBackgroundOptions.position)}
-                                onChange={(v) =>
-                                  updateCustomBgOption(
-                                    "position",
-                                    `${getPositionXPercent(draftBackgroundOptions.position)}% ${Number(v)}%`
-                                  )
-                                }
-                                onReset={() =>
-                                  updateCustomBgOption(
-                                    "position",
-                                    `${getPositionXPercent(draftBackgroundOptions.position)}% 50%`
-                                  )
-                                }
-                              />
-                            </div>
-                          </Card>
-                          <Card>
                             <div style={rowStyle}>
-                              <span style={fieldLabelStyle}>{t("rotation")}</span>
+                              <span style={fieldLabelStyle}>{t("removeBG")}</span>
                               <div style={iconLabelStyle}>
                                 <button
                                   type="button"
                                   className="decoai-control-button"
-                                  onClick={() => rotateDraftBackground(-90)}
-                                  style={controlButtonStyle}>
-                                  <Icon icon="lucide:undo-dot" height={20} aria-hidden="true" />
-                                </button>
-                                <button
-                                  type="button"
-                                  className="decoai-control-button"
-                                  onClick={() => rotateDraftBackground(90)}
-                                  style={controlButtonStyle}>
-                                  <Icon icon="lucide:redo-dot" height={20} aria-hidden="true" />
+                                  onClick={draftBgRemovalUsed ? restoreDraftBgImage : onRemoveBgClick}
+                                  disabled={isLoading || (draftBgRemovalUsed && !draftOriginalBgImageUrl)}
+                                  style={{
+                                    ...controlButtonStyle,
+                                    ...disabledControlStyle(
+                                      !isLoading && (!draftBgRemovalUsed || Boolean(draftOriginalBgImageUrl))
+                                    )
+                                  }}>
+                                  <Icon
+                                    icon={draftBgRemovalUsed ? "lucide:rotate-ccw" : "lucide:sparkles"}
+                                    height={20}
+                                    color={draftBgRemovalUsed ? undefined : "#66cdaa"}
+                                    aria-hidden="true"
+                                  />
                                 </button>
                               </div>
                             </div>
                           </Card>
-                          <CheckboxCard
-                            label={t("flip")}
-                            checked={draftBackgroundOptions.scaleX === -1}
-                            onChange={(c) => updateCustomBgOption("scaleX", c ? -1 : 1)}
-                          />
+                          <Card>
+                            <div style={{ ...columnControlStyle, gap: 8 }}>
+                              <div
+                                ref={bgPreviewRef}
+                                style={{
+                                  position: "relative",
+                                  width: "100%",
+                                  aspectRatio: "16 / 9",
+                                  overflow: "hidden",
+                                  borderRadius: 8,
+                                  background: sanitizeBg(draftBgColor) || DEFAULT_PREVIEW,
+                                  backgroundSize: draftBgColor ? undefined : "16px 16px"
+                                }}>
+                                <img
+                                  ref={setBgPreviewTarget}
+                                  src={draftBgImageUrl}
+                                  draggable={false}
+                                  style={{
+                                    position: "absolute",
+                                    top: "50%",
+                                    left: "50%",
+                                    width: isDraftBgSideways ? "56.25%" : "100%",
+                                    height: isDraftBgSideways ? "177.78%" : "100%",
+                                    objectFit: "cover",
+                                    cursor: "grab",
+                                    userSelect: "none",
+                                    transform: getBgTransform(draftBgOptions),
+                                    filter: `invert(${draftBgOptions.invert}) grayscale(${draftBgOptions.grayscale}) brightness(${draftBgOptions.brightness})`
+                                  }}
+                                />
+                                <Moveable
+                                  target={bgPreviewTarget}
+                                  draggable
+                                  origin={false}
+                                  hideDefaultLines
+                                  preventDefault
+                                  stopPropagation
+                                  onDrag={(e) => dragDraftBg(e.delta[0], e.delta[1])}
+                                />
+                                <div
+                                  style={{
+                                    position: "absolute",
+                                    inset: 0,
+                                    zIndex: 2,
+                                    borderRadius: 8,
+                                    boxShadow: "inset 0 0 0 2px #66cdaa",
+                                    pointerEvents: "none"
+                                  }}
+                                />
+                              </div>
+                              <div
+                                style={{
+                                  ...rowStyle,
+                                  justifyContent: "center",
+                                  gap: 6
+                                }}>
+                                {bgPreviewActions.map((action) => (
+                                  <button
+                                    key={action.icon}
+                                    type="button"
+                                    className="decoai-control-button"
+                                    disabled={action.disabled}
+                                    onClick={action.onClick}
+                                    style={{
+                                      ...controlButtonStyle,
+                                      ...disabledControlStyle(!action.disabled)
+                                    }}>
+                                    <Icon icon={`lucide:${action.icon}`} height={20} aria-hidden="true" />
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </Card>
                         </>
                       )}
-                      {(draftBackgroundImageUrl || draftBackgroundColor) && (
+                      {(draftBgImageUrl || draftBgColor) && (
                         <>
                           <RangeCard
                             label={t("brightness")}
                             min={0}
                             max={5}
                             step={0.1}
-                            value={draftBackgroundOptions.brightness}
+                            value={draftBgOptions.brightness}
                             onChange={(v) => updateCustomBgOption("brightness", Number(v))}
                             onReset={() => updateCustomBgOption("brightness", 1)}
                           />
                           <CheckboxCard
                             label={t("invert")}
-                            checked={draftBackgroundOptions.invert === 1}
+                            checked={draftBgOptions.invert === 1}
                             onChange={(c) => updateCustomBgOption("invert", c ? 1 : 0)}
                           />
                           <CheckboxCard
                             label={t("grayscale")}
-                            checked={draftBackgroundOptions.grayscale === 1}
+                            checked={draftBgOptions.grayscale === 1}
                             onChange={(c) => updateCustomBgOption("grayscale", c ? 1 : 0)}
                           />
                         </>
@@ -2003,22 +2105,19 @@ export function FabPanelApp() {
                   )}
                   {customEditTab === "layout" && (
                     <>
-                      {(draftBackgroundImageUrl || draftBackgroundColor) && (
+                      {(draftBgImageUrl || draftBgColor) && (
                         <>
                           <Card>
-                            <label style={rowStyle}>
+                            <div style={rowStyle}>
                               <span style={fieldLabelStyle}>{t("colorMatch")}</span>
                               <button
                                 type="button"
                                 className="decoai-control-button"
                                 onClick={onColorMatchClick}
                                 style={controlButtonStyle}>
-                                <div style={iconLabelStyle}>
-                                  <Icon icon="lucide:sparkles" height={16} color="#66cdaa" aria-hidden="true" />
-                                  {t("apply")}
-                                </div>
+                                <Icon icon="lucide:sparkles" height={20} color="#66cdaa" aria-hidden="true" />
                               </button>
-                            </label>
+                            </div>
                           </Card>
                         </>
                       )}
@@ -2041,7 +2140,7 @@ export function FabPanelApp() {
                         min={0}
                         max={100}
                         step={1}
-                        value={Math.round(draftBackgroundOptions.opacity * 100)}
+                        value={Math.round(draftBgOptions.opacity * 100)}
                         onChange={(value) => updateCustomBgOption("opacity", Number(value) / 100)}
                         onReset={() => updateCustomBgOption("opacity", 0.8)}
                       />
@@ -2050,7 +2149,7 @@ export function FabPanelApp() {
                         min={0}
                         max={50}
                         step={1}
-                        value={draftBackgroundOptions.blur}
+                        value={draftBgOptions.blur}
                         onChange={(v) => updateCustomBgOption("blur", Number(v))}
                         onReset={() => updateCustomBgOption("blur", 10)}
                       />
@@ -2060,21 +2159,17 @@ export function FabPanelApp() {
               </>
             )}
           </div>
-          <div
-            className="footer"
-            style={{ ...columnControlStyle, padding: "10px 20px" }}>
+          <div className="footer" style={{ ...columnControlStyle, padding: "10px 20px" }}>
             {panelMode === "theme" && themeTab === "custom" && view !== "custom" && (
               <div style={{ ...rowStyle, gap: 8 }}>
-                <FooterButton
-                  onClick={onImportClick}
-                  style={footerButtonStyle}
-                  icon="download"
-                  label={t("import")}
-                />
+                <FooterButton onClick={onImportClick} style={footerButtonStyle} icon="download" label={t("import")} />
                 <FooterButton
                   onClick={onExportClick}
                   disabled={theme !== "custom"}
-                  style={{ ...footerButtonStyle, ...disabledControlStyle(theme === "custom") }}
+                  style={{
+                    ...footerButtonStyle,
+                    ...disabledControlStyle(theme === "custom")
+                  }}
                   icon="upload"
                   label={t("export")}
                 />
@@ -2103,30 +2198,23 @@ export function FabPanelApp() {
                 />
               </div>
             )}
-            {!isPremiumUser &&
-              ((panelMode === "theme" && view !== "custom") || panelMode === "widget") && (
-                <FooterButton
-                  className="pro-button"
-                  onClick={onProClick}
-                  style={{ ...proButtonStyle, display: "flex", justifyContent: "center" }}
-                  icon="assets/pro.gif"
-                  label={t("upgradePro")}
-                />
-              )}
+            {!isPremiumUser && ((panelMode === "theme" && view !== "custom") || panelMode === "widget") && (
+              <FooterButton
+                className="pro-button"
+                onClick={onProClick}
+                style={{
+                  ...proButtonStyle,
+                  display: "flex",
+                  justifyContent: "center"
+                }}
+                icon="assets/pro.gif"
+                label={t("upgradePro")}
+              />
+            )}
           </div>
         </div>
         {isLoading && (
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              backgroundColor: "rgba(0, 0, 0, 0.5)",
-              zIndex: 10,
-              pointerEvents: "auto"
-            }}>
+          <div style={LOADING_OVERLAY_STYLE}>
             <Icon icon="line-md:loading-twotone-loop" height={48} aria-hidden="true" />
           </div>
         )}
@@ -2145,15 +2233,7 @@ const themeCardStyle = {
   transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
 } as const
 
-function TabButton({
-  active,
-  label,
-  onClick
-}: {
-  active: boolean
-  label: string
-  onClick: () => void
-}) {
+function TabButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
   return (
     <button
       type="button"
@@ -2197,7 +2277,9 @@ function ThemeCard({
         <div className="theme-card__bg preset-theme-card__bg" style={{ backgroundColor: color }} />
         <span className="preset-theme-card__emoji">{emoji}</span>
         <div className="theme-card__title">
-          <span className="decoai-marquee-title__text" data-title={label}>{label}</span>
+          <span className="decoai-marquee-title__text" data-title={label}>
+            {label}
+          </span>
         </div>
       </button>
     </Tilt>
@@ -2239,10 +2321,11 @@ function FooterButton({
   return (
     <button type="button" {...buttonProps}>
       <div style={iconLabelStyle}>
-        {icon.includes("assets")
-          ? <img src={chrome.runtime.getURL(icon)} draggable="false" style={{ height: 16 }} />
-          : <Icon icon={`lucide:${icon}`} height={16} aria-hidden="true" />
-        }
+        {icon.includes("assets") ? (
+          <img src={chrome.runtime.getURL(icon)} draggable="false" style={{ height: 16 }} />
+        ) : (
+          <Icon icon={`lucide:${icon}`} height={16} aria-hidden="true" />
+        )}
         <span>{label}</span>
       </div>
     </button>
@@ -2309,14 +2392,18 @@ function ColorSettingCard({
                   borderRadius: 4,
                   background: value ? pickerValue : `${DEFAULT_PREVIEW} 0 / 8px 8px`
                 }}
-                aria-hidden="true" />
+                aria-hidden="true"
+              />
             </button>
             <button
               type="button"
               className="decoai-control-button"
               onClick={onReset}
               disabled={!canReset}
-              style={{ ...controlButtonStyle, ...disabledControlStyle(canReset) }}>
+              style={{
+                ...controlButtonStyle,
+                ...disabledControlStyle(canReset)
+              }}>
               <Icon icon="lucide:rotate-ccw" height={20} aria-hidden="true" />
             </button>
           </div>
@@ -2335,7 +2422,9 @@ function ColorSettingCard({
               idSuffix={pickerIdSuffix}
               value={pickerValue}
               onChange={onChange}
-              locales={{ CONTROLS: { SOLID: t("solid"), GRADIENT: t("gradient") } }}
+              locales={{
+                CONTROLS: { SOLID: t("solid"), GRADIENT: t("gradient") }
+              }}
               config={pickerConfig}
               width={170}
               height={120}
@@ -2355,16 +2444,7 @@ function ColorSettingCard({
   )
 }
 
-function RangeControl({
-  label,
-  min,
-  max,
-  step,
-  value,
-  disabled = false,
-  onChange,
-  onReset
-}: RangeControlProps) {
+function RangeControl({ label, min, max, step, value, disabled = false, onChange, onReset }: RangeControlProps) {
   const rangePosition = max === min ? 0 : Math.min(1, Math.max(0, (Number(value) - min) / (max - min)))
   const outputLeft = `calc(${rangePosition * 100}% + ${(0.5 - rangePosition) * 16}px)`
 
@@ -2379,7 +2459,10 @@ function RangeControl({
               className="decoai-control-button"
               onClick={onReset}
               disabled={disabled}
-              style={{ ...controlButtonStyle, ...disabledControlStyle(!disabled) }}>
+              style={{
+                ...controlButtonStyle,
+                ...disabledControlStyle(!disabled)
+              }}>
               <Icon icon="lucide:rotate-ccw" height={20} aria-hidden="true" />
             </button>
           )}
@@ -2399,8 +2482,7 @@ function RangeControl({
             whiteSpace: "nowrap",
             pointerEvents: "none",
             transform: "translateX(-50%)"
-          }}
-        >
+          }}>
           {value}
         </output>
         <input
@@ -2434,27 +2516,26 @@ type RangeControlProps = {
   onReset?: () => void
 }
 
-function CheckboxControl({
-  label,
-  checked,
-  icon,
-  disabled = false,
-  onChange
-}: CheckboxControlProps) {
+function CheckboxControl({ label, checked, icon, disabled = false, onChange }: CheckboxControlProps) {
   return (
-    <label style={rowStyle}>
+    <div style={rowStyle}>
       <div style={{ ...rowStyle, gap: 8 }}>
-        {icon && (<Icon icon={`lucide:${icon}`} height={16} aria-hidden="true" />)}
+        {icon && <Icon icon={`lucide:${icon}`} height={16} aria-hidden="true" />}
         <span style={fieldLabelStyle}>{label}</span>
       </div>
       <input
         type="checkbox"
         checked={checked}
         disabled={disabled}
-        style={{ width: 20, height: 20, accentColor: "#66cdaa", ...disabledControlStyle(!disabled) }}
+        style={{
+          width: 20,
+          height: 20,
+          accentColor: "#66cdaa",
+          ...disabledControlStyle(!disabled)
+        }}
         onChange={(e) => onChange(e.target.checked)}
       />
-    </label>
+    </div>
   )
 }
 
