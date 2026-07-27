@@ -380,14 +380,7 @@ function CustomThemeSortableCard({
         <button
           type="button"
           className={`theme-card custom-theme-card decoai-marquee-title${theme === "custom" && selectedCustomThemeId === item.id ? " is-active" : ""}${draggingCustomThemeId === item.id ? " is-dragging" : ""}`}
-          style={
-            cardBg
-              ? {
-                  background: cardBg,
-                  backgroundSize: bgValue ? undefined : "16px 16px"
-                }
-              : undefined
-          }
+          style={cardBg ? { background: cardBg, backgroundSize: bgValue ? undefined : "16px 16px" } : undefined}
           onPointerEnter={(e) => updateTitleOverflow(e.currentTarget)}
           onClick={() => onCustomCardClick(item)}>
           <div className="theme-card__bg custom-theme-card__bg" style={bgStyle} />
@@ -1074,7 +1067,7 @@ export function FabPanelApp() {
             await openCheckout(nextIdToken)
             return
           }
-        } catch {}
+        } catch { }
 
         const nextAuthSession = await signInAndSaveAuthSession(true)
         setPremiumStatus(nextAuthSession.premiumStatus)

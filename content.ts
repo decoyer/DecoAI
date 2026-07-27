@@ -202,20 +202,20 @@ const WIDGET_LIST: Array<{
   labelKey: string
   icon: string
 }> = [
-  { key: "note", labelKey: "noteWidget", icon: "notepad-text" },
-  { key: "todo", labelKey: "todoWidget", icon: "list-checks" },
-  { key: "dday", labelKey: "ddayWidget", icon: "calendar-1" },
-  { key: "timer", labelKey: "timerWidget", icon: "alarm-clock" },
-  { key: "stopwatch", labelKey: "stopwatchWidget", icon: "timer" },
-  { key: "photo", labelKey: "photoWidget", icon: "sticker" }
-]
+    { key: "note", labelKey: "noteWidget", icon: "notepad-text" },
+    { key: "todo", labelKey: "todoWidget", icon: "list-checks" },
+    { key: "dday", labelKey: "ddayWidget", icon: "calendar-1" },
+    { key: "timer", labelKey: "timerWidget", icon: "alarm-clock" },
+    { key: "stopwatch", labelKey: "stopwatchWidget", icon: "timer" },
+    { key: "photo", labelKey: "photoWidget", icon: "sticker" }
+  ]
 
 const appendToPage = (element: HTMLElement) => {
-  ;(document.head || document.documentElement).appendChild(element)
+  ; (document.head || document.documentElement).appendChild(element)
 }
 
 const appendToBody = (element: HTMLElement) => {
-  ;(document.body || document.documentElement).appendChild(element)
+  ; (document.body || document.documentElement).appendChild(element)
 }
 
 const getOrCreateStyle = (id: string) => {
@@ -742,21 +742,14 @@ const getTodoItems = (content?: JSONContent): TodoItem[] =>
 const createTodoDoc = (items: TodoItem[]): JSONContent => ({
   type: "doc",
   content: items.length
-    ? [
-        {
-          type: "taskList",
-          content: items.map((item) => ({
-            type: "taskItem",
-            attrs: { checked: item.checked },
-            content: [
-              {
-                type: "paragraph",
-                content: item.text ? [{ type: "text", text: item.text }] : []
-              }
-            ]
-          }))
-        }
-      ]
+    ? [{
+      type: "taskList",
+      content: items.map((item) => ({
+        type: "taskItem",
+        attrs: { checked: item.checked },
+        content: [{ type: "paragraph", content: item.text ? [{ type: "text", text: item.text }] : [] }]
+      }))
+    }]
     : EMPTY_DOC.content
 })
 
@@ -997,8 +990,7 @@ function TodoWidgetContent({ widgetId }: { widgetId: string }) {
                 e.preventDefault()
                 addTodo(true)
               }
-            },
-            onBlur: () => addTodo()
+            }
           })
         ),
         createElement(
@@ -1451,18 +1443,16 @@ function PhotoWidgetContent({
     }),
     imageUrl
       ? createElement(
-          React.Fragment,
-          null,
-          createElement("img", {
-            className: "decoai-photo-widget-image",
-            src: imageUrl,
-            draggable: false
-          }),
-          !disabled ? createElement("div", { className: "decoai-photo-widget-upload-overlay" }, uploadButton) : null
-        )
-      : !disabled
-        ? createElement("div", { className: "decoai-photo-widget-placeholder" }, uploadButton)
-        : null
+        React.Fragment,
+        null,
+        createElement("img", {
+          className: "decoai-photo-widget-image",
+          src: imageUrl,
+          draggable: false
+        }),
+        !disabled ? createElement("div", { className: "decoai-photo-widget-upload-overlay" }, uploadButton) : null
+      )
+      : !disabled ? createElement("div", { className: "decoai-photo-widget-placeholder" }, uploadButton) : null
   )
 }
 
@@ -1828,59 +1818,52 @@ function WidgetOverlayApp() {
             }
           },
           !isPhotoWidget
-            ? createElement(Icon, {
-                icon: `lucide:${widgetMeta.icon}`,
-                height: 16,
-                "aria-hidden": "true"
-              })
+            ? createElement(Icon, { icon: `lucide:${widgetMeta.icon}`, height: 16, "aria-hidden": "true" })
             : null,
           !isPhotoWidget
             ? createElement(
-                "div",
-                {
-                  className: "decoai-widget-title",
-                  onPointerEnter: (e) => updateWidgetTitleOverflow(e.currentTarget),
-                  style: {
-                    flex: 1,
-                    minWidth: 0,
-                    overflow: "hidden",
-                    userSelect: "none"
-                  }
-                },
-                createElement(
-                  "span",
-                  {
-                    className: "decoai-widget-title__text",
-                    "data-title": item.name ?? t(widgetMeta.labelKey)
-                  },
-                  item.name ?? t(widgetMeta.labelKey)
-                )
+              "div",
+              {
+                className: "decoai-widget-title",
+                onPointerEnter: (e) => updateWidgetTitleOverflow(e.currentTarget),
+                style: {
+                  flex: 1,
+                  minWidth: 0,
+                  overflow: "hidden",
+                  userSelect: "none"
+                }
+              },
+              createElement(
+                "span",
+                { className: "decoai-widget-title__text", "data-title": item.name ?? t(widgetMeta.labelKey) },
+                item.name ?? t(widgetMeta.labelKey)
               )
+            )
             : null,
           createElement(
             "div",
             { className: "decoai-widget-card__actions" },
             isPhotoWidget
               ? createElement(
-                  "button",
-                  {
-                    type: "button",
-                    className: "decoai-widget-card__action decoai-widget-card__edit",
-                    disabled: isRemovingBg,
-                    onPointerDown: (e) => e.stopPropagation(),
-                    onPointerUp: (e) => e.stopPropagation(),
-                    onClick: (e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      void togglePhotoWidgetBg(item)
-                    }
-                  },
-                  createElement(Icon, {
-                    icon: isBgRemoved ? "lucide:rotate-ccw" : "lucide:sparkles",
-                    height: 16,
-                    "aria-hidden": "true"
-                  })
-                )
+                "button",
+                {
+                  type: "button",
+                  className: "decoai-widget-card__action decoai-widget-card__edit",
+                  disabled: isRemovingBg,
+                  onPointerDown: (e) => e.stopPropagation(),
+                  onPointerUp: (e) => e.stopPropagation(),
+                  onClick: (e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    void togglePhotoWidgetBg(item)
+                  }
+                },
+                createElement(Icon, {
+                  icon: isBgRemoved ? "lucide:rotate-ccw" : "lucide:sparkles",
+                  height: 16,
+                  "aria-hidden": "true"
+                })
+              )
               : null,
             createElement(
               "button",
@@ -1929,24 +1912,20 @@ function WidgetOverlayApp() {
         item.type === "stopwatch" ? createElement(StopwatchWidgetContent, { widgetId: item.id }) : null,
         item.type === "photo"
           ? createElement(PhotoWidgetContent, {
-              widgetId: item.id,
-              disabled: isRemovingBg,
-              onBgRemovalChange: (used: boolean) => {
-                if (bgRemovedWidgetIds[item.id] === used) return
-                setBgRemovedWidgetIds((prev) => ({ ...prev, [item.id]: used }))
-              }
-            })
+            widgetId: item.id,
+            disabled: isRemovingBg,
+            onBgRemovalChange: (used: boolean) => {
+              if (bgRemovedWidgetIds[item.id] === used) return
+              setBgRemovedWidgetIds((prev) => ({ ...prev, [item.id]: used }))
+            }
+          })
           : null,
         isRemovingBg
           ? createElement(
-              "div",
-              { style: LOADING_OVERLAY_STYLE },
-              createElement(Icon, {
-                icon: "line-md:loading-twotone-loop",
-                height: 48,
-                "aria-hidden": "true"
-              })
-            )
+            "div",
+            { style: LOADING_OVERLAY_STYLE },
+            createElement(Icon, { icon: "line-md:loading-twotone-loop", height: 48, "aria-hidden": "true" })
+          )
           : null
       )
     }),
@@ -2237,6 +2216,11 @@ const mountWidgetOverlay = () => {
         padding: 0 10px;
         overflow: auto;
         scrollbar-width: thin !important;
+        scrollbar-color: transparent transparent !important;
+        scrollbar-gutter: stable;
+      }
+      .decoai-note-widget:hover .decoai-note-editor-wrap,
+      .decoai-todo-widget:hover .decoai-todo-list {
         scrollbar-color: color-mix(in srgb, var(--decoai-widget-text) 30%, transparent) transparent !important;
       }
       .decoai-text-editor {
@@ -2381,6 +2365,7 @@ const mountWidgetOverlay = () => {
         background-color: transparent;
       }
       .decoai-todo-input::placeholder {
+        color: inherit;
         opacity: 0;
         transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       }
@@ -2537,14 +2522,7 @@ const syncFabVisibility = async () => {
   const isWidgetHidden = (await storage.get<boolean>(WIDGET_HIDDEN_STORAGE_KEY)) === true
   if (themeAction) themeAction.style.display = isThemeHidden ? "none" : "flex"
   if (widgetAction) widgetAction.style.display = isWidgetHidden ? "none" : "flex"
-  if (
-    fabOpen &&
-    ((isThemeHidden && fabPanelView === "theme") ||
-      (isWidgetHidden && fabPanelView === "widget") ||
-      (isThemeHidden && isWidgetHidden))
-  ) {
-    closeFabDock()
-  }
+  if (fabOpen && (fabPanelView === "theme" ? isThemeHidden : isWidgetHidden)) closeFabDock()
 }
 
 const onOutsideFabClick = (e: MouseEvent) => {
@@ -2620,22 +2598,14 @@ const mountFab = async () => {
 
   const themeAction = createFabAction({
     buttonClass: FAB_THEME_BTN_CLASS,
-    iconComponent: React.createElement(Icon, {
-      icon: "lucide:wallpaper",
-      height: 24,
-      "aria-hidden": "true"
-    }),
+    iconComponent: React.createElement(Icon, { icon: "lucide:wallpaper", height: 24, "aria-hidden": "true" }),
     tooltipText: `${t("theme")} ${t("setting")}`,
     panelView: "theme"
   })
 
   const widgetAction = createFabAction({
     buttonClass: FAB_WIDGET_BTN_CLASS,
-    iconComponent: React.createElement(Icon, {
-      icon: "lucide:component",
-      height: 24,
-      "aria-hidden": "true"
-    }),
+    iconComponent: React.createElement(Icon, { icon: "lucide:component", height: 24, "aria-hidden": "true" }),
     tooltipText: `${t("widget")} ${t("setting")}`,
     panelView: "widget"
   })
@@ -2706,51 +2676,51 @@ const generateCSS = (
 
   const getVisibilityStyle = () => `
     ${hideHeader ? `${SITE_SELECTORS[site].header} { display: none !important; }` : ""}
-    ${
-      hideFooter
-        ? `${SITE_SELECTORS[site].footer} {
-      ${site === "chatgpt" ? "display: none !important;" : ""}
-      font-size: 0 !important;
-      line-height: normal !important;
-    }`
-        : ""
+    ${hideFooter
+      ? `
+        ${SITE_SELECTORS[site].footer} {
+        ${site === "chatgpt" ? "display: none !important;" : ""}
+        font-size: 0 !important;
+        line-height: normal !important;
+        }
+      `
+      : ""
     }
   `
 
   const getBgStyle = () =>
     bgUrl || bgColor
       ? `
-      html body {
-        background: ${bgFill} !important;
-        background-attachment: fixed !important;
-        background-size: cover !important;
-      }
-      ${
-        bgUrl
-          ? `
-      body::before {
-        content: ""; position: fixed; top: 50%; left: 50%;
-        width: ${isBgSideways ? "100vh" : "100vw"};
-        height: ${isBgSideways ? "100vw" : "100vh"};
-        background-image: url("${bgUrl}") !important;
-        background-color: transparent !important;
-        background-position: center !important;
-        background-size: cover !important;
-        background-repeat: no-repeat !important;
-        z-index: 0 !important;
-        transform: ${bgTransform} !important;
-        transform-origin: center !important;
-        filter: invert(${invert}) grayscale(${grayscale}) brightness(${brightness}) !important;
-      }
-      `
-          : ""
+        html body {
+          background: ${bgFill} !important;
+          background-attachment: fixed !important;
+          background-size: cover !important;
+        }
+      ${bgUrl
+        ? `
+          body::before {
+            content: ""; position: fixed; top: 50%; left: 50%;
+            width: ${isBgSideways ? "100vh" : "100vw"};
+            height: ${isBgSideways ? "100vw" : "100vh"};
+            background-image: url("${bgUrl}") !important;
+            background-color: transparent !important;
+            background-position: center !important;
+            background-size: cover !important;
+            background-repeat: no-repeat !important;
+            z-index: 0 !important;
+            transform: ${bgTransform} !important;
+            transform-origin: center !important;
+            filter: invert(${invert}) grayscale(${grayscale}) brightness(${brightness}) !important;
+          }
+        `
+        : ""
       }
       ${container} { background-color: transparent !important; }
       ${site === "chatgpt" ? "#page-header, div::after { background-color: transparent !important; }" : ""}
       ${site === "gemini" ? ".input-gradient { background-color: transparent !important; } .input-gradient::before { content: none !important; }" : ""}
       ${site === "claude" ? 'header { background-color: transparent !important; } header > div:first-of-type { display: none !important } div[role="note"][data-disclaimer="true"] { background-color: transparent !important; }' : ""}
       ${site === "grok" ? "main > div > div { background-image: none !important; } .chat-input-backdrop { background-color: transparent !important; }" : ""}
-    `
+      `
       : ""
 
   const getElStyle = () => `
@@ -2768,71 +2738,66 @@ const generateCSS = (
     ${hoverSelectors} {
       opacity: 1 !important;
     }
-    ${
-      site === "chatgpt"
-        ? `
-      .agent-turn {
-        margin-top: 5px !important;
-        margin-bottom: 5px !important;
-        padding: 10px 16px !important;
-        border-radius: 22px !important;
-      }
-    `
-        : ""
+    ${site === "chatgpt"
+      ? `
+        .agent-turn {
+          margin-top: 5px !important;
+          margin-bottom: 5px !important;
+          padding: 10px 16px !important;
+          border-radius: 22px !important;
+        }
+      `
+      : ""
     }
-    ${
-      site === "gemini"
-        ? `
-      .show-lm-background::before {
-        background: none !important;
-      }
-      model-response, .dual-response-panel {
-        padding: 20px 28px !important;
-        border-radius: 40px !important;
-      }
-    `
-        : ""
+    ${site === "gemini"
+      ? `
+        .show-lm-background::before {
+          background: none !important;
+        }
+        model-response, .dual-response-panel {
+          padding: 20px 28px !important;
+          border-radius: 40px !important;
+        }
+      `
+      : ""
     }
-    ${
-      site === "claude"
-        ? `
-      .font-claude-response {
-        padding: 10px 16px !important;
-        border-radius: 12px !important;
-      }
-    `
-        : ""
+    ${site === "claude"
+      ? `
+        .font-claude-response {
+          padding: 10px 16px !important;
+          border-radius: 12px !important;
+        }
+      `
+      : ""
     }
-    ${
-      site === "grok"
-        ? `
-      [data-testid="assistant-message"] {
-        padding: 8px 16px !important;
-        border-radius: 24px !important;
-      }
-    `
-        : ""
+    ${site === "grok"
+      ? `
+        [data-testid="assistant-message"] {
+          padding: 8px 16px !important;
+          border-radius: 24px !important;
+        }
+      `
+      : ""
     }
-    ${
-      lightTextColor && darkTextColor
-        ? `
-      :root { --decoai-text-color: ${lightTextColor}; }
-      ${darkClass} { --decoai-text-color: ${darkTextColor}; }
-      ${site === "chatgpt" || site === "gemini" ? container : "*"} {
-        scrollbar-width: auto !important;
-        scrollbar-color: color-mix(in srgb, var(--decoai-text-color) 30%, transparent) transparent !important;
-      }
-    `
-        : ""
+    ${lightTextColor && darkTextColor
+      ? `
+        :root { --decoai-text-color: ${lightTextColor}; }
+        ${darkClass} { --decoai-text-color: ${darkTextColor}; }
+        ${site === "chatgpt" || site === "gemini" ? container : "*"} {
+          scrollbar-width: auto !important;
+          scrollbar-color: color-mix(in srgb, var(--decoai-text-color) 30%, transparent) transparent !important;
+        }
+      `
+      : ""
     }
   `
 
   const getTextStyle = () =>
     lightTextColor && darkTextColor
       ? `
-      *:not(pre *):not(#${FAB_ROOT_ID} *):not(#${WIDGET_ROOT_ID} *) { color: ${lightTextColor} !important; }
-      ${darkClass} *:not(pre *):not(#${FAB_ROOT_ID} *):not(#${WIDGET_ROOT_ID} *) { color: ${darkTextColor} !important; }
-    `
+        *:not(pre *):not(#${FAB_ROOT_ID} *):not(#${WIDGET_ROOT_ID} *) { color: ${lightTextColor} !important; }
+        ${darkClass} *:not(pre *):not(#${FAB_ROOT_ID} *):not(#${WIDGET_ROOT_ID} *) { color: ${darkTextColor} !important; }
+      `
       : ""
 
   return [getBgStyle(), getElStyle(), getTextStyle(), getVisibilityStyle()].join("\n")
