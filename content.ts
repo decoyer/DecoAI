@@ -58,6 +58,7 @@ import {
   THEME_HIDDEN_STORAGE_KEY,
   THEME_LOADING_EVENT,
   TIMER_WIDGET_STATE_STORAGE_KEY,
+  trimTransparentImage,
   WIDGET_FRAME_STORAGE_KEY,
   WIDGET_HIDDEN_STORAGE_KEY,
   WIDGET_INSTANCES_STORAGE_KEY,
@@ -1406,41 +1407,43 @@ function PhotoWidgetContent({
     setPhotoState(nextPhotoState)
   }
 
-  const uploadButton = createElement(
-    "button",
-    {
-      type: "button",
-      className: "decoai-widget-control decoai-photo-widget-upload",
-      disabled,
-      onPointerDown: (e) => e.stopPropagation(),
-      onPointerUp: (e) => e.stopPropagation(),
-      onClick: (e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        if (!disabled) uploadRef.current?.click()
-      }
-    },
-    createElement(Icon, {
-      icon: "lucide:image-up",
-      height: "50%",
-      "aria-hidden": "true"
-    })
-  )
+  const uploadButton = disabled
+    ? null
+    : createElement(
+      "button",
+      {
+        type: "button",
+        className: "decoai-widget-control decoai-photo-widget-upload",
+        onPointerDown: (e) => e.stopPropagation(),
+        onPointerUp: (e) => e.stopPropagation(),
+        onClick: (e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          uploadRef.current?.click()
+        }
+      },
+      createElement(Icon, {
+        icon: "lucide:image-up",
+        height: "50%",
+        "aria-hidden": "true"
+      })
+    )
 
   return createElement(
     "div",
     { className: "decoai-photo-widget" },
-    createElement("input", {
-      ref: uploadRef,
-      type: "file",
-      accept: "image/*",
-      disabled,
-      onChange: (e) => {
-        void uploadImage(e.currentTarget.files?.[0])
-        e.currentTarget.value = ""
-      },
-      style: { display: "none" }
-    }),
+    !disabled
+      ? createElement("input", {
+        ref: uploadRef,
+        type: "file",
+        accept: "image/*",
+        onChange: (e) => {
+          void uploadImage(e.currentTarget.files?.[0])
+          e.currentTarget.value = ""
+        },
+        style: { display: "none" }
+      })
+      : null,
     imageUrl
       ? createElement(
         React.Fragment,
@@ -1450,9 +1453,11 @@ function PhotoWidgetContent({
           src: imageUrl,
           draggable: false
         }),
-        !disabled ? createElement("div", { className: "decoai-photo-widget-upload-overlay" }, uploadButton) : null
+        uploadButton ? createElement("div", { className: "decoai-photo-widget-upload-overlay" }, uploadButton) : null
       )
-      : !disabled ? createElement("div", { className: "decoai-photo-widget-placeholder" }, uploadButton) : null
+      : uploadButton
+        ? createElement("div", { className: "decoai-photo-widget-placeholder" }, uploadButton)
+        : null
   )
 }
 
@@ -1640,6 +1645,7 @@ function WidgetOverlayApp() {
   const persistLiveFrame = (id: string | null) => {
     if (!id || !liveFrameRef.current[id]) return
     const nextFrame = liveFrameRef.current[id] as PixelWidgetFrame
+    delete liveFrameRef.current[id]
     setFrameMap((prev) => ({
       ...prev,
       [id]: toRelativeWidgetFrame(nextFrame, viewportSize, getWidgetMinSize(id))
@@ -1744,6 +1750,7 @@ function WidgetOverlayApp() {
     removeBgToastIdsRef.current[item.id] = toastId
     try {
       const result = await removeImageBg(imageUrl)
+      const trimmed = await trimTransparentImage(result)
 
       const latestState = await localStorageInstance.get<PhotoWidgetState>(stateKey)
       if (!latestState || latestState.imageId !== photoState.imageId) {
@@ -1751,8 +1758,28 @@ function WidgetOverlayApp() {
         return
       }
 
-      const imageId = await saveImageDataUrl(result)
+      const imageId = await saveImageDataUrl(trimmed.dataUrl)
       await localStorageInstance.set(stateKey, removeBgFromState(latestState, { imageId }))
+
+      const frame = frames[item.id]
+      const nextWidth = Math.max(frame.width * trimmed.widthRatio, viewportSize.width * PHOTO_WIDGET_MIN_SIZE.widthRatio)
+      const nextHeight = Math.max(frame.height * trimmed.heightRatio, viewportSize.height * PHOTO_WIDGET_MIN_SIZE.heightRatio)
+      const nextFrame = toRelativeWidgetFrame(
+        {
+          x: frame.x + (frame.width - nextWidth) / 2,
+          y: frame.y + (frame.height - nextHeight) / 2,
+          width: nextWidth,
+          height: nextHeight,
+          rotation: frame.rotation
+        },
+        viewportSize,
+        PHOTO_WIDGET_MIN_SIZE
+      )
+      setFrameMap((prev) => ({
+        ...prev,
+        [item.id]: nextFrame
+      }))
+      setEditingWidgetId(null)
       toast.update(toastId, {
         render: t("success_removeBG"),
         type: "success",
@@ -1913,7 +1940,7 @@ function WidgetOverlayApp() {
         item.type === "photo"
           ? createElement(PhotoWidgetContent, {
             widgetId: item.id,
-            disabled: isRemovingBg,
+            disabled: isRemovingBg || isPositionLocked,
             onBgRemovalChange: (used: boolean) => {
               if (bgRemovedWidgetIds[item.id] === used) return
               setBgRemovedWidgetIds((prev) => ({ ...prev, [item.id]: used }))
@@ -2216,8 +2243,9 @@ const mountWidgetOverlay = () => {
         padding: 0 10px;
         overflow: auto;
         scrollbar-width: thin !important;
-        scrollbar-color: transparent transparent !important;
+        scrollbar-color: color-mix(in srgb, var(--decoai-widget-text) 0%, transparent) transparent !important;
         scrollbar-gutter: stable;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       }
       .decoai-note-widget:hover .decoai-note-editor-wrap,
       .decoai-todo-widget:hover .decoai-todo-list {
@@ -2660,9 +2688,7 @@ const generateCSS = (
   const darkSelectors = mapSelectors(elements, { prefix: `${darkClass} ` })
   const hoverSelectors = mapSelectors(elements, { suffix: ":hover" })
 
-  const rotation = customBgOptions?.rotation || 0
-  const isBgSideways = rotation === 90 || rotation === 270
-  const bgTransform = getBgTransform(customBgOptions)
+  const bgTransform = getBgTransform(customBgOptions, false)
   const invert = clampNumber(customBgOptions?.invert, 0, 1, 0)
   const grayscale = clampNumber(customBgOptions?.grayscale, 0, 1, 0)
   const brightness = clampNumber(customBgOptions?.brightness, 0, 5, 1)
@@ -2699,9 +2725,9 @@ const generateCSS = (
       ${bgUrl
         ? `
           body::before {
-            content: ""; position: fixed; top: 50%; left: 50%;
-            width: ${isBgSideways ? "100vh" : "100vw"};
-            height: ${isBgSideways ? "100vw" : "100vh"};
+            content: ""; position: fixed; top: 0; left: 0;
+            width: 100vw;
+            height: 100vh;
             background-image: url("${bgUrl}") !important;
             background-color: transparent !important;
             background-position: center !important;

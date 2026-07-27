@@ -334,7 +334,6 @@ function CustomThemeSortableCard({
 }) {
   const [bgUrl, setBgUrl] = useState("")
   const isDragging = draggingCustomThemeId === item.id
-  const bgRemoved = hasRemovedBg(getCustomThemeBgState(item))
 
   useEffect(() => {
     let active = true
@@ -356,17 +355,10 @@ function CustomThemeSortableCard({
     }
   }, [item.bgImageId])
 
-  const bgRotation = item.bgOptions.rotation || 0
-  const isBgSideways = bgRotation === 90 || bgRotation === 270
   const bgValue = sanitizeBg(item.bgColor)
-  const isDefaultBg = !item.bgImageId && !sanitizeCustomBgUrl(item.bgUrl) && !bgValue
-  const cardBg = bgValue || (bgRemoved || isDefaultBg ? DEFAULT_PREVIEW : "")
+  const cardBg = bgValue || DEFAULT_PREVIEW
   const bgStyle = {
-    width: isBgSideways ? 100 : "100%",
-    height: isBgSideways ? 250 : "100%",
     backgroundImage: bgUrl ? `url(${bgUrl})` : "none",
-    backgroundSize: "cover",
-    backgroundRepeat: "no-repeat",
     backgroundColor: "transparent",
     transform: getBgTransform(item.bgOptions),
     filter: bgUrl
@@ -573,15 +565,9 @@ export function FabPanelApp() {
   const [themeTab, setThemeTab] = useState<ThemeTab>("preset")
   const [widgetTab, setWidgetTab] = useState<WidgetTab>("visibility")
   const [customEditTab, setCustomEditTab] = useState<CustomEditTab>("general")
-  const [widgetItems, setWidgetItems] = useStorage<WidgetInstance[]>(
-    WIDGET_INSTANCES_STORAGE_KEY,
-    DEFAULT_WIDGET_INSTANCES
-  )
+  const [widgetItems, setWidgetItems] = useStorage<WidgetInstance[]>(WIDGET_INSTANCES_STORAGE_KEY, DEFAULT_WIDGET_INSTANCES)
   const [, setWidgetFrameMap] = useStorage<WidgetFrameMap>(WIDGET_FRAME_STORAGE_KEY, {})
-  const [widgetLayout, setWidgetLayout] = useStorage<WidgetLayoutOptions>(
-    WIDGET_LAYOUT_STORAGE_KEY,
-    DEFAULT_WIDGET_LAYOUT
-  )
+  const [widgetLayout, setWidgetLayout] = useStorage<WidgetLayoutOptions>(WIDGET_LAYOUT_STORAGE_KEY, DEFAULT_WIDGET_LAYOUT)
   const bgUploadRef = useRef<HTMLInputElement>(null)
   const bgPreviewRef = useRef<HTMLDivElement>(null)
   const [bgPreviewTarget, setBgPreviewTarget] = useState<HTMLElement | null>(null)
@@ -593,15 +579,10 @@ export function FabPanelApp() {
   const [draftOriginalBgImageId, setDraftOriginalBgImageId] = useState("")
   const [draftOriginalBgAnimated, setDraftOriginalBgAnimated] = useState(false)
   const [storedCustomThemes, setCustomThemes] = useStorage<CustomTheme[]>(
-    { key: CUSTOM_THEMES_STORAGE_KEY, instance: localStorageInstance },
-    []
+    { key: CUSTOM_THEMES_STORAGE_KEY, instance: localStorageInstance }, []
   )
   const [selectedCustomThemeId, setSelectedCustomThemeId] = useStorage(
-    {
-      key: SELECTED_CUSTOM_THEME_ID_STORAGE_KEY,
-      instance: localStorageInstance
-    },
-    ""
+    { key: SELECTED_CUSTOM_THEME_ID_STORAGE_KEY, instance: localStorageInstance }, ""
   )
   const [editingCustomThemeId, setEditingCustomThemeId] = useState("")
   const [premiumStatus, setPremiumStatus] = useState<PremiumStatus>("unknown")
@@ -885,8 +866,6 @@ export function FabPanelApp() {
       onClick: () => updateCustomBgOption("scaleX", draftBgOptions.scaleX === -1 ? 1 : -1)
     }
   ]
-  const isDraftBgSideways = draftBgOptions.rotation === 90 || draftBgOptions.rotation === 270
-
   const normalizeCustomThemes = () => {
     if (!customThemes.length) return false
 
@@ -2017,8 +1996,8 @@ export function FabPanelApp() {
                                     position: "absolute",
                                     top: "50%",
                                     left: "50%",
-                                    width: isDraftBgSideways ? "56.25%" : "100%",
-                                    height: isDraftBgSideways ? "177.78%" : "100%",
+                                    width: "100%",
+                                    height: "100%",
                                     objectFit: "cover",
                                     cursor: "grab",
                                     userSelect: "none",
@@ -2047,11 +2026,7 @@ export function FabPanelApp() {
                                 />
                               </div>
                               <div
-                                style={{
-                                  ...rowStyle,
-                                  justifyContent: "center",
-                                  gap: 6
-                                }}>
+                                style={{ ...rowStyle, justifyContent: "center", gap: 6 }}>
                                 {bgPreviewActions.map((action) => (
                                   <button
                                     key={action.icon}
@@ -2059,10 +2034,7 @@ export function FabPanelApp() {
                                     className="decoai-control-button"
                                     disabled={action.disabled}
                                     onClick={action.onClick}
-                                    style={{
-                                      ...controlButtonStyle,
-                                      ...disabledControlStyle(!action.disabled)
-                                    }}>
+                                    style={{ ...controlButtonStyle, ...disabledControlStyle(!action.disabled) }}>
                                     <Icon icon={`lucide:${action.icon}`} height={20} aria-hidden="true" />
                                   </button>
                                 ))}

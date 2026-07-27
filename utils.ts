@@ -214,6 +214,66 @@ export const restoreBgState = (state: BgImageState): BgImageState => ({
   originalAnimated: false
 })
 
+export const trimTransparentImage = (dataUrl: string) =>
+  new Promise<{ dataUrl: string; widthRatio: number; heightRatio: number }>((resolve) => {
+    const resolveOriginal = () => resolve({ dataUrl, widthRatio: 1, heightRatio: 1 })
+    const image = new Image()
+    image.onerror = resolveOriginal
+    image.onload = () => {
+      const sourceCanvas = document.createElement("canvas")
+      sourceCanvas.width = image.naturalWidth
+      sourceCanvas.height = image.naturalHeight
+      const sourceContext = sourceCanvas.getContext("2d", { willReadFrequently: true })
+      if (!sourceContext) {
+        resolveOriginal()
+        return
+      }
+
+      sourceContext.drawImage(image, 0, 0)
+      const pixels = sourceContext.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height).data
+      let bounds: { left: number; top: number; right: number; bottom: number } | null = null
+
+      for (let y = 0; y < sourceCanvas.height; y += 1) {
+        for (let x = 0; x < sourceCanvas.width; x += 1) {
+          if (pixels[(y * sourceCanvas.width + x) * 4 + 3] === 0) continue
+
+          if (!bounds) {
+            bounds = { left: x, top: y, right: x, bottom: y }
+            continue
+          }
+
+          bounds.left = Math.min(bounds.left, x)
+          bounds.right = Math.max(bounds.right, x)
+          bounds.bottom = y
+        }
+      }
+
+      if (!bounds) {
+        resolveOriginal()
+        return
+      }
+
+      const width = bounds.right - bounds.left + 1
+      const height = bounds.bottom - bounds.top + 1
+      const trimmedCanvas = document.createElement("canvas")
+      trimmedCanvas.width = width
+      trimmedCanvas.height = height
+      const trimmedContext = trimmedCanvas.getContext("2d")
+      if (!trimmedContext) {
+        resolveOriginal()
+        return
+      }
+
+      trimmedContext.drawImage(sourceCanvas, bounds.left, bounds.top, width, height, 0, 0, width, height)
+      resolve({
+        dataUrl: trimmedCanvas.toDataURL("image/png"),
+        widthRatio: width / sourceCanvas.width,
+        heightRatio: height / sourceCanvas.height
+      })
+    }
+    image.src = dataUrl
+  })
+
 export const DEFAULT_WIDGET_MIN_SIZE: WidgetSize = {
   widthRatio: 0.12,
   heightRatio: 0.15
@@ -375,10 +435,11 @@ export const getStoredBgPosition = (x: number, y: number, rotationValue: unknown
   }
 }
 
-export const getBgTransform = (options?: Partial<CustomBgOptions>) => {
+export const getBgTransform = (options?: Partial<CustomBgOptions>, centered = true) => {
   const sanitized = sanitizeCustomBgOptions(options)
   const position = getRenderedBgPosition(sanitized.position, sanitized.rotation, sanitized.scaleX)
-  return `translate(calc(-50% + ${position.x - 50}%), calc(-50% + ${position.y - 50}%)) rotate(${sanitized.rotation}deg) scaleX(${sanitized.scaleX}) scale(${sanitized.zoom})`
+  const anchor = centered ? 100 : 50
+  return `translate(${position.x - anchor}%, ${position.y - anchor}%) rotate(${sanitized.rotation}deg) scaleX(${sanitized.scaleX}) scale(${sanitized.zoom})`
 }
 
 export const sanitizeCustomBgOptions = (options?: Partial<CustomBgOptions>): CustomBgOptions => ({
@@ -408,11 +469,11 @@ export const renderImageToCanvas = async (
 
   const image = imageUrl
     ? await new Promise<HTMLImageElement>((resolve, reject) => {
-        const nextImage = new Image()
-        nextImage.onload = () => resolve(nextImage)
-        nextImage.onerror = () => reject()
-        nextImage.src = imageUrl
-      })
+      const nextImage = new Image()
+      nextImage.onload = () => resolve(nextImage)
+      nextImage.onerror = () => reject()
+      nextImage.src = imageUrl
+    })
     : null
 
   const canvas = document.createElement("canvas")
@@ -432,8 +493,8 @@ export const renderImageToCanvas = async (
     const gradientColors = solidColor
       ? [solidColor]
       : (canvasBg.match(/#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{4}|[0-9a-f]{3})\b|(?:rgba?|hsla?)\([^)]*\)/gi) || [])
-          .map(sanitizeColor)
-          .filter(Boolean)
+        .map(sanitizeColor)
+        .filter(Boolean)
     if (gradientColors.length) {
       const fill = sourceContext.createLinearGradient(0, 0, sourceCanvas.width, 0)
       gradientColors.forEach((color, index) => {
@@ -680,10 +741,10 @@ export const isAnimatedCustomTheme = (theme: CustomTheme) => theme.bgAnimated ||
 export const clearAnimatedBgUrl = (theme: CustomTheme) =>
   isAnimatedCustomTheme(theme)
     ? {
-        ...theme,
-        bgImageId: theme.bgAnimated ? "" : theme.bgImageId,
-        bgAnimated: false,
-        bgOriginalImageId: theme.bgOriginalAnimated ? "" : theme.bgOriginalImageId,
-        bgOriginalAnimated: false
-      }
+      ...theme,
+      bgImageId: theme.bgAnimated ? "" : theme.bgImageId,
+      bgAnimated: false,
+      bgOriginalImageId: theme.bgOriginalAnimated ? "" : theme.bgOriginalImageId,
+      bgOriginalAnimated: false
+    }
     : theme
