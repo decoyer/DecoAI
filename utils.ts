@@ -505,7 +505,7 @@ export const renderImageToCanvas = async (
     }
   }
   if (image) {
-    const scale = Math.max(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight) * imageOptions.zoom
+    const scale = Math.min(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight) * imageOptions.zoom
     const drawWidth = image.naturalWidth * scale
     const drawHeight = image.naturalHeight * scale
     const drawX = (canvas.width - drawWidth) * (position.x / 100)

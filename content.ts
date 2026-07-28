@@ -2256,7 +2256,7 @@ const mountWidgetOverlay = () => {
         outline: none;
         color: inherit !important;
         font-size: max(16px, 8cqmin);
-        white-space: nowrap;
+        white-space: pre-wrap;
         font-weight: 400;
       }
       .decoai-text-editor p {
@@ -2295,6 +2295,7 @@ const mountWidgetOverlay = () => {
         display: flex;
         align-items: center;
         justify-content: space-between;
+        margin-top: 8px;
         padding: 0 10px;
         border-top: 1px solid var(--decoai-widget-text);
         border-bottom: 1px solid transparent;
@@ -2323,9 +2324,6 @@ const mountWidgetOverlay = () => {
         height: max(28px, 14cqmin);
         border-radius: 8px;
       }
-      .decoai-todo-widget {
-        padding-bottom: 10px;
-      }
       .decoai-todo-add,
       .decoai-todo-delete {
         width: max(32px, 16cqmin);
@@ -2345,6 +2343,7 @@ const mountWidgetOverlay = () => {
       .decoai-todo-list {
         display: flex;
         flex-direction: column;
+        padding-bottom: 10px;
       }
       .decoai-todo-item {
         display: flex;
@@ -2364,14 +2363,12 @@ const mountWidgetOverlay = () => {
         border-radius: 8px;
         gap: max(8px, 0.25em);
       }
-      .decoai-todo-item:not(.decoai-todo-composer) .decoai-todo-check-label {
-        padding-left: 8px;
-      }
       .decoai-todo-checkbox {
         width: max(16px, 8cqmin);
         height: max(16px, 8cqmin);
-        box-shadow: none;
+        margin: 0;
         border-radius: 4px;
+        box-shadow: none;
         cursor: pointer;
       }
       .decoai-todo-checkbox:checked {
@@ -2390,6 +2387,7 @@ const mountWidgetOverlay = () => {
         min-width: 0;
         border: none;
         box-shadow: none;
+        color: inherit;
         background-color: transparent;
       }
       .decoai-todo-input::placeholder {
@@ -2731,7 +2729,7 @@ const generateCSS = (
             background-image: url("${bgUrl}") !important;
             background-color: transparent !important;
             background-position: center !important;
-            background-size: cover !important;
+            background-size: contain !important;
             background-repeat: no-repeat !important;
             z-index: 0 !important;
             transform: ${bgTransform} !important;

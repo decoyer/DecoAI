@@ -1619,6 +1619,7 @@ export function FabPanelApp() {
           left: 50%;
           width: 100%;
           height: 100%;
+          background-size: cover;
           background-repeat: no-repeat;
           transform-origin: center center;
         }
@@ -1998,7 +1999,7 @@ export function FabPanelApp() {
                                     left: "50%",
                                     width: "100%",
                                     height: "100%",
-                                    objectFit: "cover",
+                                    objectFit: "contain",
                                     cursor: "grab",
                                     userSelect: "none",
                                     transform: getBgTransform(draftBgOptions),
