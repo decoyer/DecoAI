@@ -5,6 +5,9 @@
   "visibility": {
     "message": "Visibility"
   },
+  "sidebar": {
+    "message": "AI Sidebar"
+  },
   "theme": {
     "message": "Theme"
   },
@@ -173,6 +176,21 @@
   "photoWidget": {
     "message": "Sticker"
   },
+  "screenshot": {
+    "message": "Screenshot"
+  },
+  "reload": {
+    "message": "Reload"
+  },
+  "newTab": {
+    "message": "Open in new tab"
+  },
+  "collapse": {
+    "message": "Collapse"
+  },
+  "expand": {
+    "message": "Expand"
+  },
   "place_noteWidget": {
     "message": "Write a note..."
   },
@@ -214,6 +232,9 @@
   },
   "error_restore": {
     "message": "Unable to load data file. Please try again later."
+  },
+  "error_noModel": {
+    "message": "Enable a model in DecoAI settings."
   },
   "success_themeExport": {
     "message": "Theme exported successfully."

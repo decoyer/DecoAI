@@ -51,8 +51,10 @@ import {
   sanitizeCustomBgOptions,
   sanitizeCustomBgUrl,
   saveImageDataUrl,
+  SCREENSHOT_ATTACH_MESSAGE,
   SELECTED_CUSTOM_THEME_ID_STORAGE_KEY,
   SELECTED_THEME_STORAGE_KEY,
+  SIDE_PANEL_THEME_MESSAGE,
   STOPWATCH_WIDGET_STATE_STORAGE_KEY,
   TEXT_WIDGET_STATE_STORAGE_KEY,
   THEME_HIDDEN_STORAGE_KEY,
@@ -69,6 +71,7 @@ import {
   type DdayWidgetState,
   type ModelEnabledMap,
   type PhotoWidgetState,
+  type ScreenshotAttachMessage,
   type SiteType,
   type StopwatchWidgetState,
   type TimerWidgetState,
@@ -82,7 +85,7 @@ import {
 
 export const config: PlasmoCSConfig = {
   matches: ["https://chatgpt.com/*", "https://gemini.google.com/*", "https://claude.ai/*", "https://grok.com/*"],
-  all_frames: false,
+  all_frames: true,
   run_at: "document_start"
 }
 
@@ -100,13 +103,13 @@ const SITE_SELECTORS = {
   chatgpt: {
     container: "body",
     header: "#page-header",
-    footer: 'div[data-scroll-root][data-show-disclaimer] div[data-testid="thread-disclaimer"]',
+    footer: 'div[data-testid="thread-disclaimer"]',
     elements:
       ".btn-secondary, .agent-turn, .user-message-bubble-color, .shadow-short-composer, .origin-top-right > aside",
     darkClass: "html.dark"
   },
   gemini: {
-    container: "body",
+    container: "body, .mat-drawer-container",
     header: "top-bar-actions",
     footer: ".capabilities-disclaimer p",
     elements: "model-response, .dual-response-panel, .user-query-bubble-with-background, .input-box-shadow",
@@ -116,7 +119,7 @@ const SITE_SELECTORS = {
     container: "body",
     header:
       'header, #main-content > div > div > main > div:first-child, .z-header, [data-testid="wiggle-controls-actions"]',
-    footer: 'div[data-disclaimer="true"]',
+    footer: 'div[data-disclaimer="true"], .leading-relaxed',
     elements: 'li.inline-block button, .font-claude-response, div[data-user-message-bubble="true"], .\\!box-content',
     darkClass: 'html[data-mode="dark"]'
   },
@@ -2692,8 +2695,9 @@ const generateCSS = (
   const brightness = clampNumber(customBgOptions?.brightness, 0, 5, 1)
   const blur = clampNumber(customBgOptions?.blur, 0, 50, 10)
   const opacity = clampNumber(customBgOptions?.opacity, 0, 1, 0.8)
-  const hideHeader = customBgOptions?.hideHeader ?? true
+  const hideHeader = window.top === window && (customBgOptions?.hideHeader ?? true)
   const hideFooter = customBgOptions?.hideFooter ?? true
+  const bgSize = !customBgOptions || window.top !== window ? "cover" : "contain"
   const solidBgColor = sanitizeColor(bgColor)
   const bgGradient = bgColor && !solidBgColor ? bgColor : ""
   const bgFill = solidBgColor || bgGradient || "transparent"
@@ -2729,7 +2733,7 @@ const generateCSS = (
             background-image: url("${bgUrl}") !important;
             background-color: transparent !important;
             background-position: center !important;
-            background-size: contain !important;
+            background-size: ${bgSize} !important;
             background-repeat: no-repeat !important;
             z-index: 0 !important;
             transform: ${bgTransform} !important;
@@ -2840,9 +2844,11 @@ const applyTheme = async (requestId: number) => {
     return
   }
 
-  await mountFab()
-  mountWidgetOverlay()
-  setRouteScopedUiVisibility(currentSite)
+  if (window.top === window) {
+    await mountFab()
+    mountWidgetOverlay()
+    setRouteScopedUiVisibility(currentSite)
+  }
 
   const [currentTheme, modelEnabled] = await Promise.all([
     storage.get<string>(SELECTED_THEME_STORAGE_KEY),
@@ -2959,6 +2965,96 @@ window.addEventListener(CUSTOM_THEME_PREVIEW_EVENT, (e) => {
     if (!(await isCustomThemeSelected())) return
     scheduleApplyTheme()
   })()
+})
+
+type DeepQueryRoot = Document | ShadowRoot
+
+const EDITOR_SELECTOR: Record<SiteType, string> = {
+  chatgpt: "#prompt-textarea",
+  gemini: ".ql-editor.textarea",
+  claude: ".ProseMirror",
+  grok: "[contenteditable='true']"
+}
+
+const getDeepQueryRoots = () => {
+  const roots: DeepQueryRoot[] = [document]
+
+  for (let index = 0; index < roots.length; index += 1) {
+    roots[index].querySelectorAll("*").forEach((element) => {
+      if (element.shadowRoot) roots.push(element.shadowRoot)
+    })
+  }
+
+  return roots
+}
+
+const querySelectorDeep = <T extends Element>(roots: DeepQueryRoot[], selector: string) => {
+  for (const root of roots) {
+    const element = root.querySelector<T>(selector)
+    if (element) return element
+  }
+  return null
+}
+
+const createFileTransfer = (file: File) => {
+  const transfer = new DataTransfer()
+  transfer.items.add(file)
+  return transfer
+}
+
+const attachFileToInput = (roots: DeepQueryRoot[], file: File) => {
+  const inputs = roots.flatMap((root) => Array.from(root.querySelectorAll<HTMLInputElement>('input[type="file"]')))
+  const input =
+    inputs.find((candidate) => candidate.accept.toLowerCase().includes("image")) ||
+    inputs.find((candidate) => !candidate.accept || candidate.accept.includes("*"))
+  if (!input) return false
+
+  const transfer = createFileTransfer(file)
+  input.files = transfer.files
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }))
+  input.dispatchEvent(new Event("change", { bubbles: true, composed: true }))
+  return true
+}
+
+const pasteFileIntoEditor = (roots: DeepQueryRoot[], file: File, site: SiteType) => {
+  const editor = querySelectorDeep<HTMLElement>(roots, EDITOR_SELECTOR[site])
+  if (!editor) return false
+
+  editor.dispatchEvent(
+    new ClipboardEvent("paste", {
+      bubbles: true,
+      composed: true,
+      clipboardData: createFileTransfer(file)
+    })
+  )
+  return true
+}
+
+window.addEventListener("message", async (event) => {
+  if (window.top === window || event.source !== window.parent) return
+  if (event.origin !== chrome.runtime.getURL("/").replace(/\/$/, "")) return
+
+  if (event.data?.type === SIDE_PANEL_THEME_MESSAGE) {
+    scheduleApplyTheme()
+    return
+  }
+
+  const message = event.data as Partial<ScreenshotAttachMessage>
+  if (
+    message.type !== SCREENSHOT_ATTACH_MESSAGE ||
+    typeof message.dataUrl !== "string" ||
+    !message.dataUrl.startsWith("data:image/png;base64,")
+  )
+    return
+
+  const blob = await fetch(message.dataUrl).then((response) => response.blob())
+  const file = new File([blob], `decoai-screenshot-${Date.now()}.png`, { type: "image/png" })
+  const site = detectCurrentSite()
+  if (!site) return
+
+  const roots = getDeepQueryRoots()
+
+  if (!attachFileToInput(roots, file)) pasteFileIntoEditor(roots, file, site)
 })
 
 watchLocationChange()

@@ -28,6 +28,15 @@ export type CustomTheme = {
 
 export type SiteType = "chatgpt" | "gemini" | "claude" | "grok"
 export type ModelEnabledMap = Record<SiteType, boolean>
+export type SidePanelStatusMessage = {
+  type: typeof SIDE_PANEL_STATUS_MESSAGE
+  windowId: number
+}
+export type SidePanelStatusResponse = { open: true }
+export type ScreenshotAttachMessage = {
+  type: typeof SCREENSHOT_ATTACH_MESSAGE
+  dataUrl: string
+}
 
 export type WidgetKey = "note" | "todo" | "dday" | "timer" | "stopwatch" | "photo"
 export type WidgetInstance = {
@@ -103,6 +112,9 @@ export const FAB_HIDDEN_STORAGE_KEY = "fab-hidden"
 export const THEME_HIDDEN_STORAGE_KEY = "theme-hidden"
 export const WIDGET_HIDDEN_STORAGE_KEY = "widget-hidden"
 export const MODEL_ENABLED_STORAGE_KEY = "model-enabled-map"
+export const SIDE_PANEL_STATUS_MESSAGE = "decoai:side-panel-status"
+export const SCREENSHOT_ATTACH_MESSAGE = "decoai:screenshot-attach"
+export const SIDE_PANEL_THEME_MESSAGE = "decoai:side-panel-theme"
 export const WIDGET_LAYOUT_STORAGE_KEY = "widget-layout"
 export const WIDGET_FRAME_STORAGE_KEY = "widget-frame-map"
 export const WIDGET_INSTANCES_STORAGE_KEY = "widget-instances"

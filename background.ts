@@ -19,12 +19,56 @@ import { IMAGE_SOURCE_URLS, MAX_FILE_BYTES } from "./utils"
 const AUTH_SILENT_FAILURE_COOLDOWN_MS = 60_000
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 const GOOGLE_AUTH_SCOPES = ["openid", "email", "profile"]
+const SIDEBAR_DOMAINS = ["chatgpt.com", "gemini.google.com", "claude.ai", "grok.com"]
 
 const t = (key: string) => chrome.i18n.getMessage(key)
 
 type ExtensionManifest = chrome.runtime.Manifest & {
   oauth2?: { client_id?: string }
 }
+
+const installAiSidebarFrameRule = async () => {
+  if (!chrome.declarativeNetRequest?.updateDynamicRules) return
+
+  await chrome.declarativeNetRequest.updateDynamicRules({
+    removeRuleIds: [91001],
+    addRules: [
+      {
+        id: 91001,
+        priority: 1,
+        action: {
+          type: chrome.declarativeNetRequest.RuleActionType.MODIFY_HEADERS,
+          responseHeaders: [
+            {
+              header: "x-frame-options",
+              operation: chrome.declarativeNetRequest.HeaderOperation.REMOVE
+            },
+            {
+              header: "content-security-policy",
+              operation: chrome.declarativeNetRequest.HeaderOperation.REMOVE
+            }
+          ]
+        },
+        condition: {
+          initiatorDomains: [chrome.runtime.id],
+          requestDomains: SIDEBAR_DOMAINS,
+          resourceTypes: [chrome.declarativeNetRequest.ResourceType.SUB_FRAME]
+        }
+      }
+    ]
+  })
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+  void installAiSidebarFrameRule()
+})
+
+chrome.runtime.onStartup.addListener(() => {
+  void installAiSidebarFrameRule()
+})
+
+void installAiSidebarFrameRule()
+
 let silentUserVerification: {
   uid: string
   promise: Promise<User | null>

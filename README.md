@@ -17,6 +17,7 @@ using *Google Authentication*
 - ```Animated backgrounds and stickers```
 - ```AI-assisted color matching```
 - ```Image background removal```
+- ```AI chat directly in the sidebar```
 - ```Google sign-in and Pro access control```
 - ```Chrome, Edge, and Whale support```
 

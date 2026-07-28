@@ -31,10 +31,12 @@ import {
   sanitizeCustomBgUrl,
   saveImageDataUrl,
   SELECTED_CUSTOM_THEME_ID_STORAGE_KEY,
+  SIDE_PANEL_STATUS_MESSAGE,
   THEME_HIDDEN_STORAGE_KEY,
   WIDGET_HIDDEN_STORAGE_KEY,
   type CustomTheme,
-  type ModelEnabledMap
+  type ModelEnabledMap,
+  type SidePanelStatusResponse
 } from "./utils"
 
 const t = (key: string, value?: string) => chrome.i18n.getMessage(key, value)
@@ -48,6 +50,11 @@ const MODEL_LIST = [
 ] as const
 
 type PopupTab = "settings" | "account"
+
+type SidePanelApi = typeof chrome.sidePanel & { close: (options: { windowId: number }) => Promise<void> }
+const sidePanelApi = chrome.sidePanel as SidePanelApi
+
+const getCurrentWindowId = async () => (await chrome.windows.getCurrent()).id
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value)
 
@@ -151,12 +158,14 @@ function IndexPopup() {
   const [authSession, setAuthSession] = useState<AuthSessionSnapshot | null>(null)
   const [premiumStatus, setPremiumStatus] = useState<PremiumStatus>("unknown")
   const [activeTab, setActiveTab] = useState<PopupTab>("settings")
+  const [isSidePanelOpen, setIsSidePanelOpen] = useState(false)
   const restoreFileRef = useRef<HTMLInputElement>(null)
   const version = chrome.runtime.getManifest().version
   const updateModelEnabled = (key: ModelKey, checked: boolean) => setModelEnabled({ ...modelEnabled, [key]: checked })
 
   useEffect(() => {
     void loadSavedSession()
+    void syncSidePanelState()
 
     const intervalId = window.setInterval(() => {
       void refreshSavedSession()
@@ -220,6 +229,35 @@ function IndexPopup() {
   }
 
   const onSubscriptionClick = () => window.open("https://polar.sh/kstm/portal")
+
+  const syncSidePanelState = async () => {
+    const windowId = await getCurrentWindowId()
+    if (windowId == null) return
+
+    try {
+      const response = (await chrome.runtime.sendMessage({
+        type: SIDE_PANEL_STATUS_MESSAGE,
+        windowId
+      })) as SidePanelStatusResponse | undefined
+      setIsSidePanelOpen(Boolean(response?.open))
+    } catch {
+      setIsSidePanelOpen(false)
+    }
+  }
+
+  const onSidePanelToggle = async (open: boolean) => {
+    const windowId = await getCurrentWindowId()
+    if (windowId == null) return
+
+    if (open) {
+      await chrome.sidePanel.open({ windowId })
+      setIsSidePanelOpen(true)
+      return
+    }
+
+    await sidePanelApi.close({ windowId })
+    setIsSidePanelOpen(false)
+  }
 
   const onBackupClick = async () => {
     setIsLoading(true)
@@ -394,6 +432,14 @@ function IndexPopup() {
                 <h3>{t("visibility")}</h3>
               </div>
 
+              <div style={rowStyle}>
+                <div style={itemLabelStyle}>
+                  <Icon icon="lucide:panel-right-open" color="#66cdaa" height={16} aria-hidden="true" />
+                  <span style={{ lineHeight: 1 }}>{t("sidebar")}</span>
+                </div>
+                <ToggleSwitch checked={isSidePanelOpen} onChange={onSidePanelToggle} />
+              </div>
+
               <label style={rowStyle}>
                 <div style={itemLabelStyle}>
                   <Icon icon="lucide:wallpaper" color="#66cdaa" height={16} aria-hidden="true" />
@@ -561,7 +607,6 @@ function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (chec
 
 const rootStyle = {
   width: 300,
-  height: 450,
   display: "flex",
   flexDirection: "column",
   backgroundColor: "#333",
