@@ -59,7 +59,7 @@
     },
     "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAySs7ecsAKR97h5gRjhQq++F5UoZz1jip2uC+7uYYdEC7Q8ZG9Yo0HSbGH4PmguG4fFfe80U+pI+/MtOowYGOUi29lTS/KiG3QNbvmnkjVLpVEPsgUco7/W0/Vt/zkJOiMt3i+z9DrkAqO3PQendzcQEtjAfNYT0w5s9bm/pro+NyvSQC7nOdPcBm0R6Vugh4ij+sBVOTRAqwonThRGQqG+hNrXbY+qkaGMKwAxSMtbM5wDnl/6Mk+6E0+BnYTCoMFT0tSMl8h7qr5Zp0eyX1ADK4EGtna3qedxyLRyexPrsjzxhOKXp4c8YGmTZsLJsG6Yy0XBkqhklY/QQoE97UzwIDAQAB",
     "host_permissions": [
-      "https://*/*"
+      "<all_urls>"
     ],
     "web_accessible_resources": [
       {
@@ -76,12 +76,12 @@
     ]
   },
   "allowScripts": {
-    "@firebase/util@1.15.1": true,
+    "@firebase/util@1.15.2": true,
     "lmdb@2.5.2": true,
     "lmdb@2.7.11": true,
     "@parcel/watcher@2.5.1": true,
     "@swc/core@1.3.96": true,
-    "@swc/core@1.15.46": true,
+    "@swc/core@1.16.1": true,
     "esbuild@0.18.20": true,
     "msgpackr-extract@3.0.4": true,
     "protobufjs@7.6.5": true,

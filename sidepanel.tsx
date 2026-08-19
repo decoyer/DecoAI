@@ -67,9 +67,7 @@ function TooltipButton({ label, children, ...buttonProps }: TooltipButtonProps) 
   return (
     <span className="tooltip-action">
       <button {...buttonProps}>{children}</button>
-      <span className="tooltip" role="tooltip">
-        {label}
-      </span>
+      <span className="tooltip" role="tooltip">{label}</span>
     </span>
   )
 }
@@ -82,12 +80,8 @@ function SidePanel() {
   )
   const [activeKey, setActiveKey] = useState<ModelKey>(() => getInitialSite(AI_SITES))
   const [visited, setVisited] = useState<Set<ModelKey>>(() => new Set([activeKey]))
-  const [loadingSites, setLoadingSites] = useState<Partial<Record<ModelKey, boolean>>>({
-    [activeKey]: true
-  })
+  const [loadingSites, setLoadingSites] = useState<Partial<Record<ModelKey, boolean>>>({ [activeKey]: true })
   const [reloadKeys, setReloadKeys] = useState<Partial<Record<ModelKey, number>>>({})
-  const [tabsVisible, setTabsVisible] = useState(true)
-
   const activeSite = enabledSites.find((site) => site.key === activeKey) || enabledSites[0]
 
   useEffect(() => {
@@ -172,37 +166,47 @@ function SidePanel() {
           width: 100%;
           height: 100%;
           display: grid;
-          grid-template-rows: auto auto minmax(0, 1fr);
+          grid-template-rows: auto minmax(0, 1fr);
           isolation: isolate;
           color: #fff;
           background: #333;
         }
-        .topbar {
-          position: relative;
+        .toolbar {
           z-index: 2;
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 5px 10px;
+          padding: 4px 8px;
           background: #333;
         }
-        .actions {
+        .toolbar-group {
           display: flex;
-          gap: 20px;
+          align-items: center;
+          gap: 8px;
+          padding: 2px;
+          background: #000;
+          border-radius: 999px;
         }
-        .icon-button {
+        .toolbar-button {
           width: 32px;
           height: 32px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
+          padding: 4px;
           border: 0;
           border-radius: 999px;
           color: #fff;
           background: transparent;
           cursor: pointer;
+          transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .icon-button:not(:disabled):hover { background: #4b5563; }
+        .toolbar-button:not(.is-active):not(:disabled):hover { background: #4b5563; }
+        .toolbar-button.is-active { background: #66cdaa; }
+        .toolbar-button:disabled {
+          opacity: 0.35;
+          cursor: default;
+        }
         .tooltip-action {
           position: relative;
           display: inline-flex;
@@ -212,14 +216,11 @@ function SidePanel() {
           z-index: 3;
           top: calc(100% + 2px);
           left: 50%;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
           padding: 4px 8px;
           border: 1px solid #66cdaa4d;
           border-radius: 8px;
           color: #fff;
-          background-color: #000;
+          background: #000;
           font-size: 12px;
           line-height: 1.2;
           max-width: calc(100vw - 16px);
@@ -236,43 +237,25 @@ function SidePanel() {
           opacity: 1;
           transform: translate(-50%, 0);
         }
-        .actions > .tooltip-action:first-child .tooltip { left: calc(50% + 16px); }
-        .topbar > .tooltip-action:last-child .tooltip { left: calc(50% - 8px); }
-        .tabs {
-          position: relative;
-          z-index: 1;
-          display: flex;
-          justify-content: space-around;
-          padding: 0 10px 5px;
-          overflow: visible;
-          background: #333;
+        .toolbar-models > .tooltip-action:first-child .tooltip {
+          left: 0;
+          transform: translate(0, -2px);
         }
-        .tabs.hidden { display: none; }
-        .tab {
-          width: 32px;
-          height: 32px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          padding: 4px;
-          border: 0;
-          border-radius: 999px;
-          color: #fff;
-          background: transparent;
-          cursor: pointer;
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        .toolbar-models > .tooltip-action:first-child > button:hover + .tooltip,
+        .toolbar-models > .tooltip-action:first-child > button:focus-visible + .tooltip {
+          transform: translate(0, 0);
         }
-        .tab:not(:disabled):hover { background: #4b5563; }
-        .tab.active { box-shadow: inset 0 0 0 2px #66cdaa; }
-        .icon-button:disabled,
-        .tab:disabled {
-          opacity: 0.35;
-          cursor: default;
+        .toolbar-actions > .tooltip-action:last-child .tooltip {
+          right: 0;
+          left: auto;
+          transform: translate(0, -2px);
+        }
+        .toolbar-actions > .tooltip-action:last-child > button:hover + .tooltip,
+        .toolbar-actions > .tooltip-action:last-child > button:focus-visible + .tooltip {
+          transform: translate(0, 0);
         }
         .stage {
-          grid-row: 3;
           position: relative;
-          z-index: 0;
           min-height: 0;
           background: #000;
         }
@@ -292,15 +275,31 @@ function SidePanel() {
           place-items: center;
           padding: 20px;
           text-align: center;
-          color: #fff;
-          background: #000;
         }
       `}</style>
 
-      <header className="topbar">
-        <div className="actions">
+      <header className="toolbar">
+        <div className="toolbar-group toolbar-models">
+          {AI_SITES.map((site) => {
+            const enabled = enabledSites.some((enabledSite) => enabledSite.key === site.key)
+
+            return (
+              <TooltipButton
+                key={site.key}
+                type="button"
+                label={site.label}
+                className={`toolbar-button${site.key === activeSite?.key ? " is-active" : ""}`}
+                disabled={!enabled}
+                onClick={() => setActiveKey(site.key)}>
+                <Icon icon={site.icon} height={20} aria-hidden="true" />
+              </TooltipButton>
+            )
+          })}
+        </div>
+
+        <div className="toolbar-group toolbar-actions">
           <TooltipButton
-            className="icon-button"
+            className="toolbar-button"
             type="button"
             label={t("screenshot")}
             disabled={!activeSite}
@@ -308,15 +307,15 @@ function SidePanel() {
             <Icon icon="lucide:scan-square" height={20} aria-hidden="true" />
           </TooltipButton>
           <TooltipButton
-            className="icon-button"
+            className="toolbar-button"
             type="button"
             label={t("reload")}
             disabled={!activeSite}
             onClick={reloadActiveSite}>
-            <Icon icon="lucide:refresh-cw" height={20} aria-hidden="true" />
+            <Icon icon="lucide:rotate-cw" height={20} aria-hidden="true" />
           </TooltipButton>
           <TooltipButton
-            className="icon-button"
+            className="toolbar-button"
             type="button"
             label={t("newTab")}
             disabled={!activeSite}
@@ -324,33 +323,7 @@ function SidePanel() {
             <Icon icon="lucide:external-link" height={20} aria-hidden="true" />
           </TooltipButton>
         </div>
-        <TooltipButton
-          className="icon-button"
-          type="button"
-          label={t(tabsVisible ? "collapse" : "expand")}
-          aria-expanded={tabsVisible}
-          onClick={() => setTabsVisible((visible) => !visible)}>
-          <Icon icon={`lucide:chevron-${tabsVisible ? "up" : "down"}`} height={20} aria-hidden="true" />
-        </TooltipButton>
       </header>
-
-      <nav className={`tabs${tabsVisible ? "" : " hidden"}`}>
-        {AI_SITES.map((site) => {
-          const enabled = enabledSites.some((enabledSite) => enabledSite.key === site.key)
-
-          return (
-            <TooltipButton
-              key={site.key}
-              type="button"
-              label={site.label}
-              className={`tab${site.key === activeSite?.key ? " active" : ""}`}
-              disabled={!enabled}
-              onClick={() => setActiveKey(site.key)}>
-              <Icon icon={site.icon} height={20} aria-hidden="true" />
-            </TooltipButton>
-          )
-        })}
-      </nav>
 
       <section className="stage">
         {activeSite ? (

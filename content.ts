@@ -2346,7 +2346,7 @@ const mountWidgetOverlay = () => {
       .decoai-todo-list {
         display: flex;
         flex-direction: column;
-        padding-bottom: 10px;
+        margin-bottom: 10px;
       }
       .decoai-todo-item {
         display: flex;
